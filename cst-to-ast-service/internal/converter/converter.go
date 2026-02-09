@@ -622,7 +622,8 @@ func (c *CConverter) convertExpressionStatement(node *sitter.Node, sourceCode []
 // ============= Expression converters =============
 
 func (c *CConverter) convertIdentifier(node *sitter.Node, sourceCode []byte) (interfaces.Expr, error) {
-	return &structs.Identifier{
+	return &structs.VariableExpr{
+		Type: "VariableExpr",
 		Name: c.getNodeText(node, sourceCode),
 		Loc:  c.getLocation(node),
 	}, nil

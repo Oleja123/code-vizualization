@@ -347,6 +347,31 @@ int val = *ptr;    // Разыменование (*)
 if (!condition) {} // Логическое отрицание (!)
 ```
 
+#### VariableExpr (обращение к переменной)
+
+```go
+type VariableExpr struct {
+    Type     string   // всегда "VariableExpr"
+    Name     string
+    Location Location
+}
+```
+
+**Пример**:
+```c
+int x = 5;
+result = x;  // VariableExpr для x
+```
+
+**JSON**:
+```json
+{
+    "type": "VariableExpr",
+    "name": "x",
+    "location": {...}
+}
+```
+
 #### AssignmentExpr (присваивание)
 
 ```go

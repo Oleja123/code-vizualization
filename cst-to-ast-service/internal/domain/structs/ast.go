@@ -164,6 +164,17 @@ func (i *Identifier) ExprNode() {}
 func (i *Identifier) NodeType() string { return "Identifier" }
 func (i *Identifier) GetLocation() Location { return i.Loc }
 
+// VariableExpr представляет обращение к переменной в выражении
+type VariableExpr struct {
+	Type string   `json:"type"` // всегда "VariableExpr"
+	Name string   `json:"name"`
+	Loc  Location `json:"location"`
+}
+
+func (v *VariableExpr) ExprNode() {}
+func (v *VariableExpr) NodeType() string { return "VariableExpr" }
+func (v *VariableExpr) GetLocation() Location { return v.Loc }
+
 // IntLiteral представляет целочисленный литерал
 type IntLiteral struct {
 	Value int      `json:"value"`
