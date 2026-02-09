@@ -25,7 +25,7 @@
   - Доступ к элементам массива
   - Инициализация массивов
 - **Операторы**:
-  - if/else
+  - if/else if/else (с поддержкой явного представления else if через ElseIfClause)
   - while
   - for
   - return
@@ -78,6 +78,9 @@ ast, err := conv.ConvertToProgram(tree, sourceCode)
 # Простой пример
 go run cmd/example/main.go
 
-# Расширенный пример
+# Расширенный пример с массивами и указателями
 go run cmd/advanced-example/main.go
+
+# Пример с else if конструкциями
+go run cmd/else-if-example/main.go
 ```
