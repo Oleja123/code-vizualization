@@ -23,10 +23,10 @@ type Expr interface {
 type Converter interface {
 	// ConvertToProgram преобразует корневой узел tree-sitter в Program
 	ConvertToProgram(tree *sitter.Tree, sourceCode []byte) (Node, error)
-	
+
 	// ConvertStmt преобразует узел tree-sitter в Statement
 	ConvertStmt(node *sitter.Node, sourceCode []byte) (Stmt, error)
-	
+
 	// ConvertExpr преобразует узел tree-sitter в Expression
 	ConvertExpr(node *sitter.Node, sourceCode []byte) (Expr, error)
 }

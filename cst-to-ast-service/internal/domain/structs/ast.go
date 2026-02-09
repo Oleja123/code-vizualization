@@ -19,8 +19,8 @@ type Type struct {
 
 // Parameter представляет параметр функции
 type Parameter struct {
-	Type Type   `json:"type"`
-	Name string `json:"name"`
+	Type Type     `json:"type"`
+	Name string   `json:"name"`
 	Loc  Location `json:"location"`
 }
 
@@ -30,34 +30,34 @@ type Program struct {
 	Loc          Location          `json:"location"`
 }
 
-func (p *Program) NodeType() string { return "Program" }
+func (p *Program) NodeType() string      { return "Program" }
 func (p *Program) GetLocation() Location { return p.Loc }
 
 // ============= Statements =============
 
 // VariableDecl представляет объявление переменной
 type VariableDecl struct {
-	Type     Type           `json:"type"`
-	Name     string         `json:"name"`
+	Type     Type            `json:"type"`
+	Name     string          `json:"name"`
 	InitExpr interfaces.Expr `json:"initExpr,omitempty"` // может быть nil
-	Loc      Location       `json:"location"`
+	Loc      Location        `json:"location"`
 }
 
-func (v *VariableDecl) StmtNode() {}
-func (v *VariableDecl) NodeType() string { return "VariableDecl" }
+func (v *VariableDecl) StmtNode()             {}
+func (v *VariableDecl) NodeType() string      { return "VariableDecl" }
 func (v *VariableDecl) GetLocation() Location { return v.Loc }
 
 // FunctionDecl представляет объявление функции
 type FunctionDecl struct {
-	Name       string            `json:"name"`
-	ReturnType Type              `json:"returnType"`
-	Parameters []Parameter       `json:"parameters"`
-	Body       *BlockStmt        `json:"body"`
-	Loc        Location          `json:"location"`
+	Name       string      `json:"name"`
+	ReturnType Type        `json:"returnType"`
+	Parameters []Parameter `json:"parameters"`
+	Body       *BlockStmt  `json:"body"`
+	Loc        Location    `json:"location"`
 }
 
-func (f *FunctionDecl) StmtNode() {}
-func (f *FunctionDecl) NodeType() string { return "FunctionDecl" }
+func (f *FunctionDecl) StmtNode()             {}
+func (f *FunctionDecl) NodeType() string      { return "FunctionDecl" }
 func (f *FunctionDecl) GetLocation() Location { return f.Loc }
 
 // ElseIfClause представляет else if блок в условном операторе
@@ -71,13 +71,13 @@ type ElseIfClause struct {
 type IfStmt struct {
 	Condition  interfaces.Expr `json:"condition"`
 	ThenBlock  interfaces.Stmt `json:"thenBlock"`
-	ElseIfList []ElseIfClause  `json:"elseIf,omitempty"`  // else if блоки
+	ElseIfList []ElseIfClause  `json:"elseIf,omitempty"`    // else if блоки
 	ElseBlock  interfaces.Stmt `json:"elseBlock,omitempty"` // может быть nil
 	Loc        Location        `json:"location"`
 }
 
-func (i *IfStmt) StmtNode() {}
-func (i *IfStmt) NodeType() string { return "IfStmt" }
+func (i *IfStmt) StmtNode()             {}
+func (i *IfStmt) NodeType() string      { return "IfStmt" }
 func (i *IfStmt) GetLocation() Location { return i.Loc }
 
 // WhileStmt представляет цикл while
@@ -87,32 +87,32 @@ type WhileStmt struct {
 	Loc       Location        `json:"location"`
 }
 
-func (w *WhileStmt) StmtNode() {}
-func (w *WhileStmt) NodeType() string { return "WhileStmt" }
+func (w *WhileStmt) StmtNode()             {}
+func (w *WhileStmt) NodeType() string      { return "WhileStmt" }
 func (w *WhileStmt) GetLocation() Location { return w.Loc }
 
 // ForStmt представляет цикл for
 type ForStmt struct {
 	Init      interfaces.Stmt `json:"init,omitempty"`      // может быть nil
 	Condition interfaces.Expr `json:"condition,omitempty"` // может быть nil
-	Post      interfaces.Expr `json:"post,omitempty"`      // может быть nil
+	Post      interfaces.Stmt `json:"post,omitempty"`      // может быть nil (ExprStmt)
 	Body      interfaces.Stmt `json:"body"`
 	Loc       Location        `json:"location"`
 }
 
-func (f *ForStmt) StmtNode() {}
-func (f *ForStmt) NodeType() string { return "ForStmt" }
+func (f *ForStmt) StmtNode()             {}
+func (f *ForStmt) NodeType() string      { return "ForStmt" }
 func (f *ForStmt) GetLocation() Location { return f.Loc }
 
 // ReturnStmt представляет оператор return
 type ReturnStmt struct {
-	Type  string         `json:"type"`  // всегда "ReturnStmt"
+	Type  string          `json:"type"`            // всегда "ReturnStmt"
 	Value interfaces.Expr `json:"value,omitempty"` // может быть nil
-	Loc   Location       `json:"location"`
+	Loc   Location        `json:"location"`
 }
 
-func (r *ReturnStmt) StmtNode() {}
-func (r *ReturnStmt) NodeType() string { return "ReturnStmt" }
+func (r *ReturnStmt) StmtNode()             {}
+func (r *ReturnStmt) NodeType() string      { return "ReturnStmt" }
 func (r *ReturnStmt) GetLocation() Location { return r.Loc }
 
 // BlockStmt представляет блок операторов { ... }
@@ -121,8 +121,8 @@ type BlockStmt struct {
 	Loc        Location          `json:"location"`
 }
 
-func (b *BlockStmt) StmtNode() {}
-func (b *BlockStmt) NodeType() string { return "BlockStmt" }
+func (b *BlockStmt) StmtNode()             {}
+func (b *BlockStmt) NodeType() string      { return "BlockStmt" }
 func (b *BlockStmt) GetLocation() Location { return b.Loc }
 
 // ExprStmt представляет выражение как оператор
@@ -131,8 +131,8 @@ type ExprStmt struct {
 	Loc        Location        `json:"location"`
 }
 
-func (e *ExprStmt) StmtNode() {}
-func (e *ExprStmt) NodeType() string { return "ExprStmt" }
+func (e *ExprStmt) StmtNode()             {}
+func (e *ExprStmt) NodeType() string      { return "ExprStmt" }
 func (e *ExprStmt) GetLocation() Location { return e.Loc }
 
 // BreakStmt представляет оператор break
@@ -140,8 +140,8 @@ type BreakStmt struct {
 	Loc Location `json:"location"`
 }
 
-func (b *BreakStmt) StmtNode() {}
-func (b *BreakStmt) NodeType() string { return "BreakStmt" }
+func (b *BreakStmt) StmtNode()             {}
+func (b *BreakStmt) NodeType() string      { return "BreakStmt" }
 func (b *BreakStmt) GetLocation() Location { return b.Loc }
 
 // ContinueStmt представляет оператор continue
@@ -149,8 +149,8 @@ type ContinueStmt struct {
 	Loc Location `json:"location"`
 }
 
-func (c *ContinueStmt) StmtNode() {}
-func (c *ContinueStmt) NodeType() string { return "ContinueStmt" }
+func (c *ContinueStmt) StmtNode()             {}
+func (c *ContinueStmt) NodeType() string      { return "ContinueStmt" }
 func (c *ContinueStmt) GetLocation() Location { return c.Loc }
 
 // ============= Expressions =============
@@ -161,8 +161,8 @@ type Identifier struct {
 	Loc  Location `json:"location"`
 }
 
-func (i *Identifier) ExprNode() {}
-func (i *Identifier) NodeType() string { return "Identifier" }
+func (i *Identifier) ExprNode()             {}
+func (i *Identifier) NodeType() string      { return "Identifier" }
 func (i *Identifier) GetLocation() Location { return i.Loc }
 
 // VariableExpr представляет обращение к переменной в выражении
@@ -172,8 +172,8 @@ type VariableExpr struct {
 	Loc  Location `json:"location"`
 }
 
-func (v *VariableExpr) ExprNode() {}
-func (v *VariableExpr) NodeType() string { return "VariableExpr" }
+func (v *VariableExpr) ExprNode()             {}
+func (v *VariableExpr) NodeType() string      { return "VariableExpr" }
 func (v *VariableExpr) GetLocation() Location { return v.Loc }
 
 // IntLiteral представляет целочисленный литерал
@@ -182,8 +182,8 @@ type IntLiteral struct {
 	Loc   Location `json:"location"`
 }
 
-func (l *IntLiteral) ExprNode() {}
-func (l *IntLiteral) NodeType() string { return "IntLiteral" }
+func (l *IntLiteral) ExprNode()             {}
+func (l *IntLiteral) NodeType() string      { return "IntLiteral" }
 func (l *IntLiteral) GetLocation() Location { return l.Loc }
 
 // BinaryExpr представляет бинарное выражение
@@ -194,8 +194,8 @@ type BinaryExpr struct {
 	Loc      Location        `json:"location"`
 }
 
-func (b *BinaryExpr) ExprNode() {}
-func (b *BinaryExpr) NodeType() string { return "BinaryExpr" }
+func (b *BinaryExpr) ExprNode()             {}
+func (b *BinaryExpr) NodeType() string      { return "BinaryExpr" }
 func (b *BinaryExpr) GetLocation() Location { return b.Loc }
 
 // UnaryExpr представляет унарное выражение
@@ -205,19 +205,19 @@ type UnaryExpr struct {
 	Loc      Location        `json:"location"`
 }
 
-func (u *UnaryExpr) ExprNode() {}
-func (u *UnaryExpr) NodeType() string { return "UnaryExpr" }
+func (u *UnaryExpr) ExprNode()             {}
+func (u *UnaryExpr) NodeType() string      { return "UnaryExpr" }
 func (u *UnaryExpr) GetLocation() Location { return u.Loc }
 
 // AssignmentExpr представляет выражение присваивания
 type AssignmentExpr struct {
-	Left  interfaces.Expr `json:"left"`  // Identifier или ArrayAccessExpr
+	Left  interfaces.Expr `json:"left"` // Identifier или ArrayAccessExpr
 	Right interfaces.Expr `json:"right"`
 	Loc   Location        `json:"location"`
 }
 
-func (a *AssignmentExpr) ExprNode() {}
-func (a *AssignmentExpr) NodeType() string { return "AssignmentExpr" }
+func (a *AssignmentExpr) ExprNode()             {}
+func (a *AssignmentExpr) NodeType() string      { return "AssignmentExpr" }
 func (a *AssignmentExpr) GetLocation() Location { return a.Loc }
 
 // CallExpr представляет вызов функции
@@ -227,8 +227,8 @@ type CallExpr struct {
 	Loc          Location          `json:"location"`
 }
 
-func (c *CallExpr) ExprNode() {}
-func (c *CallExpr) NodeType() string { return "CallExpr" }
+func (c *CallExpr) ExprNode()             {}
+func (c *CallExpr) NodeType() string      { return "CallExpr" }
 func (c *CallExpr) GetLocation() Location { return c.Loc }
 
 // ArrayAccessExpr представляет доступ к элементу массива
@@ -238,8 +238,8 @@ type ArrayAccessExpr struct {
 	Loc   Location        `json:"location"`
 }
 
-func (a *ArrayAccessExpr) ExprNode() {}
-func (a *ArrayAccessExpr) NodeType() string { return "ArrayAccessExpr" }
+func (a *ArrayAccessExpr) ExprNode()             {}
+func (a *ArrayAccessExpr) NodeType() string      { return "ArrayAccessExpr" }
 func (a *ArrayAccessExpr) GetLocation() Location { return a.Loc }
 
 // ArrayInitExpr представляет инициализатор массива {1, 2, 3}
@@ -248,6 +248,6 @@ type ArrayInitExpr struct {
 	Loc      Location          `json:"location"`
 }
 
-func (a *ArrayInitExpr) ExprNode() {}
-func (a *ArrayInitExpr) NodeType() string { return "ArrayInitExpr" }
+func (a *ArrayInitExpr) ExprNode()             {}
+func (a *ArrayInitExpr) NodeType() string      { return "ArrayInitExpr" }
 func (a *ArrayInitExpr) GetLocation() Location { return a.Loc }
