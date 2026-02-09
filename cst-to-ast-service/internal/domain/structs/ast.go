@@ -50,6 +50,7 @@ func (v *VariableDecl) GetLocation() Location { return v.Loc }
 // FunctionDecl представляет объявление функции
 type FunctionDecl struct {
 	Name       string            `json:"name"`
+	ReturnType Type              `json:"returnType"`
 	Parameters []Parameter       `json:"parameters"`
 	Body       *BlockStmt        `json:"body"`
 	Loc        Location          `json:"location"`

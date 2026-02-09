@@ -264,6 +264,7 @@ func (c *CConverter) parseDeclarator(node *sitter.Node, sourceCode []byte) (stru
 
 func (c *CConverter) convertFunctionDefinition(node *sitter.Node, sourceCode []byte) (interfaces.Stmt, error) {
 	var funcName string
+	var returnType structs.Type
 	var params []structs.Parameter
 	var body *structs.BlockStmt
 	
@@ -271,6 +272,14 @@ func (c *CConverter) convertFunctionDefinition(node *sitter.Node, sourceCode []b
 		child := node.Child(i)
 		
 		switch child.Type() {
+		case "primitive_type":
+			// Return type
+			returnType = structs.Type{
+				BaseType:     "int",
+				PointerLevel: 0,
+				ArraySize:    0,
+			}
+			
 		case "function_declarator":
 			// Извлекаем имя функции и параметры
 			for j := 0; j < int(child.ChildCount()); j++ {
@@ -293,6 +302,7 @@ func (c *CConverter) convertFunctionDefinition(node *sitter.Node, sourceCode []b
 	
 	return &structs.FunctionDecl{
 		Name:       funcName,
+		ReturnType: returnType,
 		Parameters: params,
 		Body:       body,
 		Loc:        c.getLocation(node),
