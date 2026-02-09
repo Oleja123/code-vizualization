@@ -59,10 +59,18 @@ func (f *FunctionDecl) StmtNode() {}
 func (f *FunctionDecl) NodeType() string { return "FunctionDecl" }
 func (f *FunctionDecl) GetLocation() Location { return f.Loc }
 
-// IfStmt представляет условный оператор if/else
+// ElseIfClause представляет else if блок в условном операторе
+type ElseIfClause struct {
+	Condition interfaces.Expr `json:"condition"`
+	Block     interfaces.Stmt `json:"block"`
+	Loc       Location        `json:"location"`
+}
+
+// IfStmt представляет условный оператор if/else if/else
 type IfStmt struct {
 	Condition  interfaces.Expr `json:"condition"`
 	ThenBlock  interfaces.Stmt `json:"thenBlock"`
+	ElseIfList []ElseIfClause  `json:"elseIf,omitempty"`  // else if блоки
 	ElseBlock  interfaces.Stmt `json:"elseBlock,omitempty"` // может быть nil
 	Loc        Location        `json:"location"`
 }

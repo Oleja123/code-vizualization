@@ -334,15 +334,24 @@ func (c *CConverter) parseParameterList(node *sitter.Node, sourceCode []byte) []
 func (c *CConverter) convertIfStatement(node *sitter.Node, sourceCode []byte) (interfaces.Stmt, error) {
 	var condition interfaces.Expr
 	var thenBlock interfaces.Stmt
+	var elseIfList []structs.ElseIfClause
 	var elseBlock interfaces.Stmt
+	
+	// Структура tree-sitter для if/else if/else:
+	// if_statement:
+	//   "if"
+	//   parenthesized_expression
+	//   compound_statement
+	//   else_clause (optional)
 	
 	for i := 0; i < int(node.ChildCount()); i++ {
 		child := node.Child(i)
+		childType := child.Type()
 		
-		switch child.Type() {
+		switch childType {
 		case "parenthesized_expression":
-			// Условие внутри скобок
-			if child.ChildCount() > 1 {
+			// Это условие if
+			if condition == nil && child.ChildCount() > 1 {
 				condExpr, err := c.ConvertExpr(child.Child(1), sourceCode)
 				if err != nil {
 					return nil, err
@@ -351,30 +360,78 @@ func (c *CConverter) convertIfStatement(node *sitter.Node, sourceCode []byte) (i
 			}
 			
 		case "compound_statement", "expression_statement", "return_statement",
-			"if_statement", "while_statement", "for_statement":
-			if thenBlock == nil {
+			"while_statement", "for_statement":
+			// Это тело if (если мы ещё не установили тело)
+			if thenBlock == nil && condition != nil {
 				stmt, err := c.ConvertStmt(child, sourceCode)
 				if err != nil {
 					return nil, err
 				}
 				thenBlock = stmt
-			} else {
-				// Это else блок
-				stmt, err := c.ConvertStmt(child, sourceCode)
-				if err != nil {
-					return nil, err
-				}
-				elseBlock = stmt
 			}
+			
+		case "else_clause":
+			// Это else или else if блок
+			c.processElseClause(child, sourceCode, &elseIfList, &elseBlock)
+			
+		case "if":
+			// Ключевое слово "if", пропускаем
 		}
 	}
 	
 	return &structs.IfStmt{
 		Condition:  condition,
 		ThenBlock:  thenBlock,
+		ElseIfList: elseIfList,
 		ElseBlock:  elseBlock,
 		Loc:        c.getLocation(node),
 	}, nil
+}
+
+// processElseClause обрабатывает else_clause
+// Структура: else_clause может содержать:
+// - if_statement (для else if)
+// - compound_statement (для else { ... })
+func (c *CConverter) processElseClause(node *sitter.Node, sourceCode []byte, elseIfList *[]structs.ElseIfClause, elseBlock *interfaces.Stmt) error {
+	for i := 0; i < int(node.ChildCount()); i++ {
+		child := node.Child(i)
+		
+		switch child.Type() {
+		case "if_statement":
+			// Это else if конструкция
+			nestedIfStmt, err := c.convertIfStatement(child, sourceCode)
+			if err != nil {
+				return err
+			}
+			
+			nestedIf := nestedIfStmt.(*structs.IfStmt)
+			
+			// Добавляем условие вложенного if в elseIfList
+			*elseIfList = append(*elseIfList, structs.ElseIfClause{
+				Condition: nestedIf.Condition,
+				Block:     nestedIf.ThenBlock,
+				Loc:       nestedIf.Loc,
+			})
+			
+			// Добавляем все else if из вложенного if
+			*elseIfList = append(*elseIfList, nestedIf.ElseIfList...)
+			
+			// Последний else блок становится нашим else
+			*elseBlock = nestedIf.ElseBlock
+			
+		case "compound_statement", "expression_statement", "return_statement":
+			// Это обычный else блок
+			stmt, err := c.ConvertStmt(child, sourceCode)
+			if err != nil {
+				return err
+			}
+			*elseBlock = stmt
+			
+		case "else":
+			// Ключевое слово "else", пропускаем
+		}
+	}
+	return nil
 }
 
 func (c *CConverter) convertWhileStatement(node *sitter.Node, sourceCode []byte) (interfaces.Stmt, error) {
