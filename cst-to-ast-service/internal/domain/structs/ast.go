@@ -106,8 +106,9 @@ func (f *ForStmt) GetLocation() Location { return f.Loc }
 
 // ReturnStmt представляет оператор return
 type ReturnStmt struct {
+	Type  string         `json:"type"`  // всегда "ReturnStmt"
 	Value interfaces.Expr `json:"value,omitempty"` // может быть nil
-	Loc   Location        `json:"location"`
+	Loc   Location       `json:"location"`
 }
 
 func (r *ReturnStmt) StmtNode() {}

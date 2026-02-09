@@ -567,6 +567,7 @@ func (c *CConverter) convertReturnStatement(node *sitter.Node, sourceCode []byte
 	}
 	
 	return &structs.ReturnStmt{
+		Type:  "ReturnStmt",
 		Value: value,
 		Loc:   c.getLocation(node),
 	}, nil
