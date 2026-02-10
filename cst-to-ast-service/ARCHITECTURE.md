@@ -13,16 +13,25 @@
 ### Точка входа
 
 ```go
-import "github.com/Oleja123/code-vizualization/cst-to-ast-service/internal/converter"
+import "github.com/Oleja123/code-vizualization/cst-to-ast-service/pkg/converter"
 
-conv := converter.NewCConverter()
-ast, err := conv.ConvertToAST(sourceCode)
+// Создать конвертер
+conv := converter.New()
+
+// Основной метод: парсинг кода в AST
+program, err := conv.ParseToAST(sourceCode)
 if err != nil {
-    // Обработка ошибок парсинга или конвертации
+    // Обработка ошибки парсинга
+    loc := err.GetLocation()
+    code := err.GetCode()
+    msg := err.GetMessage()
+    nodeType := err.GetNodeType()
 }
 ```
 
-**Возвращает**: `*structs.Program` - корневой узел AST
+**Возвращает**: `(*Program, *ConverterError)` где:
+- `Program` - корневой узел AST (nil при ошибке)
+- `ConverterError` - детальная информация об ошибке (nil при успехе)
 
 ---
 
@@ -701,22 +710,42 @@ if ifStmt, ok := stmt.(*structs.IfStmt); ok {
 
 ```bash
 cd cst-to-ast-service
-go test ./internal/converter/... -v -cover
+go test ./pkg/converter/... -v -cover
 ```
 
 **Покрытие**: 81.7% (47 тестов)
 
-### Примеры использования
+### Запуск HTTP API сервера
 
 ```bash
-# Базовый пример (факториал)
-go run cmd/example/main.go
+cd cst-to-ast-service
+go run cmd/server/main.go
+```
 
-# Массивы и указатели
-go run cmd/advanced-example/main.go
+Сервер доступен на `http://localhost:8080` с тремя endpoints:
+- `POST /parse` - парсинг C кода в AST
+- `GET /health` - проверка статуса
+- `GET /info` - информация об API
 
-# Условные операторы
-go run cmd/else-if-example/main.go
+**Примеры:**
+```bash
+# Парсинг кода
+curl -X POST http://localhost:8080/parse \
+  -H "Content-Type: application/json" \
+  -d '{"code":"int x = 42;"}'
+
+# Проверка здоровья
+curl http://localhost:8080/health
+```
+
+### Использование как библиотеки
+
+```bash
+# Добавить зависимость в ваш проект
+go get github.com/Oleja123/code-vizualization/cst-to-ast-service/pkg/converter
+
+# Использование в коде
+go run your-program.go
 ```
 
 ---

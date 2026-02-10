@@ -44,85 +44,123 @@
 
 ### Быстрый старт
 
+**Как библиотека:**
+
 ```go
-import (
-    "github.com/Oleja123/code-vizualization/cst-to-ast-service/internal/converter"
-    "encoding/json"
-)
+import "github.com/Oleja123/code-vizualization/cst-to-ast-service/pkg/converter"
 
-// C код для разбора
-code := `
-int factorial(int n) {
-    if (n <= 1) return 1;
-    return n * factorial(n - 1);
-}
-`
+// Парсинг C кода в AST
+conv := converter.New()
+program, err := conv.ParseToAST(`
+    int factorial(int n) {
+        if (n <= 1) return 1;
+        return n * factorial(n - 1);
+    }
+`)
 
-// Конвертация в AST
-conv := converter.NewCConverter()
-ast, err := conv.ConvertToAST(code)
 if err != nil {
-    panic(err)
+    fmt.Printf("Parse error at %d:%d\n", err.GetLocation().Line, err.GetLocation().Column)
+    fmt.Printf("Code: %s\n", err.GetCode())
+    fmt.Printf("Message: %s\n", err.GetMessage())
+    return
 }
 
-// Использование AST (например, в интерпретаторе)
-for _, decl := range ast.Declarations {
-    if fn, ok := decl.(*structs.FunctionDecl); ok {
+// program имеет тип *converter.Program
+for _, decl := range program.Declarations {
+    if fn, ok := decl.(*converter.FunctionDecl); ok {
         fmt.Printf("Function: %s\n", fn.Name)
-        // ... выполнение функции
     }
 }
 ```
 
-### Структура AST
+**Как HTTP API:**
 
-**Пример**: `if (score >= 90) { return 5; } else if (score >= 80) { return 4; } else { return 2; }`
+```bash
+# Запустить сервер
+go run cmd/server/main.go
 
-```json
-{
-  "type": "IfStmt",
-  "condition": {"op": ">=", "left": "score", "right": 90},
-  "thenBlock": {...},
-  "elseIf": [
-    {"condition": {"op": ">=", "left": "score", "right": 80}, "block": {...}}
-  ],
-  "elseBlock": {...}
-}
+# В другом терминале отправить код на парсинг
+curl -X POST http://localhost:8080/parse \
+  -H "Content-Type: application/json" \
+  -d '{"code":"int factorial(int n) { if (n <= 1) return 1; return n * factorial(n - 1); }"}'
 ```
 
-Подробная документация: [`ARCHITECTURE.md`](cst-to-ast-service/ARCHITECTURE.md)
+### Обработка ошибок
+
+Все ошибки парсинга имеют тип `*converter.ConverterError` с полной информацией:
+
+```go
+if err != nil {
+    convErr := err.(*converter.ConverterError)
+    
+    // Location в коде
+    loc := convErr.GetLocation()
+    fmt.Printf("at %d:%d\n", loc.Line, loc.Column)
+    
+    // Тип ошибки (ParseFailed, StmtConversion, ExprUnsupported, etc.)
+    fmt.Printf("error code: %s\n", convErr.GetCode())
+    
+    // Понятное описание
+    fmt.Printf("message: %s\n", convErr.GetMessage())
+    
+    // Тип узла tree-sitter (для отладки)
+    fmt.Printf("node type: %s\n", convErr.GetNodeType())
+}
+```
 
 ### Структура проекта
 
 ```
 cst-to-ast-service/
 ├── ARCHITECTURE.md       # 📖 Полный справочник AST для разработки интерпретаторов
+├── API.md               # 📚 REST API документация
+├── pkg/
+│   └── converter/       # Публичный API
+│       ├── converter.go      # Основной конвертер (ParseToAST)
+│       ├── errors.go         # Структура ошибок (ConverterError)
+│       ├── converter_test.go # 47 тестов (81.7% покрытие)
+│       └── doc.go            # Документация пакета
 ├── cmd/
-│   ├── example/          # Базовый пример (факториал)
-│   ├── advanced-example/ # Массивы, указатели, циклы
-│   └── else-if-example/  # Условные операторы
+│   └── server/
+│       └── main.go      # HTTP REST API сервер
 ├── internal/
-│   ├── converter/
-│   │   ├── converter.go      # Конвертер CST → AST
-│   │   └── converter_test.go # 47 тестов (81.7% покрытие)
 │   └── domain/
-│       ├── interfaces/   # Интерфейсы Node, Stmt, Expr
-│       └── structs/      # Определения всех 20 типов узлов
+│       ├── interfaces/  # Интерфейсы (Node, Stmt, Expr)
+│       └── structs/     # Определения типов AST
 └── go.mod
 ```
 
-### Команды
+### REST HTTP API
 
+AST-сервис предоставляет REST API для парсинга C кода.
+
+**Запуск:**
 ```bash
-# Тестирование
-cd cst-to-ast-service
-go test ./internal/converter/... -v -cover
-
-# Примеры
-go run cmd/example/main.go          # Факториал
-go run cmd/advanced-example/main.go # Массивы и указатели
-go run cmd/else-if-example/main.go  # If-else-if цепочки
+go run cmd/server/main.go
 ```
+Сервер доступен на `http://localhost:8080`
+
+**Endpoints:**
+
+- **POST /parse** — Парсит C код и возвращает AST или ошибку
+- **GET /health** — Проверка статуса сервиса
+- **GET /info** — Информация об API и поддерживаемых конструкциях
+
+**Примеры:**
+```bash
+# Парсинг переменной
+curl -X POST http://localhost:8080/parse \
+  -H "Content-Type: application/json" \
+  -d '{"code":"int x = 42;"}'
+
+# Проверка здоровья
+curl http://localhost:8080/health
+
+# Информация об API
+curl http://localhost:8080/info
+```
+
+Полная документация API: [`API.md`](cst-to-ast-service/API.md)
 
 ### Для разработчиков интерпретаторов
 
@@ -132,6 +170,26 @@ go run cmd/else-if-example/main.go  # If-else-if цепочки
 - Рекомендациями по архитектуре интерпретатора
 - Примерами обхода и вычисления AST
 - Информацией о системе типов и `Location`
+
+Все типы AST доступны из пакета `converter`:
+
+```go
+import "github.com/Oleja123/code-vizualization/cst-to-ast-service/pkg/converter"
+
+// Основная точка входа
+conv := converter.New()
+program, err := conv.ParseToAST(sourceCode)
+
+// Типы операторов
+_ = (*converter.FunctionDecl)(nil)
+_ = (*converter.IfStmt)(nil)
+_ = (*converter.ForStmt)(nil)
+// ... остальные 20 типов
+
+// Базовые типы
+_ = (*converter.Location)(nil)
+_ = (*converter.Type)(nil)
+```
 
 ### Ограничения
 

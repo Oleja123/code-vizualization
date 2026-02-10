@@ -12,6 +12,37 @@ import (
 	"github.com/smacker/go-tree-sitter/c"
 )
 
+// Переэкспорт для публичного API
+type (
+	// structs переэкспортируются через пакет
+	Program      = structs.Program
+	VariableDecl = structs.VariableDecl
+	FunctionDecl = structs.FunctionDecl
+	IfStmt       = structs.IfStmt
+	ElseIfClause = structs.ElseIfClause
+	WhileStmt    = structs.WhileStmt
+	ForStmt      = structs.ForStmt
+	ReturnStmt   = structs.ReturnStmt
+	BlockStmt    = structs.BlockStmt
+	ExprStmt     = structs.ExprStmt
+	BreakStmt    = structs.BreakStmt
+	ContinueStmt = structs.ContinueStmt
+
+	// Выражения
+	VariableExpr    = structs.VariableExpr
+	IntLiteral      = structs.IntLiteral
+	BinaryExpr      = structs.BinaryExpr
+	UnaryExpr       = structs.UnaryExpr
+	AssignmentExpr  = structs.AssignmentExpr
+	CallExpr        = structs.CallExpr
+	ArrayAccessExpr = structs.ArrayAccessExpr
+	ArrayInitExpr   = structs.ArrayInitExpr
+
+	// Базовые типы
+	Location = structs.Location
+	Type     = structs.Type
+)
+
 // CConverter реализует конвертер tree-sitter CST в AST для языка C
 type CConverter struct {
 	parser *sitter.Parser
@@ -25,6 +56,49 @@ func NewCConverter() *CConverter {
 	return &CConverter{
 		parser: parser,
 	}
+}
+
+// New создает новый конвертер для C (публичный API)
+func New() *CConverter {
+	return NewCConverter()
+}
+
+// ParseToAST парсит C код и возвращает AST или детальную ошибку
+// Это основной публичный метод для интерпретаторов
+func (c *CConverter) ParseToAST(sourceCode string) (*Program, *ConverterError) {
+	tree, err := c.parser.ParseCtx(context.Background(), nil, []byte(sourceCode))
+	if err != nil {
+		return nil, &ConverterError{
+			Code:    ErrParseFailed,
+			Message: "tree-sitter parsing failed: " + err.Error(),
+			Cause:   err,
+		}
+	}
+
+	// Используем внутренний метод ConvertToProgram для полной конвертации
+	node, err := c.ConvertToProgram(tree, []byte(sourceCode))
+	if err != nil {
+		// Преобразуем внутреннюю ошибку в публичный формат
+		if convErr, ok := err.(*ConverterError); ok {
+			return nil, convErr
+		}
+		// Если это не наша ошибка, оборачиваем в ConverterError
+		return nil, &ConverterError{
+			Code:    ErrStmtConversion,
+			Message: "failed to convert AST: " + err.Error(),
+			Cause:   err,
+		}
+	}
+
+	program, ok := node.(*Program)
+	if !ok {
+		return nil, &ConverterError{
+			Code:    ErrStmtConversion,
+			Message: "expected Program node, got something else",
+		}
+	}
+
+	return program, nil
 }
 
 // Parse парсит исходный код C и возвращает дерево tree-sitter
