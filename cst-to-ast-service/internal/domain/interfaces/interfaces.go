@@ -16,7 +16,8 @@ type Stmt interface {
 // Expr представляет выражение (expression) в C
 type Expr interface {
 	Node
-	ExprNode() // маркерный метод для expressions
+	ExprNode()      // маркерный метод для expressions
+	IsLValue() bool // возвращает true, если выражение является lvalue (может стоять слева от =)
 }
 
 // Converter определяет интерфейс для конвертации tree-sitter CST в AST

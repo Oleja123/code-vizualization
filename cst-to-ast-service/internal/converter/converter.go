@@ -1,6 +1,7 @@
 package converter
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"strconv"
@@ -30,7 +31,7 @@ func NewCConverter() *CConverter {
 func (c *CConverter) Parse(sourceCode []byte) (*sitter.Tree, error) {
 	tree, err := c.parser.ParseCtx(context.Background(), nil, sourceCode)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse source code: %w", err)
+		return nil, newConverterError(ErrParseFailed, "failed to parse source code", nil, err)
 	}
 	return tree, nil
 }
@@ -40,6 +41,7 @@ func (c *CConverter) ConvertToProgram(tree *sitter.Tree, sourceCode []byte) (int
 	rootNode := tree.RootNode()
 
 	program := &structs.Program{
+		Type:         "Program",
 		Declarations: make([]interfaces.Stmt, 0),
 		Loc:          c.getLocation(rootNode),
 	}
@@ -55,8 +57,7 @@ func (c *CConverter) ConvertToProgram(tree *sitter.Tree, sourceCode []byte) (int
 
 		stmt, err := c.ConvertStmt(child, sourceCode)
 		if err != nil {
-			return nil, fmt.Errorf("failed to convert statement at line %d: %w",
-				child.StartPoint().Row, err)
+			return nil, newConverterError(ErrStmtConversion, "failed to convert statement", child, err)
 		}
 
 		if stmt != nil {
@@ -71,6 +72,12 @@ func (c *CConverter) ConvertToProgram(tree *sitter.Tree, sourceCode []byte) (int
 func (c *CConverter) ConvertStmt(node *sitter.Node, sourceCode []byte) (interfaces.Stmt, error) {
 	if node == nil {
 		return nil, nil
+	}
+
+	// Проверяем, есть ли ошибки парсинга tree-sitter для этого узла
+	if c.hasTreeSitterError(node) {
+		errMsg := c.getTreeSitterErrorMessage(node, sourceCode)
+		return nil, newConverterError(ErrTreeSitterError, errMsg, node, nil)
 	}
 
 	nodeType := node.Type()
@@ -93,11 +100,14 @@ func (c *CConverter) ConvertStmt(node *sitter.Node, sourceCode []byte) (interfac
 	case "expression_statement":
 		return c.convertExpressionStatement(node, sourceCode)
 	case "break_statement":
-		return &structs.BreakStmt{Loc: c.getLocation(node)}, nil
+		return &structs.BreakStmt{Type: "BreakStmt", Loc: c.getLocation(node)}, nil
 	case "continue_statement":
-		return &structs.ContinueStmt{Loc: c.getLocation(node)}, nil
+		return &structs.ContinueStmt{Type: "ContinueStmt", Loc: c.getLocation(node)}, nil
+	case "comment":
+		// Пропускаем комментарии - они не являются AST узлами
+		return nil, nil
 	default:
-		return nil, fmt.Errorf("unsupported statement type: %s", nodeType)
+		return nil, newConverterError(ErrStmtUnsupported, fmt.Sprintf("unsupported statement type: %s", nodeType), node, nil)
 	}
 }
 
@@ -105,6 +115,12 @@ func (c *CConverter) ConvertStmt(node *sitter.Node, sourceCode []byte) (interfac
 func (c *CConverter) ConvertExpr(node *sitter.Node, sourceCode []byte) (interfaces.Expr, error) {
 	if node == nil {
 		return nil, nil
+	}
+
+	// Проверяем, есть ли ошибки парсинга tree-sitter для этого узла
+	if c.hasTreeSitterError(node) {
+		errMsg := c.getTreeSitterErrorMessage(node, sourceCode)
+		return nil, newConverterError(ErrTreeSitterError, errMsg, node, nil)
 	}
 
 	nodeType := node.Type()
@@ -131,17 +147,132 @@ func (c *CConverter) ConvertExpr(node *sitter.Node, sourceCode []byte) (interfac
 	case "pointer_expression":
 		return c.convertUnaryExpression(node, sourceCode)
 	case "parenthesized_expression":
-		// Разворачиваем скобки
-		if node.ChildCount() > 0 {
-			return c.ConvertExpr(node.Child(1), sourceCode)
+		// Разворачиваем скобки, пропускаем комментарии
+		for i := 0; i < int(node.ChildCount()); i++ {
+			child := node.Child(i)
+			if child.Type() != "(" && child.Type() != ")" && child.Type() != "comment" {
+				return c.ConvertExpr(child, sourceCode)
+			}
 		}
-		return nil, fmt.Errorf("empty parenthesized expression")
+		return nil, newConverterError(ErrEmptyParenthesizedExpr, "empty parenthesized expression", node, nil)
+	case "comment":
+		// Комментарии в выражениях должны быть пропущены выше, но на случай
+		return nil, newConverterError(ErrExprUnsupported, "comment cannot be part of expression", node, nil)
 	default:
-		return nil, fmt.Errorf("unsupported expression type: %s", nodeType)
+		return nil, newConverterError(ErrExprUnsupported, fmt.Sprintf("unsupported expression type: %s", nodeType), node, nil)
 	}
 }
 
 // ============= Helper functions =============
+
+// hasTreeSitterError проверяет, содержит ли узел ошибки парсинга tree-sitter
+// Проверяет только сам узел - потомков мы проверим при рекурсивном вызове ConvertStmt/ConvertExpr
+func (c *CConverter) hasTreeSitterError(node *sitter.Node) bool {
+	if node == nil {
+		return false
+	}
+	return node.HasError() || node.IsMissing()
+}
+
+// getTreeSitterErrorMessage извлекает информативное сообщение об ошибке парсинга tree-sitter
+// Анализирует дерево ошибки и выводит контекст с информацией о синтаксической проблеме
+func (c *CConverter) getTreeSitterErrorMessage(node *sitter.Node, sourceCode []byte) string {
+	if node == nil {
+		return "tree-sitter parsing error"
+	}
+
+	// Если сам узел - ERROR узел, выводим информацию о нем
+	if node.Type() == "ERROR" {
+		startPoint := node.StartPoint()
+		errChar := c.getCharAtPosition(sourceCode, startPoint)
+		return fmt.Sprintf("syntax error at line %d, column %d near '%s'",
+			startPoint.Row+1, startPoint.Column, errChar)
+	}
+
+	// Рекурсивно ищем ERROR узлы в потомках
+	errorNode := c.findErrorNode(node)
+	if errorNode != nil {
+		startPoint := errorNode.StartPoint()
+		errChar := c.getCharAtPosition(sourceCode, startPoint)
+		return fmt.Sprintf("syntax error at line %d, column %d near '%s'",
+			startPoint.Row+1, startPoint.Column, errChar)
+	}
+
+	// Ищем IsMissing узлы
+	missingNode := c.findMissingNode(node)
+	if missingNode != nil {
+		startPoint := missingNode.StartPoint()
+		return fmt.Sprintf("syntax error at line %d, column %d: missing '%s'",
+			startPoint.Row+1, startPoint.Column, missingNode.Type())
+	}
+
+	// Общее сообщение по типу узла
+	return fmt.Sprintf("tree-sitter parsing error in %s", node.Type())
+}
+
+// getCharAtPosition возвращает символ в заданной позиции исходного кода
+func (c *CConverter) getCharAtPosition(sourceCode []byte, point sitter.Point) string {
+	lines := bytes.Split(sourceCode, []byte("\n"))
+	if int(point.Row) >= len(lines) {
+		return "EOF"
+	}
+
+	line := lines[point.Row]
+	if int(point.Column) >= len(line) {
+		return "\\n"
+	}
+
+	if point.Column < 0 {
+		return ""
+	}
+
+	char := line[point.Column]
+	if char == '\t' {
+		return "\\t"
+	}
+	if char == ' ' {
+		return "SPACE"
+	}
+	return string(char)
+}
+
+// findErrorNode рекурсивно ищет первый ERROR узел в дереве
+func (c *CConverter) findErrorNode(node *sitter.Node) *sitter.Node {
+	if node == nil {
+		return nil
+	}
+
+	if node.Type() == "ERROR" {
+		return node
+	}
+
+	for i := 0; i < int(node.ChildCount()); i++ {
+		if found := c.findErrorNode(node.Child(i)); found != nil {
+			return found
+		}
+	}
+
+	return nil
+}
+
+// findMissingNode рекурсивно ищет первый missing узел в дереве
+func (c *CConverter) findMissingNode(node *sitter.Node) *sitter.Node {
+	if node == nil {
+		return nil
+	}
+
+	if node.IsMissing() {
+		return node
+	}
+
+	for i := 0; i < int(node.ChildCount()); i++ {
+		if found := c.findMissingNode(node.Child(i)); found != nil {
+			return found
+		}
+	}
+
+	return nil
+}
 
 func (c *CConverter) getLocation(node *sitter.Node) structs.Location {
 	startPoint := node.StartPoint()
@@ -190,23 +321,29 @@ func (c *CConverter) convertDeclaration(node *sitter.Node, sourceCode []byte) (i
 	}
 
 	if typeNode == nil || declaratorNode == nil {
-		return nil, fmt.Errorf("invalid declaration: missing type or declarator")
+		return nil, newConverterError(ErrInvalidDeclaration, "invalid declaration: missing type or declarator", node, nil)
 	}
 
 	varType, varName := c.parseDeclarator(declaratorNode, sourceCode)
 	varType.BaseType = c.getNodeText(typeNode, sourceCode)
+
+	// Проверка на пустое имя переменной
+	if varName == "" {
+		return nil, newConverterError(ErrInvalidDeclaration, "declaration without variable name", node, nil)
+	}
 
 	var initExpr interfaces.Expr
 	var err error
 	if initNode != nil {
 		initExpr, err = c.ConvertExpr(initNode, sourceCode)
 		if err != nil {
-			return nil, fmt.Errorf("failed to convert initializer: %w", err)
+			return nil, newConverterError(ErrInitializerConversion, "failed to convert initializer", initNode, err)
 		}
 	}
 
 	return &structs.VariableDecl{
-		Type:     varType,
+		Type:     "VariableDecl",
+		VarType:  varType,
 		Name:     varName,
 		InitExpr: initExpr,
 		Loc:      c.getLocation(node),
@@ -240,8 +377,22 @@ func (c *CConverter) parseDeclarator(node *sitter.Node, sourceCode []byte) (stru
 				}
 			}
 		}
+		// После цикла current может быть identifier или array_declarator
 		if current.Type() == "identifier" {
 			name = c.getNodeText(current, sourceCode)
+		} else if current.Type() == "array_declarator" {
+			// Рекурсивно обработать array_declarator (например, int *arr[10])
+			_, name = c.parseDeclarator(current, sourceCode)
+			// Для array_declarator нужно также обновить размер массива
+			for i := 0; i < int(current.ChildCount()); i++ {
+				child := current.Child(i)
+				if child.Type() == "number_literal" {
+					sizeStr := c.getNodeText(child, sourceCode)
+					if size, err := strconv.Atoi(sizeStr); err == nil {
+						varType.ArraySize = size
+					}
+				}
+			}
 		}
 
 	case "array_declarator":
@@ -267,21 +418,24 @@ func (c *CConverter) convertFunctionDefinition(node *sitter.Node, sourceCode []b
 	var returnType structs.Type
 	var params []structs.Parameter
 	var body *structs.BlockStmt
+	var funcPointerLevel int
 
 	for i := 0; i < int(node.ChildCount()); i++ {
 		child := node.Child(i)
 
 		switch child.Type() {
-		case "primitive_type":
-			// Return type
+		case "primitive_type", "type_identifier":
+			typeName := c.getNodeText(child, sourceCode)
+			if typeName != "int" && typeName != "void" {
+				return nil, newConverterError(ErrInvalidDeclaration, fmt.Sprintf("unsupported return type: %s", typeName), child, nil)
+			}
 			returnType = structs.Type{
-				BaseType:     "int",
+				BaseType:     typeName,
 				PointerLevel: 0,
 				ArraySize:    0,
 			}
 
 		case "function_declarator":
-			// Извлекаем имя функции и параметры
 			for j := 0; j < int(child.ChildCount()); j++ {
 				subChild := child.Child(j)
 				if subChild.Type() == "identifier" {
@@ -290,6 +444,16 @@ func (c *CConverter) convertFunctionDefinition(node *sitter.Node, sourceCode []b
 					params = c.parseParameterList(subChild, sourceCode)
 				}
 			}
+
+		case "pointer_declarator":
+			name, parsedParams, pointerLevel := c.parseFunctionDeclarator(child, sourceCode)
+			if name != "" {
+				funcName = name
+			}
+			if parsedParams != nil {
+				params = parsedParams
+			}
+			funcPointerLevel = pointerLevel
 
 		case "compound_statement":
 			blockStmt, err := c.convertBlockStatement(child, sourceCode)
@@ -300,13 +464,51 @@ func (c *CConverter) convertFunctionDefinition(node *sitter.Node, sourceCode []b
 		}
 	}
 
+	if funcPointerLevel > 0 {
+		returnType.PointerLevel = funcPointerLevel
+	}
+
 	return &structs.FunctionDecl{
+		Type:       "FunctionDecl",
 		Name:       funcName,
 		ReturnType: returnType,
 		Parameters: params,
 		Body:       body,
 		Loc:        c.getLocation(node),
 	}, nil
+}
+
+func (c *CConverter) parseFunctionDeclarator(node *sitter.Node, sourceCode []byte) (string, []structs.Parameter, int) {
+	var name string
+	var params []structs.Parameter
+	var pointerLevel int
+
+	current := node
+	for current.Type() == "pointer_declarator" {
+		pointerLevel++
+		for i := 0; i < int(current.ChildCount()); i++ {
+			child := current.Child(i)
+			if child.Type() != "*" {
+				current = child
+				break
+			}
+		}
+	}
+
+	if current.Type() == "function_declarator" {
+		for i := 0; i < int(current.ChildCount()); i++ {
+			child := current.Child(i)
+			if child.Type() == "identifier" {
+				name = c.getNodeText(child, sourceCode)
+			} else if child.Type() == "parameter_list" {
+				params = c.parseParameterList(child, sourceCode)
+			}
+		}
+	} else if current.Type() == "identifier" {
+		name = c.getNodeText(current, sourceCode)
+	}
+
+	return name, params, pointerLevel
 }
 
 func (c *CConverter) parseParameterList(node *sitter.Node, sourceCode []byte) []structs.Parameter {
@@ -390,6 +592,7 @@ func (c *CConverter) convertIfStatement(node *sitter.Node, sourceCode []byte) (i
 	}
 
 	return &structs.IfStmt{
+		Type:       "IfStmt",
 		Condition:  condition,
 		ThenBlock:  thenBlock,
 		ElseIfList: elseIfList,
@@ -471,6 +674,7 @@ func (c *CConverter) convertWhileStatement(node *sitter.Node, sourceCode []byte)
 	}
 
 	return &structs.WhileStmt{
+		Type:      "WhileStmt",
 		Condition: condition,
 		Body:      body,
 		Loc:       c.getLocation(node),
@@ -482,6 +686,57 @@ func (c *CConverter) convertForStatement(node *sitter.Node, sourceCode []byte) (
 	var condition interfaces.Expr
 	var post interfaces.Stmt
 	var body interfaces.Stmt
+	var usedFields bool
+
+	for i := 0; i < int(node.ChildCount()); i++ {
+		child := node.Child(i)
+		field := node.FieldNameForChild(i)
+		if field != "" {
+			usedFields = true
+		}
+
+		switch field {
+		case "initializer":
+			stmt, err := c.ConvertStmt(child, sourceCode)
+			if err != nil {
+				return nil, err
+			}
+			init = stmt
+		case "condition":
+			expr, err := c.ConvertExpr(child, sourceCode)
+			if err != nil {
+				return nil, err
+			}
+			condition = expr
+		case "update":
+			expr, err := c.ConvertExpr(child, sourceCode)
+			if err != nil {
+				return nil, err
+			}
+			post = &structs.ExprStmt{
+				Type:       "ExprStmt",
+				Expression: expr,
+				Loc:        c.getLocation(child),
+			}
+		case "body":
+			stmt, err := c.ConvertStmt(child, sourceCode)
+			if err != nil {
+				return nil, err
+			}
+			body = stmt
+		}
+	}
+
+	if usedFields {
+		return &structs.ForStmt{
+			Type:      "ForStmt",
+			Init:      init,
+			Condition: condition,
+			Post:      post,
+			Body:      body,
+			Loc:       c.getLocation(node),
+		}, nil
+	}
 
 	partIndex := 0
 	for i := 0; i < int(node.ChildCount()); i++ {
@@ -495,6 +750,10 @@ func (c *CConverter) convertForStatement(node *sitter.Node, sourceCode []byte) (
 		}
 		if child.Type() == ";" {
 			partIndex++
+			continue
+		}
+		// Пропускаем комментарии
+		if child.Type() == "comment" {
 			continue
 		}
 
@@ -523,20 +782,22 @@ func (c *CConverter) convertForStatement(node *sitter.Node, sourceCode []byte) (
 			body = stmt
 
 		default:
-			if partIndex == 1 {
+			switch partIndex {
+			case 1:
 				// Condition
 				expr, err := c.ConvertExpr(child, sourceCode)
 				if err != nil {
 					return nil, err
 				}
 				condition = expr
-			} else if partIndex == 2 {
+			case 2:
 				// Post - обрабатываем как выражение и оборачиваем в ExprStmt
 				expr, err := c.ConvertExpr(child, sourceCode)
 				if err != nil {
 					return nil, err
 				}
 				post = &structs.ExprStmt{
+					Type:       "ExprStmt",
 					Expression: expr,
 					Loc:        c.getLocation(child),
 				}
@@ -545,6 +806,7 @@ func (c *CConverter) convertForStatement(node *sitter.Node, sourceCode []byte) (
 	}
 
 	return &structs.ForStmt{
+		Type:      "ForStmt",
 		Init:      init,
 		Condition: condition,
 		Post:      post,
@@ -555,17 +817,23 @@ func (c *CConverter) convertForStatement(node *sitter.Node, sourceCode []byte) (
 
 func (c *CConverter) convertReturnStatement(node *sitter.Node, sourceCode []byte) (interfaces.Stmt, error) {
 	var value interfaces.Expr
+	var exprCount int
 
 	for i := 0; i < int(node.ChildCount()); i++ {
 		child := node.Child(i)
 
 		if child.Type() != "return" && child.Type() != ";" {
-			expr, err := c.ConvertExpr(child, sourceCode)
+			exprCount++
+			// Предупреждение, если выражений больше одного
+			if exprCount > 1 {
+				return nil, newConverterError(ErrInvalidReturnStatement, "return statement has multiple expressions", node, nil)
+			}
+
+			var err error
+			value, err = c.ConvertExpr(child, sourceCode)
 			if err != nil {
 				return nil, err
 			}
-			value = expr
-			break
 		}
 	}
 
@@ -582,8 +850,8 @@ func (c *CConverter) convertBlockStatement(node *sitter.Node, sourceCode []byte)
 	for i := 0; i < int(node.ChildCount()); i++ {
 		child := node.Child(i)
 
-		// Пропускаем фигурные скобки
-		if child.Type() == "{" || child.Type() == "}" {
+		// Пропускаем фигурные скобки и комментарии
+		if child.Type() == "{" || child.Type() == "}" || child.Type() == "comment" {
 			continue
 		}
 
@@ -598,37 +866,56 @@ func (c *CConverter) convertBlockStatement(node *sitter.Node, sourceCode []byte)
 	}
 
 	return &structs.BlockStmt{
+		Type:       "BlockStmt",
 		Statements: statements,
 		Loc:        c.getLocation(node),
 	}, nil
 }
 
 func (c *CConverter) convertExpressionStatement(node *sitter.Node, sourceCode []byte) (interfaces.Stmt, error) {
+	var expr interfaces.Expr
+	var exprCount int
+
 	for i := 0; i < int(node.ChildCount()); i++ {
 		child := node.Child(i)
 
 		if child.Type() != ";" {
-			expr, err := c.ConvertExpr(child, sourceCode)
+			exprCount++
+			// Предупреждение, если выражений больше одного
+			if exprCount > 1 {
+				return nil, newConverterError(ErrInvalidExpressionStatement, "expression statement has multiple expressions", node, nil)
+			}
+
+			var err error
+			expr, err = c.ConvertExpr(child, sourceCode)
 			if err != nil {
 				return nil, err
 			}
-
-			return &structs.ExprStmt{
-				Expression: expr,
-				Loc:        c.getLocation(node),
-			}, nil
 		}
 	}
 
-	return nil, fmt.Errorf("empty expression statement")
+	if expr == nil {
+		return nil, newConverterError(ErrEmptyExpressionStatement, "empty expression statement", node, nil)
+	}
+
+	return &structs.ExprStmt{
+		Type:       "ExprStmt",
+		Expression: expr,
+		Loc:        c.getLocation(node),
+	}, nil
 }
 
 // ============= Expression converters =============
 
 func (c *CConverter) convertIdentifier(node *sitter.Node, sourceCode []byte) (interfaces.Expr, error) {
+	name := c.getNodeText(node, sourceCode)
+	if err := c.validateIdentifier(name); err != nil {
+		return nil, err
+	}
+
 	return &structs.VariableExpr{
 		Type: "VariableExpr",
-		Name: c.getNodeText(node, sourceCode),
+		Name: name,
 		Loc:  c.getLocation(node),
 	}, nil
 }
@@ -637,10 +924,29 @@ func (c *CConverter) convertIntLiteral(node *sitter.Node, sourceCode []byte) (in
 	text := c.getNodeText(node, sourceCode)
 	value, err := strconv.Atoi(text)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse integer literal: %w", err)
+		return nil, newConverterError(ErrIntLiteralParse, "failed to parse integer literal", node, err)
+	}
+
+	// Если числовой литерал отрицательный, представляем его как UnaryExpr
+	// (унарный минус с положительным литералом), а не как отрицательный IntLiteral
+	if value < 0 {
+		posValue := -value
+		posLiteral := &structs.IntLiteral{
+			Type:  "IntLiteral",
+			Value: posValue,
+			Loc:   c.getLocation(node),
+		}
+		return &structs.UnaryExpr{
+			Type:      "UnaryExpr",
+			Operator:  "-",
+			Operand:   posLiteral,
+			IsPostfix: false,
+			Loc:       c.getLocation(node),
+		}, nil
 	}
 
 	return &structs.IntLiteral{
+		Type:  "IntLiteral",
 		Value: value,
 		Loc:   c.getLocation(node),
 	}, nil
@@ -650,28 +956,40 @@ func (c *CConverter) convertBinaryExpression(node *sitter.Node, sourceCode []byt
 	var left interfaces.Expr
 	var operator string
 	var right interfaces.Expr
+	var partIndex int
 
 	for i := 0; i < int(node.ChildCount()); i++ {
 		child := node.Child(i)
 
-		if i == 0 {
+		// Пропускаем комментарии
+		if child.Type() == "comment" {
+			continue
+		}
+
+		switch partIndex {
+		case 0:
 			expr, err := c.ConvertExpr(child, sourceCode)
 			if err != nil {
 				return nil, err
 			}
 			left = expr
-		} else if i == 1 {
+		case 1:
 			operator = c.getNodeText(child, sourceCode)
-		} else if i == 2 {
+			if err := c.validateBinaryOperator(operator); err != nil {
+				return nil, err
+			}
+		case 2:
 			expr, err := c.ConvertExpr(child, sourceCode)
 			if err != nil {
 				return nil, err
 			}
 			right = expr
 		}
+		partIndex++
 	}
 
 	return &structs.BinaryExpr{
+		Type:     "BinaryExpr",
 		Left:     left,
 		Operator: operator,
 		Right:    right,
@@ -682,43 +1000,100 @@ func (c *CConverter) convertBinaryExpression(node *sitter.Node, sourceCode []byt
 func (c *CConverter) convertUnaryExpression(node *sitter.Node, sourceCode []byte) (interfaces.Expr, error) {
 	var operator string
 	var operand interfaces.Expr
+	var operatorIndex int
+	var operandIndex int
 
 	for i := 0; i < int(node.ChildCount()); i++ {
 		child := node.Child(i)
 
+		// Пропускаем комментарии
+		if child.Type() == "comment" {
+			continue
+		}
+
 		if child.Type() == "!" || child.Type() == "-" || child.Type() == "*" ||
 			child.Type() == "&" || child.Type() == "~" || child.Type() == "++" || child.Type() == "--" {
 			operator = c.getNodeText(child, sourceCode)
+			operatorIndex = i
+			if err := c.validateUnaryOperator(operator); err != nil {
+				return nil, err
+			}
 		} else {
 			expr, err := c.ConvertExpr(child, sourceCode)
 			if err != nil {
 				return nil, err
 			}
 			operand = expr
+			operandIndex = i
+		}
+	}
+
+	// Определяем, постфиксный ли оператор (оператор идёт после операнда)
+	isPostfix := operatorIndex > operandIndex
+
+	// Проверяем, что оператор может быть постфиксным, если он стоит после операнда
+	if isPostfix {
+		if operator != "++" && operator != "--" {
+			return nil, newConverterError(ErrInvalidPostfixOperator,
+				fmt.Sprintf("operator '%s' cannot be used in postfix notation", operator), node, nil)
+		}
+	}
+
+	// Проверяем, что операнд является lvalue для операторов, которые требуют lvalue
+	// & (взятие адреса) требует lvalue: &5 невалидно, &x валидно
+	// Префиксные ++ и -- требуют lvalue: ++5 невалидно, ++x валидно
+	// Постфиксные ++ и -- также требуют lvalue: 5++ невалидно, x++ валидно
+	if operator == "&" || operator == "++" || operator == "--" {
+		if !operand.IsLValue() {
+			return nil, newConverterError(ErrRequiresLValue,
+				fmt.Sprintf("operand of '%s' operator must be an lvalue", operator), node, nil)
 		}
 	}
 
 	return &structs.UnaryExpr{
-		Operator: operator,
-		Operand:  operand,
-		Loc:      c.getLocation(node),
+		Type:      "UnaryExpr",
+		Operator:  operator,
+		Operand:   operand,
+		IsPostfix: isPostfix,
+		Loc:       c.getLocation(node),
 	}, nil
 }
 
 func (c *CConverter) convertAssignmentExpression(node *sitter.Node, sourceCode []byte) (interfaces.Expr, error) {
 	var left interfaces.Expr
 	var right interfaces.Expr
+	var operator string
+	var exprCount int
 
 	for i := 0; i < int(node.ChildCount()); i++ {
 		child := node.Child(i)
 
-		if i == 0 {
+		if child.Type() == "comment" {
+			continue
+		}
+
+		if c.isAssignmentOperator(child.Type()) {
+			operator = c.getNodeText(child, sourceCode)
+			if err := c.validateAssignmentOperator(operator); err != nil {
+				return nil, err
+			}
+			continue
+		}
+
+		if left == nil {
+			exprCount++
 			expr, err := c.ConvertExpr(child, sourceCode)
 			if err != nil {
 				return nil, err
 			}
 			left = expr
-		} else if child.Type() != "=" && i > 0 {
+		} else {
+			exprCount++
+			// Проверка, что выражений не больше одного (кроме первого)
+			if exprCount > 2 {
+				return nil, newConverterError(ErrInvalidAssignmentExpression, "assignment expression has multiple right-hand side expressions", node, nil)
+			}
+
 			expr, err := c.ConvertExpr(child, sourceCode)
 			if err != nil {
 				return nil, err
@@ -727,22 +1102,46 @@ func (c *CConverter) convertAssignmentExpression(node *sitter.Node, sourceCode [
 		}
 	}
 
+	if operator == "" {
+		return nil, newConverterError(ErrInvalidAssignmentExpression, "assignment expression missing operator", node, nil)
+	}
+
+	// Проверка наличия обеих сторон присваивания
+	if left == nil {
+		return nil, newConverterError(ErrInvalidAssignmentExpression, "assignment expression missing left-hand side", node, nil)
+	}
+	if right == nil {
+		return nil, newConverterError(ErrInvalidAssignmentExpression, "assignment expression missing right-hand side", node, nil)
+	}
+
+	// Проверка, что левая часть является lvalue
+	if !left.IsLValue() {
+		return nil, newConverterError(ErrRequiresLValue, "left-hand side of assignment must be an lvalue", node, nil)
+	}
+
 	return &structs.AssignmentExpr{
-		Left:  left,
-		Right: right,
-		Loc:   c.getLocation(node),
+		Type:     "AssignmentExpr",
+		Left:     left,
+		Operator: operator,
+		Right:    right,
+		Loc:      c.getLocation(node),
 	}, nil
 }
 
 func (c *CConverter) convertCallExpression(node *sitter.Node, sourceCode []byte) (interfaces.Expr, error) {
 	var funcName string
+	var foundIdentifier bool
 	arguments := make([]interfaces.Expr, 0)
 
 	for i := 0; i < int(node.ChildCount()); i++ {
 		child := node.Child(i)
 
 		if child.Type() == "identifier" {
+			if foundIdentifier {
+				return nil, newConverterError(ErrInvalidCallExpression, "call expression has multiple function names", node, nil)
+			}
 			funcName = c.getNodeText(child, sourceCode)
+			foundIdentifier = true
 		} else if child.Type() == "argument_list" {
 			// Парсим список аргументов
 			for j := 0; j < int(child.ChildCount()); j++ {
@@ -759,7 +1158,13 @@ func (c *CConverter) convertCallExpression(node *sitter.Node, sourceCode []byte)
 		}
 	}
 
+	// Проверка наличия имени функции
+	if funcName == "" {
+		return nil, newConverterError(ErrInvalidCallExpression, "call expression missing function name", node, nil)
+	}
+
 	return &structs.CallExpr{
+		Type:         "CallExpr",
 		FunctionName: funcName,
 		Arguments:    arguments,
 		Loc:          c.getLocation(node),
@@ -789,6 +1194,7 @@ func (c *CConverter) convertArrayAccessExpression(node *sitter.Node, sourceCode 
 	}
 
 	return &structs.ArrayAccessExpr{
+		Type:  "ArrayAccessExpr",
 		Array: array,
 		Index: index,
 		Loc:   c.getLocation(node),
@@ -801,7 +1207,7 @@ func (c *CConverter) convertArrayInitExpression(node *sitter.Node, sourceCode []
 	for i := 0; i < int(node.ChildCount()); i++ {
 		child := node.Child(i)
 
-		if child.Type() != "{" && child.Type() != "}" && child.Type() != "," {
+		if child.Type() != "{" && child.Type() != "}" && child.Type() != "," && child.Type() != "comment" {
 			expr, err := c.ConvertExpr(child, sourceCode)
 			if err != nil {
 				return nil, err
@@ -810,8 +1216,120 @@ func (c *CConverter) convertArrayInitExpression(node *sitter.Node, sourceCode []
 		}
 	}
 
+	// В C пустой initializer_list не разрешён
+	if len(elements) == 0 {
+		return nil, newConverterError(ErrEmptyArrayInitializer, "array initializer list cannot be empty in C", node, nil)
+	}
+
 	return &structs.ArrayInitExpr{
+		Type:     "ArrayInitExpr",
 		Elements: elements,
 		Loc:      c.getLocation(node),
 	}, nil
+}
+
+// validateIdentifier проверяет, что идентификатор соответствует правилам C
+func (c *CConverter) validateIdentifier(name string) error {
+	if name == "" {
+		return newConverterError(ErrInvalidIdentifier, "identifier cannot be empty", nil, nil)
+	}
+
+	// Проверка первого символа: буква или подчеркивание
+	firstChar := rune(name[0])
+	if !((firstChar >= 'a' && firstChar <= 'z') ||
+		(firstChar >= 'A' && firstChar <= 'Z') ||
+		firstChar == '_') {
+		return newConverterError(ErrInvalidIdentifier,
+			fmt.Sprintf("identifier '%s' must start with a letter or underscore", name), nil, nil)
+	}
+
+	// Проверка остальных символов: буквы, цифры или подчеркивание
+	for i, ch := range name {
+		if !((ch >= 'a' && ch <= 'z') ||
+			(ch >= 'A' && ch <= 'Z') ||
+			(ch >= '0' && ch <= '9') ||
+			ch == '_') {
+			return newConverterError(ErrInvalidIdentifier,
+				fmt.Sprintf("identifier '%s' contains invalid character '%c' at position %d", name, ch, i), nil, nil)
+		}
+	}
+
+	return nil
+}
+
+// validateBinaryOperator проверяет, что бинарный оператор поддерживается
+func (c *CConverter) validateBinaryOperator(operator string) error {
+	supportedBinaryOps := map[string]bool{
+		"+":  true,
+		"-":  true,
+		"*":  true,
+		"/":  true,
+		"%":  true,
+		"==": true,
+		"!=": true,
+		"<":  true,
+		">":  true,
+		"<=": true,
+		">=": true,
+		"&&": true,
+		"||": true,
+		"&":  true,
+		"|":  true,
+		"^":  true,
+		"<<": true,
+		">>": true,
+	}
+
+	if !supportedBinaryOps[operator] {
+		return newConverterError(ErrUnsupportedOperator,
+			fmt.Sprintf("unsupported binary operator: %s", operator), nil, nil)
+	}
+	return nil
+}
+
+// validateUnaryOperator проверяет, что унарный оператор поддерживается
+func (c *CConverter) validateUnaryOperator(operator string) error {
+	supportedUnaryOps := map[string]bool{
+		"!":  true,
+		"-":  true,
+		"~":  true,
+		"&":  true,
+		"*":  true,
+		"++": true,
+		"--": true,
+		"+":  true,
+	}
+
+	if !supportedUnaryOps[operator] {
+		return newConverterError(ErrUnsupportedOperator,
+			fmt.Sprintf("unsupported unary operator: %s", operator), nil, nil)
+	}
+	return nil
+}
+
+func (c *CConverter) isAssignmentOperator(tokenType string) bool {
+	return tokenType == "=" || tokenType == "+=" || tokenType == "-=" || tokenType == "/=" ||
+		tokenType == "%=" || tokenType == "&=" || tokenType == "|=" || tokenType == "^=" ||
+		tokenType == "<<=" || tokenType == ">>="
+}
+
+func (c *CConverter) validateAssignmentOperator(operator string) error {
+	supportedAssignmentOps := map[string]bool{
+		"=":   true,
+		"+=":  true,
+		"-=":  true,
+		"/=":  true,
+		"%=":  true,
+		"&=":  true,
+		"|=":  true,
+		"^=":  true,
+		"<<=": true,
+		">>=": true,
+	}
+
+	if !supportedAssignmentOps[operator] {
+		return newConverterError(ErrUnsupportedOperator,
+			fmt.Sprintf("unsupported assignment operator: %s", operator), nil, nil)
+	}
+	return nil
 }

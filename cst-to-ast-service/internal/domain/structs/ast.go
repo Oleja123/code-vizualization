@@ -26,6 +26,7 @@ type Parameter struct {
 
 // Program представляет корневой узел программы
 type Program struct {
+	Type         string            `json:"type"` // всегда "Program"
 	Declarations []interfaces.Stmt `json:"declarations"`
 	Loc          Location          `json:"location"`
 }
@@ -37,7 +38,8 @@ func (p *Program) GetLocation() Location { return p.Loc }
 
 // VariableDecl представляет объявление переменной
 type VariableDecl struct {
-	Type     Type            `json:"type"`
+	Type     string          `json:"type"`    // всегда "VariableDecl"
+	VarType  Type            `json:"varType"` // тип переменной (int, int*, int[10])
 	Name     string          `json:"name"`
 	InitExpr interfaces.Expr `json:"initExpr,omitempty"` // может быть nil
 	Loc      Location        `json:"location"`
@@ -49,6 +51,7 @@ func (v *VariableDecl) GetLocation() Location { return v.Loc }
 
 // FunctionDecl представляет объявление функции
 type FunctionDecl struct {
+	Type       string      `json:"type"` // всегда "FunctionDecl"
 	Name       string      `json:"name"`
 	ReturnType Type        `json:"returnType"`
 	Parameters []Parameter `json:"parameters"`
@@ -69,6 +72,7 @@ type ElseIfClause struct {
 
 // IfStmt представляет условный оператор if/else if/else
 type IfStmt struct {
+	Type       string          `json:"type"` // всегда "IfStmt"
 	Condition  interfaces.Expr `json:"condition"`
 	ThenBlock  interfaces.Stmt `json:"thenBlock"`
 	ElseIfList []ElseIfClause  `json:"elseIf,omitempty"`    // else if блоки
@@ -82,6 +86,7 @@ func (i *IfStmt) GetLocation() Location { return i.Loc }
 
 // WhileStmt представляет цикл while
 type WhileStmt struct {
+	Type      string          `json:"type"` // всегда "WhileStmt"
 	Condition interfaces.Expr `json:"condition"`
 	Body      interfaces.Stmt `json:"body"`
 	Loc       Location        `json:"location"`
@@ -93,6 +98,7 @@ func (w *WhileStmt) GetLocation() Location { return w.Loc }
 
 // ForStmt представляет цикл for
 type ForStmt struct {
+	Type      string          `json:"type"`                // всегда "ForStmt"
 	Init      interfaces.Stmt `json:"init,omitempty"`      // может быть nil
 	Condition interfaces.Expr `json:"condition,omitempty"` // может быть nil
 	Post      interfaces.Stmt `json:"post,omitempty"`      // может быть nil (ExprStmt)
@@ -117,6 +123,7 @@ func (r *ReturnStmt) GetLocation() Location { return r.Loc }
 
 // BlockStmt представляет блок операторов { ... }
 type BlockStmt struct {
+	Type       string            `json:"type"` // всегда "BlockStmt"
 	Statements []interfaces.Stmt `json:"statements"`
 	Loc        Location          `json:"location"`
 }
@@ -127,6 +134,7 @@ func (b *BlockStmt) GetLocation() Location { return b.Loc }
 
 // ExprStmt представляет выражение как оператор
 type ExprStmt struct {
+	Type       string          `json:"type"` // всегда "ExprStmt"
 	Expression interfaces.Expr `json:"expression"`
 	Loc        Location        `json:"location"`
 }
@@ -137,7 +145,8 @@ func (e *ExprStmt) GetLocation() Location { return e.Loc }
 
 // BreakStmt представляет оператор break
 type BreakStmt struct {
-	Loc Location `json:"location"`
+	Type string   `json:"type"` // всегда "BreakStmt"
+	Loc  Location `json:"location"`
 }
 
 func (b *BreakStmt) StmtNode()             {}
@@ -146,7 +155,8 @@ func (b *BreakStmt) GetLocation() Location { return b.Loc }
 
 // ContinueStmt представляет оператор continue
 type ContinueStmt struct {
-	Loc Location `json:"location"`
+	Type string   `json:"type"` // всегда "ContinueStmt"
+	Loc  Location `json:"location"`
 }
 
 func (c *ContinueStmt) StmtNode()             {}
@@ -157,6 +167,7 @@ func (c *ContinueStmt) GetLocation() Location { return c.Loc }
 
 // Identifier представляет идентификатор (имя переменной/функции)
 type Identifier struct {
+	Type string   `json:"type"` // всегда "Identifier"
 	Name string   `json:"name"`
 	Loc  Location `json:"location"`
 }
@@ -164,6 +175,7 @@ type Identifier struct {
 func (i *Identifier) ExprNode()             {}
 func (i *Identifier) NodeType() string      { return "Identifier" }
 func (i *Identifier) GetLocation() Location { return i.Loc }
+func (i *Identifier) IsLValue() bool        { return true } // Identifier is lvalue
 
 // VariableExpr представляет обращение к переменной в выражении
 type VariableExpr struct {
@@ -175,9 +187,11 @@ type VariableExpr struct {
 func (v *VariableExpr) ExprNode()             {}
 func (v *VariableExpr) NodeType() string      { return "VariableExpr" }
 func (v *VariableExpr) GetLocation() Location { return v.Loc }
+func (v *VariableExpr) IsLValue() bool        { return true } // Variable is lvalue
 
 // IntLiteral представляет целочисленный литерал
 type IntLiteral struct {
+	Type  string   `json:"type"` // всегда "IntLiteral"
 	Value int      `json:"value"`
 	Loc   Location `json:"location"`
 }
@@ -185,9 +199,11 @@ type IntLiteral struct {
 func (l *IntLiteral) ExprNode()             {}
 func (l *IntLiteral) NodeType() string      { return "IntLiteral" }
 func (l *IntLiteral) GetLocation() Location { return l.Loc }
+func (l *IntLiteral) IsLValue() bool        { return false } // Literal is rvalue
 
 // BinaryExpr представляет бинарное выражение
 type BinaryExpr struct {
+	Type     string          `json:"type"` // всегда "BinaryExpr"
 	Left     interfaces.Expr `json:"left"`
 	Operator string          `json:"operator"` // +, -, *, /, %, ==, !=, <, >, <=, >=, &&, ||
 	Right    interfaces.Expr `json:"right"`
@@ -197,31 +213,51 @@ type BinaryExpr struct {
 func (b *BinaryExpr) ExprNode()             {}
 func (b *BinaryExpr) NodeType() string      { return "BinaryExpr" }
 func (b *BinaryExpr) GetLocation() Location { return b.Loc }
+func (b *BinaryExpr) IsLValue() bool        { return false } // Binary operation result is rvalue
 
 // UnaryExpr представляет унарное выражение
 type UnaryExpr struct {
-	Operator string          `json:"operator"` // -, !, *, &
-	Operand  interfaces.Expr `json:"operand"`
-	Loc      Location        `json:"location"`
+	Type      string          `json:"type"`     // всегда "UnaryExpr"
+	Operator  string          `json:"operator"` // -, !, *, &, ++, --
+	Operand   interfaces.Expr `json:"operand"`
+	IsPostfix bool            `json:"isPostfix"` // true для постфиксных операторов (i++, i--)
+	Loc       Location        `json:"location"`
 }
 
 func (u *UnaryExpr) ExprNode()             {}
 func (u *UnaryExpr) NodeType() string      { return "UnaryExpr" }
 func (u *UnaryExpr) GetLocation() Location { return u.Loc }
+func (u *UnaryExpr) IsLValue() bool {
+	// * (разыменование) делает lvalue: *ptr = 5 валидно
+	// Префиксные ++ и -- возвращают lvalue: ++i = 5 валидно (хотя странно)
+	// Постфиксные ++ и -- возвращают rvalue: i++ = 5 невалидно
+	// Остальные операторы возвращают rvalue
+	if u.Operator == "*" {
+		return true
+	}
+	if (u.Operator == "++" || u.Operator == "--") && !u.IsPostfix {
+		return true
+	}
+	return false
+}
 
 // AssignmentExpr представляет выражение присваивания
 type AssignmentExpr struct {
-	Left  interfaces.Expr `json:"left"` // Identifier или ArrayAccessExpr
-	Right interfaces.Expr `json:"right"`
-	Loc   Location        `json:"location"`
+	Type     string          `json:"type"` // всегда "AssignmentExpr"
+	Left     interfaces.Expr `json:"left"` // Identifier или ArrayAccessExpr
+	Operator string          `json:"operator"`
+	Right    interfaces.Expr `json:"right"`
+	Loc      Location        `json:"location"`
 }
 
 func (a *AssignmentExpr) ExprNode()             {}
 func (a *AssignmentExpr) NodeType() string      { return "AssignmentExpr" }
 func (a *AssignmentExpr) GetLocation() Location { return a.Loc }
+func (a *AssignmentExpr) IsLValue() bool        { return false } // Assignment result is rvalue
 
 // CallExpr представляет вызов функции
 type CallExpr struct {
+	Type         string            `json:"type"` // всегда "CallExpr"
 	FunctionName string            `json:"functionName"`
 	Arguments    []interfaces.Expr `json:"arguments"`
 	Loc          Location          `json:"location"`
@@ -230,9 +266,11 @@ type CallExpr struct {
 func (c *CallExpr) ExprNode()             {}
 func (c *CallExpr) NodeType() string      { return "CallExpr" }
 func (c *CallExpr) GetLocation() Location { return c.Loc }
+func (c *CallExpr) IsLValue() bool        { return false } // Function call result is rvalue
 
 // ArrayAccessExpr представляет доступ к элементу массива
 type ArrayAccessExpr struct {
+	Type  string          `json:"type"`  // всегда "ArrayAccessExpr"
 	Array interfaces.Expr `json:"array"` // обычно Identifier
 	Index interfaces.Expr `json:"index"`
 	Loc   Location        `json:"location"`
@@ -241,9 +279,11 @@ type ArrayAccessExpr struct {
 func (a *ArrayAccessExpr) ExprNode()             {}
 func (a *ArrayAccessExpr) NodeType() string      { return "ArrayAccessExpr" }
 func (a *ArrayAccessExpr) GetLocation() Location { return a.Loc }
+func (a *ArrayAccessExpr) IsLValue() bool        { return true } // Array element access is lvalue: arr[i] = 5
 
 // ArrayInitExpr представляет инициализатор массива {1, 2, 3}
 type ArrayInitExpr struct {
+	Type     string            `json:"type"` // всегда "ArrayInitExpr"
 	Elements []interfaces.Expr `json:"elements"`
 	Loc      Location          `json:"location"`
 }
@@ -251,3 +291,4 @@ type ArrayInitExpr struct {
 func (a *ArrayInitExpr) ExprNode()             {}
 func (a *ArrayInitExpr) NodeType() string      { return "ArrayInitExpr" }
 func (a *ArrayInitExpr) GetLocation() Location { return a.Loc }
+func (a *ArrayInitExpr) IsLValue() bool        { return false } // Array initializer is rvalue
