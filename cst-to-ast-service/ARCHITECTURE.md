@@ -4,7 +4,9 @@
 
 Этот документ описывает структуру Abstract Syntax Tree (AST), генерируемую CST-to-AST конвертером. AST представляет упрощенное подмножество языка C, оптимизированное для образовательных интерпретаторов и визуализаторов.
 
-**Область применения**: Написание интерпретаторов, анализаторов кода, визуализаторов выполнения.
+**Область применения**: Написание интерпретаторов, визуализаторов выполнения, отладчиков кода на C.
+
+**Примечание**: Семантический анализ (проверка типов, таблица символов, и т.д.) выполняется **отдельным микросервисом** (`semantic-analyzer-service`). Этот сервис занимается исключительно конвертацией CST в AST.
 
 ---
 
@@ -93,21 +95,22 @@ type Location struct {
 type Type struct {
     BaseType     string `json:"baseType"`     // Всегда "int"
     PointerLevel int    `json:"pointerLevel"` // 0=int, 1=int*, 2=int**
-    ArraySize    *int   `json:"arraySize"`    // nil или размер массива
+    ArraySizes   []int  `json:"arraySizes"`   // Поддержка многомерных массивов
 }
 ```
 
 **Примеры**:
-- `int x` → `{BaseType: "int", PointerLevel: 0, ArraySize: nil}`
-- `int *p` → `{BaseType: "int", PointerLevel: 1, ArraySize: nil}`
-- `int **pp` → `{BaseType: "int", PointerLevel: 2, ArraySize: nil}`
-- `int arr[10]` → `{BaseType: "int", PointerLevel: 0, ArraySize: &10}`
-- `int *arr[5]` → `{BaseType: "int", PointerLevel: 1, ArraySize: &5}`
+- `int x` → `{BaseType: "int", PointerLevel: 0, ArraySizes: []}`
+- `int *p` → `{BaseType: "int", PointerLevel: 1, ArraySizes: []}`
+- `int **pp` → `{BaseType: "int", PointerLevel: 2, ArraySizes: []}`
+- `int arr[10]` → `{BaseType: "int", PointerLevel: 0, ArraySizes: [10]}`
+- `int arr[2][3]` → `{BaseType: "int", PointerLevel: 0, ArraySizes: [2, 3]}`
+- `int *arr[5]` → `{BaseType: "int", PointerLevel: 1, ArraySizes: [5]}`
 
 **Использование в интерпретаторе**:
 - Определение размера аллокации памяти
 - Разыменование указателей
-- Валидация операций с типами
+- Навигация по многомерным массивам
 
 ---
 
@@ -265,7 +268,7 @@ type WhileStmt struct {
 type ForStmt struct {
     Init      Stmt     `json:"init,omitempty"`      // VariableDecl или ExprStmt
     Condition Expr     `json:"condition,omitempty"`
-    Update    Expr     `json:"update,omitempty"`
+    Post      Stmt     `json:"post,omitempty"`      // ExprStmt для Update
     Body      Stmt     `json:"body"`
     Loc       Location `json:"loc"`
 }
@@ -283,7 +286,7 @@ for (;;) { }                        // Бесконечный цикл
 2. Вычислить `Condition` (если nil, считать `true`)
 3. Если `false` → выйти
 4. Выполнить `Body`
-5. Если `Update != nil` → вычислить
+5. Если `Post != nil` → выполнить
 6. Вернуться к шагу 2
 
 ---
@@ -511,12 +514,13 @@ type ArrayAccessExpr struct {
 ```c
 arr[i]       // Array=VariableExpr("arr"), Index=VariableExpr("i")
 matrix[i][j] // Array=ArrayAccessExpr(VariableExpr("matrix"), i), Index=j
+matrix[0][1] // Вложенные ArrayAccessExpr
 ```
 
-**Интерпретация**:
-1. Вычислить `Array` (получить базовый адрес)
+**Интерпретация** (для многомерных массивов):
+1. Вычислить `Array` (получить базовый адрес или подмассив)
 2. Вычислить `Index`
-3. Вычислить адрес: `base + index * sizeof(element)`
+3. Для каждого уровня доступа: вычислить смещение `index * stride`
 4. Вернуть значение или адрес (для lvalue)
 
 ---
@@ -534,14 +538,15 @@ type ArrayInitExpr struct {
 
 **Примеры**:
 ```c
-int arr[5] = {1, 2, 3};     // Elements=[IntLiteral(1), IntLiteral(2), IntLiteral(3)]
-int mat[2][2] = {{1,2},{3,4}}; // Вложенные ArrayInitExpr
+int arr[5] = {1, 2, 3};              // Elements=[IntLiteral(1), IntLiteral(2), IntLiteral(3)]
+int mat[2][2] = {{1,2},{3,4}};       // Вложенные ArrayInitExpr
+int vec[] = {10, 20, 30};            // Size выводится из Elements
 ```
 
 **Интерпретация**:
 - Вычислить все `Elements` по порядку
 - Записать в память массива последовательно
-- Оставшиеся элементы заполнить нулями
+- Оставшиеся элементы (если размер известен) заполнить нулями
 
 ---
 
@@ -631,37 +636,62 @@ func ExecuteIf(stmt *structs.IfStmt, scope *Scope) error {
 
 ---
 
-## Рекомендации для интерпретатора
+## Рекомендации для интерпретатора / Визуализатора
 
-### Необходимые компоненты
+### Архитектура интерпретатора
+
+```
+CST-to-AST Service
+        ↓
+      AST
+        ↓
+Semantic Analyzer Service (опционально)
+        ↓
+Annotated AST (типы, таблица символов)
+        ↓
+    Интерпретатор
+```
+
+### Необходимые компоненты в интерпретаторе
 
 1. **Memory Manager**: Управление heap/stack для указателей и массивов
 2. **Scope Manager**: Иерархия областей видимости (global → function → block)
 3. **Call Stack**: Трассировка вызовов функций для рекурсии
 4. **Value System**: Представление значений (int, pointer, array)
+5. **Executor**: Обход AST и выполнение операций
 
 ### Визуализация выполнения
 
-Используйте `Location` для:
-- Подсветки текущей исполняемой строки
-- Отображения stack trace с номерами строк
+Используйте `Location` в каждом узле для:
+- Подсветки текущей исполняемой строки в IDE
+- Отображения stack trace с номерами строк и имен функций
 - Связывания значений переменных с местом объявления
+- Визуализации состояния памяти по шагам
 
 ### Обработка ошибок
 
-- **Runtime errors**: Деление на ноль, выход за границы массива, null pointer
-- **Type errors**: Несоответствие типов (можно проверить на этапе интерпретации)
+- **Runtime errors**: Деление на ноль, выход за границы массива, null pointer dereference
+- **Semantic errors**: Проверка типов, таблица символов — обрабатывает **отдельный сервис** (semantic-analyzer-service)
 - **Location**: Используйте `stmt.Loc` или `expr.Loc` для сообщений об ошибках
 
 ---
 
-## Ограничения текущей версии
+## Возможности и ограничения
 
-- **Типы**: Только `int` (нет `float`, `char`, `struct`)
-- **Возвращаемые типы**: `int`, `int*`, `int**`, `void` (нет `float`, `double`, `char`)
-- **Строки**: Не поддерживаются
-- **Динамическая память**: Нет `malloc`/`free`
-- **Многомерные массивы**: Только синтаксис `arr[i][j]`, не `int arr[2][3]`
+### Поддерживается
+- **Типы**: `int`, указатели (`int*`, `int**`), массивы (`int[10]`), многомерные массивы (`int[2][3]`)
+- **Возвращаемые типы**: `int`, `int*`, `int**`, `void`
+- **Циклы**: `for`, `while`, `do-while` (поддержка `break`/`continue`)
+- **Условные операторы**: `if/else if/else`
+- **Функции**: Рекурсия, вложенные вызовы
+- **Операции**: Арифметика, сравнение, логические, битовые, указатели
+
+### Не поддерживается
+- **Типы**: `float`, `double`, `char` (только `int`)
+- **Структуры**: Нет `struct`, `union`, `enum`
+- **Строки**: Нет встроенной поддержки (можно использовать массивы)
+- **Динамическая память**: Нет `malloc`/`free` (управление памятью за интерпретатором)
+- **Стандартная библиотека**: Функции `printf`, `scanf` и т.д. на уровне CST-to-AST не обрабатываются
 
 ---
 
@@ -672,20 +702,37 @@ func ExecuteIf(stmt *structs.IfStmt, scope *Scope) error {
 ```go
 // Точка входа
 type Program struct {
-    Declarations []Stmt
-    Loc Location
+    Declarations []Stmt  // Глобальные переменные и функции
+    Loc          Location
 }
 
-// Операторы (12 типов)
-VariableDecl, FunctionDecl, IfStmt, WhileStmt, ForStmt,
-ReturnStmt, BlockStmt, ExprStmt, BreakStmt, ContinueStmt
+// Операторы (10 типов)
+VariableDecl    // Объявление переменной
+FunctionDecl    // Объявление функции
+IfStmt          // Условный оператор с else if цепочкой
+WhileStmt       // Цикл while
+ForStmt         // Цикл for
+ReturnStmt      // Оператор return
+BlockStmt       // Блок { ... }
+ExprStmt        // Выражение-оператор
+BreakStmt       // break
+ContinueStmt    // continue
 
 // Выражения (8 типов)
-VariableExpr, IntLiteral, BinaryExpr, UnaryExpr,
-AssignmentExpr, CallExpr, ArrayAccessExpr, ArrayInitExpr
+VariableExpr    // Ссылка на переменную
+IntLiteral      // Целочисленная константа
+BinaryExpr      // Бинарная операция (+, -, *, /, %,  ==, !=, <, >, <=, >=, &&, ||, &, |, ^, <<, >>)
+UnaryExpr       // Унарная операция (-, !, *, &, ++, --)
+AssignmentExpr  // Присваивание (=, +=, -=, и т.д.)
+CallExpr        // Вызов функции
+ArrayAccessExpr // Доступ к элементу массива
+ArrayInitExpr   // Инициализация массива
 
 // Вспомогательные
-Location, Type, ElseIfClause
+Location        // Позиция в коде
+Type            // Описание типа
+Parameter       // Параметр функции
+ElseIfClause    // Блок else if
 ```
 
 ### Методы type assertion
@@ -710,58 +757,49 @@ if ifStmt, ok := stmt.(*structs.IfStmt); ok {
 
 ```bash
 cd cst-to-ast-service
-go test ./pkg/converter/... -v -cover
+go test ./pkg/converter -v -cover
 ```
 
-**Покрытие**: 81.7% (47 тестов)
-
-### Запуск HTTP API сервера
-
-```bash
-cd cst-to-ast-service
-go run cmd/server/main.go
-```
-
-Сервер доступен на `http://localhost:8080` с тремя endpoints:
-- `POST /parse` - парсинг C кода в AST
-- `GET /health` - проверка статуса
-- `GET /info` - информация об API
-
-**Примеры:**
-```bash
-# Парсинг кода
-curl -X POST http://localhost:8080/parse \
-  -H "Content-Type: application/json" \
-  -d '{"code":"int x = 42;"}'
-
-# Проверка здоровья
-curl http://localhost:8080/health
-```
+**Текущее состояние**: 80+ тестов, полное покрытие основных конструкций C
 
 ### Использование как библиотеки
 
 ```bash
 # Добавить зависимость в ваш проект
-go get github.com/Oleja123/code-vizualization/cst-to-ast-service/pkg/converter
+go get github.com/Oleja123/code-vizualization/cst-to-ast-service
 
 # Использование в коде
-go run your-program.go
+conv := converter.New()
+ast, err := conv.ParseToAST("int main() { return 0; }")
+if err != nil {
+    log.Fatal(err)
+}
+// Использовать ast...
 ```
 
 ---
 
-## Технические детали (для расширения конвертера)
+## Технические детали (для разработчиков)
 
 ### Архитектура конвертера
 
 ```
-C source → tree-sitter parser → CST → CConverter → AST
+C source code
+        ↓
+  tree-sitter parser (Concrete Syntax Tree)
+        ↓
+  CConverter (pkg/converter)
+        ↓
+AST (internal/domain/structs)
+        ↓
+Интерпретатор / Анализатор
 ```
 
-**Ключевые принципы**:
-1. Маркер методы (`StmtNode()`, `ExprNode()`) для type safety
-2. Рекурсивная обработка `else if` цепочек (преобразование вложенной структуры в плоский список)
-3. Фильтрация комментариев на уровне конвертации
+**Ключевые принципы реализации**:
+1. **Type safety**: Маркер методы (`StmtNode()`, `ExprNode()`) через интерфейсы
+2. **Else-if обработка**: Рекурсивное преобразование вложенной if-else структуры в плоский список `ElseIfClause`
+3. **Комментарии**: Фильтруются на уровне tree-sitter парсера (не присутствуют в CST)
+4. **Многомерные массивы**: Поддержка через `ArraySizes []int` в структуре `Type`
 
 ### Расширение функциональности
 
@@ -773,5 +811,6 @@ C source → tree-sitter parser → CST → CConverter → AST
 
 ### Зависимости
 
-- `github.com/smacker/go-tree-sitter` - парсер C
-- Стандартная библиотека Go
+- `github.com/smacker/go-tree-sitter` - парсер C (tree-sitter)
+- `github.com/tree-sitter/tree-sitter` - C language definitions
+- Стандартная библиотека Go (no external deps besides tree-sitter)
