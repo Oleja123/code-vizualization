@@ -10,11 +10,11 @@ type Location struct {
 	EndColumn uint32 `json:"endColumn"`
 }
 
-// Type представляет тип данных в C (только int с поддержкой указателей и массивов)
+// Type представляет тип данных в C (поддержка int, указателей и многомерных массивов)
 type Type struct {
 	BaseType     string `json:"baseType"`     // "int"
 	PointerLevel int    `json:"pointerLevel"` // 0 = int, 1 = int*, 2 = int**
-	ArraySize    int    `json:"arraySize"`    // 0 если не массив, N для int[N]
+	ArraySizes   []int  `json:"arraySizes"`   // пустой если не массив, [10, 20] для int[10][20]
 }
 
 // Parameter представляет параметр функции
@@ -175,7 +175,6 @@ type Identifier struct {
 func (i *Identifier) ExprNode()             {}
 func (i *Identifier) NodeType() string      { return "Identifier" }
 func (i *Identifier) GetLocation() Location { return i.Loc }
-func (i *Identifier) IsLValue() bool        { return true } // Identifier is lvalue
 
 // VariableExpr представляет обращение к переменной в выражении
 type VariableExpr struct {
@@ -187,7 +186,6 @@ type VariableExpr struct {
 func (v *VariableExpr) ExprNode()             {}
 func (v *VariableExpr) NodeType() string      { return "VariableExpr" }
 func (v *VariableExpr) GetLocation() Location { return v.Loc }
-func (v *VariableExpr) IsLValue() bool        { return true } // Variable is lvalue
 
 // IntLiteral представляет целочисленный литерал
 type IntLiteral struct {
@@ -199,7 +197,6 @@ type IntLiteral struct {
 func (l *IntLiteral) ExprNode()             {}
 func (l *IntLiteral) NodeType() string      { return "IntLiteral" }
 func (l *IntLiteral) GetLocation() Location { return l.Loc }
-func (l *IntLiteral) IsLValue() bool        { return false } // Literal is rvalue
 
 // BinaryExpr представляет бинарное выражение
 type BinaryExpr struct {
@@ -213,7 +210,6 @@ type BinaryExpr struct {
 func (b *BinaryExpr) ExprNode()             {}
 func (b *BinaryExpr) NodeType() string      { return "BinaryExpr" }
 func (b *BinaryExpr) GetLocation() Location { return b.Loc }
-func (b *BinaryExpr) IsLValue() bool        { return false } // Binary operation result is rvalue
 
 // UnaryExpr представляет унарное выражение
 type UnaryExpr struct {
@@ -227,19 +223,6 @@ type UnaryExpr struct {
 func (u *UnaryExpr) ExprNode()             {}
 func (u *UnaryExpr) NodeType() string      { return "UnaryExpr" }
 func (u *UnaryExpr) GetLocation() Location { return u.Loc }
-func (u *UnaryExpr) IsLValue() bool {
-	// * (разыменование) делает lvalue: *ptr = 5 валидно
-	// Префиксные ++ и -- возвращают lvalue: ++i = 5 валидно (хотя странно)
-	// Постфиксные ++ и -- возвращают rvalue: i++ = 5 невалидно
-	// Остальные операторы возвращают rvalue
-	if u.Operator == "*" {
-		return true
-	}
-	if (u.Operator == "++" || u.Operator == "--") && !u.IsPostfix {
-		return true
-	}
-	return false
-}
 
 // AssignmentExpr представляет выражение присваивания
 type AssignmentExpr struct {
@@ -253,7 +236,6 @@ type AssignmentExpr struct {
 func (a *AssignmentExpr) ExprNode()             {}
 func (a *AssignmentExpr) NodeType() string      { return "AssignmentExpr" }
 func (a *AssignmentExpr) GetLocation() Location { return a.Loc }
-func (a *AssignmentExpr) IsLValue() bool        { return false } // Assignment result is rvalue
 
 // CallExpr представляет вызов функции
 type CallExpr struct {
@@ -266,7 +248,6 @@ type CallExpr struct {
 func (c *CallExpr) ExprNode()             {}
 func (c *CallExpr) NodeType() string      { return "CallExpr" }
 func (c *CallExpr) GetLocation() Location { return c.Loc }
-func (c *CallExpr) IsLValue() bool        { return false } // Function call result is rvalue
 
 // ArrayAccessExpr представляет доступ к элементу массива
 type ArrayAccessExpr struct {
@@ -279,7 +260,6 @@ type ArrayAccessExpr struct {
 func (a *ArrayAccessExpr) ExprNode()             {}
 func (a *ArrayAccessExpr) NodeType() string      { return "ArrayAccessExpr" }
 func (a *ArrayAccessExpr) GetLocation() Location { return a.Loc }
-func (a *ArrayAccessExpr) IsLValue() bool        { return true } // Array element access is lvalue: arr[i] = 5
 
 // ArrayInitExpr представляет инициализатор массива {1, 2, 3}
 type ArrayInitExpr struct {
@@ -291,4 +271,3 @@ type ArrayInitExpr struct {
 func (a *ArrayInitExpr) ExprNode()             {}
 func (a *ArrayInitExpr) NodeType() string      { return "ArrayInitExpr" }
 func (a *ArrayInitExpr) GetLocation() Location { return a.Loc }
-func (a *ArrayInitExpr) IsLValue() bool        { return false } // Array initializer is rvalue

@@ -11,25 +11,12 @@ import (
 type ErrorCode string
 
 const (
-	ErrParseFailed                 ErrorCode = "ParseFailed"
-	ErrStmtUnsupported             ErrorCode = "StmtUnsupported"
-	ErrExprUnsupported             ErrorCode = "ExprUnsupported"
-	ErrEmptyParenthesizedExpr      ErrorCode = "EmptyParenthesizedExpr"
-	ErrInvalidDeclaration          ErrorCode = "InvalidDeclaration"
-	ErrInitializerConversion       ErrorCode = "InitializerConversion"
-	ErrEmptyExpressionStatement    ErrorCode = "EmptyExpressionStatement"
-	ErrInvalidExpressionStatement  ErrorCode = "InvalidExpressionStatement"
-	ErrInvalidReturnStatement      ErrorCode = "InvalidReturnStatement"
-	ErrInvalidAssignmentExpression ErrorCode = "InvalidAssignmentExpression"
-	ErrInvalidCallExpression       ErrorCode = "InvalidCallExpression"
-	ErrEmptyArrayInitializer       ErrorCode = "EmptyArrayInitializer"
-	ErrInvalidPostfixOperator      ErrorCode = "InvalidPostfixOperator"
-	ErrInvalidIdentifier           ErrorCode = "InvalidIdentifier"
-	ErrUnsupportedOperator         ErrorCode = "UnsupportedOperator"
-	ErrRequiresLValue              ErrorCode = "RequiresLValue"
-	ErrTreeSitterError             ErrorCode = "TreeSitterError"
-	ErrIntLiteralParse             ErrorCode = "IntLiteralParse"
-	ErrStmtConversion              ErrorCode = "StmtConversion"
+	ErrParseFailed     ErrorCode = "ParseFailed"
+	ErrStmtUnsupported ErrorCode = "StmtUnsupported"
+	ErrExprUnsupported ErrorCode = "ExprUnsupported"
+	ErrTreeSitterError ErrorCode = "TreeSitterError"
+	ErrIntLiteralParse ErrorCode = "IntLiteralParse"
+	ErrStmtConversion  ErrorCode = "StmtConversion"
 )
 
 // ConverterError представляет ошибку парсинга с полной информацией для интерпретатора
@@ -37,7 +24,7 @@ type ConverterError struct {
 	// Code - код ошибки для идентификации типа проблемы
 	Code ErrorCode `json:"code"`
 
-	// Message - понятное описание ошибки
+	// Message - понятное описание ошибки (включает информацию о Cause если она есть)
 	Message string `json:"message"`
 
 	// NodeType - тип узла tree-sitter, вызвавший ошибку (если известен)
@@ -95,10 +82,15 @@ func newConverterError(code ErrorCode, message string, node *sitter.Node, cause 
 		}
 		nodeType = node.Type()
 	}
+	// Дополняем сообщение информацией о Cause если она есть
+	finalMessage := message
+	if cause != nil {
+		finalMessage = fmt.Sprintf("%s: %v", message, cause)
+	}
 
 	return &ConverterError{
 		Code:     code,
-		Message:  message,
+		Message:  finalMessage,
 		NodeType: nodeType,
 		Loc:      loc,
 		Cause:    cause,

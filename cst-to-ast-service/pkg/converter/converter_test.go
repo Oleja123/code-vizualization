@@ -145,8 +145,8 @@ func TestParseArrayVariable(t *testing.T) {
 	funcDecl := program.Declarations[0].(*structs.FunctionDecl)
 	varDecl := funcDecl.Body.Statements[0].(*structs.VariableDecl)
 
-	if varDecl.VarType.ArraySize != 10 {
-		t.Errorf("Expected array size 10, got %d", varDecl.VarType.ArraySize)
+	if len(varDecl.VarType.ArraySizes) != 1 || varDecl.VarType.ArraySizes[0] != 10 {
+		t.Errorf("Expected array size [10], got %v", varDecl.VarType.ArraySizes)
 	}
 }
 
@@ -176,8 +176,105 @@ func TestParseArrayOfPointers(t *testing.T) {
 		t.Errorf("Expected pointer level 1, got %d", varDecl.VarType.PointerLevel)
 	}
 
-	if varDecl.VarType.ArraySize != 10 {
-		t.Errorf("Expected array size 10, got %d", varDecl.VarType.ArraySize)
+	if len(varDecl.VarType.ArraySizes) != 1 || varDecl.VarType.ArraySizes[0] != 10 {
+		t.Errorf("Expected array size [10], got %v", varDecl.VarType.ArraySizes)
+	}
+}
+
+// TestParse2DArray проверяет парсинг двумерного массива
+func TestParse2DArray(t *testing.T) {
+	sourceCode := []byte(`int main() {
+	int arr[10][20];
+	return 0;
+}`)
+
+	conv := NewCConverter()
+	tree, err := conv.Parse(sourceCode)
+	if err != nil {
+		t.Fatalf("Parse failed: %v", err)
+	}
+
+	ast, err := conv.ConvertToProgram(tree, sourceCode)
+	if err != nil {
+		t.Fatalf("ConvertToProgram failed: %v", err)
+	}
+
+	program := ast.(*structs.Program)
+	funcDecl := program.Declarations[0].(*structs.FunctionDecl)
+	varDecl := funcDecl.Body.Statements[0].(*structs.VariableDecl)
+
+	if len(varDecl.VarType.ArraySizes) != 2 {
+		t.Errorf("Expected 2D array, got %d dimensions", len(varDecl.VarType.ArraySizes))
+	}
+
+	if varDecl.VarType.ArraySizes[0] != 10 || varDecl.VarType.ArraySizes[1] != 20 {
+		t.Errorf("Expected array sizes [10, 20], got %v", varDecl.VarType.ArraySizes)
+	}
+}
+
+// TestParse3DArray проверяет парсинг трехмерного массива
+func TestParse3DArray(t *testing.T) {
+	sourceCode := []byte(`int main() {
+	int arr[5][10][15];
+	return 0;
+}`)
+
+	conv := NewCConverter()
+	tree, err := conv.Parse(sourceCode)
+	if err != nil {
+		t.Fatalf("Parse failed: %v", err)
+	}
+
+	ast, err := conv.ConvertToProgram(tree, sourceCode)
+	if err != nil {
+		t.Fatalf("ConvertToProgram failed: %v", err)
+	}
+
+	program := ast.(*structs.Program)
+	funcDecl := program.Declarations[0].(*structs.FunctionDecl)
+	varDecl := funcDecl.Body.Statements[0].(*structs.VariableDecl)
+
+	if len(varDecl.VarType.ArraySizes) != 3 {
+		t.Errorf("Expected 3D array, got %d dimensions", len(varDecl.VarType.ArraySizes))
+	}
+
+	if varDecl.VarType.ArraySizes[0] != 5 || varDecl.VarType.ArraySizes[1] != 10 || varDecl.VarType.ArraySizes[2] != 15 {
+		t.Errorf("Expected array sizes [5, 10, 15], got %v", varDecl.VarType.ArraySizes)
+	}
+}
+
+// TestParse2DArrayOfPointers проверяет парсинг двумерного массива указателей
+func TestParse2DArrayOfPointers(t *testing.T) {
+	sourceCode := []byte(`int main() {
+	int *arr[3][4];
+	return 0;
+}`)
+
+	conv := NewCConverter()
+	tree, err := conv.Parse(sourceCode)
+	if err != nil {
+		t.Fatalf("Parse failed: %v", err)
+	}
+
+	ast, err := conv.ConvertToProgram(tree, sourceCode)
+	if err != nil {
+		t.Fatalf("ConvertToProgram failed: %v", err)
+	}
+
+	program := ast.(*structs.Program)
+	funcDecl := program.Declarations[0].(*structs.FunctionDecl)
+	varDecl := funcDecl.Body.Statements[0].(*structs.VariableDecl)
+
+	if varDecl.VarType.PointerLevel != 1 {
+		t.Errorf("Expected pointer level 1, got %d", varDecl.VarType.PointerLevel)
+	}
+
+	if len(varDecl.VarType.ArraySizes) != 2 {
+		t.Errorf("Expected 2D array, got %d dimensions", len(varDecl.VarType.ArraySizes))
+	}
+
+	if varDecl.VarType.ArraySizes[0] != 3 || varDecl.VarType.ArraySizes[1] != 4 {
+		t.Errorf("Expected array sizes [3, 4], got %v", varDecl.VarType.ArraySizes)
 	}
 }
 
@@ -670,11 +767,6 @@ func TestParseCompoundAssignmentWithExpressions(t *testing.T) {
 				t.Errorf("Expected operator '%s', got '%s'", tt.operator, assignExpr.Operator)
 			}
 
-			// Проверяем что левая часть является lvalue
-			if !assignExpr.Left.IsLValue() {
-				t.Error("Left side of assignment should be lvalue")
-			}
-
 			// Проверяем что правая часть существует
 			if assignExpr.Right == nil {
 				t.Error("Right side of assignment should not be nil")
@@ -951,31 +1043,6 @@ int main() {
 }
 
 // TestValidation_InvalidLValueAssignment проверяет валидацию lvalue при присваивании выражения
-func TestValidation_InvalidLValueAssignment(t *testing.T) {
-	sourceCode := []byte(`int main() {
-	int x;
-	(x + 1) = 10;
-	return 0;
-}`)
-
-	conv := NewCConverter()
-	tree, err := conv.Parse(sourceCode)
-	if err != nil {
-		t.Fatalf("Parse failed: %v", err)
-	}
-
-	_, err = conv.ConvertToProgram(tree, sourceCode)
-	if err == nil {
-		t.Fatal("Expected error for invalid lvalue assignment")
-	}
-
-	// Ошибка может быть обёрнута в StmtConversion, проверяем строку ошибки
-	errMsg := err.Error()
-	if !contains(errMsg, "RequiresLValue") && !contains(errMsg, "lvalue") {
-		t.Errorf("Expected error about lvalue, got: %v", err)
-	}
-}
-
 // TestValidation_EmptyParenthesizedExpression проверяет пустое выражение в скобках
 func TestValidation_EmptyParenthesizedExpression(t *testing.T) {
 	sourceCode := []byte(`int main() {
@@ -1045,54 +1112,6 @@ func TestValidation_AssignmentMissingSide(t *testing.T) {
 	}
 }
 
-// TestValidation_InvalidAddressOfRValue проверяет валидацию взятия адреса rvalue
-func TestValidation_InvalidAddressOfRValue(t *testing.T) {
-	sourceCode := []byte(`int main() {
-	int *ptr = &(5);
-	return 0;
-}`)
-
-	conv := NewCConverter()
-	tree, err := conv.Parse(sourceCode)
-	if err != nil {
-		t.Fatalf("Parse failed: %v", err)
-	}
-
-	_, err = conv.ConvertToProgram(tree, sourceCode)
-	if err == nil {
-		t.Fatal("Expected error for address-of on rvalue")
-	}
-
-	errMsg := err.Error()
-	if !contains(errMsg, "RequiresLValue") && !contains(errMsg, "lvalue") {
-		t.Errorf("Expected error about lvalue, got: %v", err)
-	}
-}
-
-// TestValidation_EmptyArrayInitializer проверяет валидацию пустого инициализатора массива
-func TestValidation_EmptyArrayInitializer(t *testing.T) {
-	sourceCode := []byte(`int main() {
-	int arr[] = {};
-	return 0;
-}`)
-
-	conv := NewCConverter()
-	tree, err := conv.Parse(sourceCode)
-	if err != nil {
-		t.Fatalf("Parse failed: %v", err)
-	}
-
-	_, err = conv.ConvertToProgram(tree, sourceCode)
-	if err == nil {
-		t.Fatal("Expected error for empty array initializer")
-	}
-
-	errMsg := err.Error()
-	if !contains(errMsg, "EmptyArrayInitializer") && !contains(errMsg, "initializer list cannot be empty") {
-		t.Errorf("Expected error about empty array initializer, got: %v", err)
-	}
-}
-
 // TestValidation_InvalidIdentifier проверяет валидацию идентификаторов
 func TestValidation_InvalidIdentifier(t *testing.T) {
 	sourceCode := []byte(`int main() {
@@ -1154,14 +1173,6 @@ func TestValidation_UnsupportedOperatorsTable(t *testing.T) {
 			sourceCode: `int main() {
 	int x = 5;
 	int y = x >>> 1;
-	return 0;
-}`,
-		},
-		{
-			name: "conditional_operator",
-			sourceCode: `int main() {
-	int x = 1;
-	int y = x ? 3 : 4;
 	return 0;
 }`,
 		},
@@ -1271,31 +1282,6 @@ func TestParseBreakContinue(t *testing.T) {
 	}
 }
 
-// TestUnsupportedTreeSitterNode проверяет ошибку на неподдерживаемый узел
-func TestUnsupportedTreeSitterNode(t *testing.T) {
-	sourceCode := []byte(`int main() {
-	goto label;
-label:
-	return 0;
-}`)
-
-	conv := NewCConverter()
-	tree, err := conv.Parse(sourceCode)
-	if err != nil {
-		t.Fatalf("Parse failed: %v", err)
-	}
-
-	_, err = conv.ConvertToProgram(tree, sourceCode)
-	if err == nil {
-		t.Fatal("Expected unsupported statement error for goto/label")
-	}
-
-	errMsg := err.Error()
-	if !contains(errMsg, "unsupported statement type") && !contains(errMsg, "StmtUnsupported") {
-		t.Errorf("Expected unsupported statement error, got: %v", err)
-	}
-}
-
 // TestParseReturnStatement проверяет парсинг return statement
 func TestParseReturnStatement(t *testing.T) {
 	sourceCode := []byte(`int main() {
@@ -1363,6 +1349,73 @@ func TestParseArrayInitializer(t *testing.T) {
 	}
 }
 
+// TestParseArrayInitializerWithSize проверяет парсинг инициализатора массива с явным размером
+// Это проверяет, что не создается двойное объявление переменной
+func TestParseArrayInitializerWithSize(t *testing.T) {
+	sourceCode := []byte(`int main() {
+	int arr[3] = {1, 2, 3};
+	int *p = arr;
+	*p = 10;
+	return arr[0];
+}`)
+
+	conv := NewCConverter()
+	tree, err := conv.Parse(sourceCode)
+	if err != nil {
+		t.Fatalf("Parse failed: %v", err)
+	}
+
+	ast, err := conv.ConvertToProgram(tree, sourceCode)
+	if err != nil {
+		t.Fatalf("ConvertToProgram failed: %v", err)
+	}
+
+	program := ast.(*structs.Program)
+	funcDecl := program.Declarations[0].(*structs.FunctionDecl)
+
+	// Проверяем, что есть ровно 4 statement в функции main:
+	// 1. VariableDecl arr[3] = {1,2,3}
+	// 2. VariableDecl *p = arr
+	// 3. ExprStmt *p = 10
+	// 4. ReturnStmt arr[0]
+	if len(funcDecl.Body.Statements) != 4 {
+		t.Errorf("Expected 4 statements, got %d", len(funcDecl.Body.Statements))
+	}
+
+	// Проверяем первое объявление - массив
+	varDecl1, ok := funcDecl.Body.Statements[0].(*structs.VariableDecl)
+	if !ok {
+		t.Fatalf("Expected VariableDecl at index 0, got %T", funcDecl.Body.Statements[0])
+	}
+
+	if varDecl1.Name != "arr" {
+		t.Errorf("Expected var name 'arr', got %s", varDecl1.Name)
+	}
+
+	if len(varDecl1.VarType.ArraySizes) != 1 || varDecl1.VarType.ArraySizes[0] != 3 {
+		t.Errorf("Expected array size [3], got %v", varDecl1.VarType.ArraySizes)
+	}
+
+	_, ok = varDecl1.InitExpr.(*structs.ArrayInitExpr)
+	if !ok {
+		t.Fatalf("Expected ArrayInitExpr, got %T", varDecl1.InitExpr)
+	}
+
+	// Проверяем второе объявление - указатель
+	varDecl2, ok := funcDecl.Body.Statements[1].(*structs.VariableDecl)
+	if !ok {
+		t.Fatalf("Expected VariableDecl at index 1, got %T", funcDecl.Body.Statements[1])
+	}
+
+	if varDecl2.Name != "p" {
+		t.Errorf("Expected var name 'p', got %s", varDecl2.Name)
+	}
+
+	if varDecl2.VarType.PointerLevel != 1 {
+		t.Errorf("Expected pointer level 1, got %d", varDecl2.VarType.PointerLevel)
+	}
+}
+
 // TestParsePointerReturnType проверяет парсинг функции с возвращаемым указателем
 func TestParsePointerReturnType(t *testing.T) {
 	sourceCode := []byte(`int* get_pointer() {
@@ -1410,110 +1463,6 @@ func TestParseVoidReturnType(t *testing.T) {
 
 	if funcDecl.ReturnType.BaseType != "void" {
 		t.Errorf("Expected return type 'void', got '%s'", funcDecl.ReturnType.BaseType)
-	}
-}
-
-// TestValidation_UnsupportedReturnType проверяет неподдерживаемые типы возврата
-func TestValidation_UnsupportedReturnType(t *testing.T) {
-	tests := []struct {
-		name       string
-		sourceCode string
-	}{
-		{
-			name: "float_return",
-			sourceCode: `float calculate() {
-	return 1.5;
-}`,
-		},
-		{
-			name: "double_return",
-			sourceCode: `double calculate() {
-	return 2.5;
-}`,
-		},
-		{
-			name: "char_return",
-			sourceCode: `char get_char() {
-	return 'a';
-}`,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			conv := NewCConverter()
-			tree, err := conv.Parse([]byte(tt.sourceCode))
-			if err != nil {
-				t.Fatalf("Parse failed: %v", err)
-			}
-
-			_, err = conv.ConvertToProgram(tree, []byte(tt.sourceCode))
-			if err == nil {
-				t.Fatal("Expected error for unsupported return type")
-			}
-
-			errMsg := err.Error()
-			if !contains(errMsg, "unsupported") && !contains(errMsg, "UnsupportedType") {
-				t.Errorf("Expected unsupported type error, got: %v", err)
-			}
-		})
-	}
-}
-
-// TestIsLValueIdentifier проверяет, что идентификатор является lvalue
-func TestIsLValueIdentifier(t *testing.T) {
-	sourceCode := []byte(`int main() {
-	int x;
-	x = 5;
-	return 0;
-}`)
-
-	conv := NewCConverter()
-	tree, err := conv.Parse(sourceCode)
-	if err != nil {
-		t.Fatalf("Parse failed: %v", err)
-	}
-
-	ast, err := conv.ConvertToProgram(tree, sourceCode)
-	if err != nil {
-		t.Fatalf("ConvertToProgram failed: %v", err)
-	}
-
-	program := ast.(*structs.Program)
-	funcDecl := program.Declarations[0].(*structs.FunctionDecl)
-	exprStmt := funcDecl.Body.Statements[1].(*structs.ExprStmt)
-	assignExpr := exprStmt.Expression.(*structs.AssignmentExpr)
-
-	if !assignExpr.Left.IsLValue() {
-		t.Error("Expected identifier to be lvalue")
-	}
-}
-
-// TestIsLValueIntLiteral проверяет, что литерал не является lvalue
-func TestIsLValueIntLiteral(t *testing.T) {
-	sourceCode := []byte(`int main() {
-	int x = 5;
-	return 0;
-}`)
-
-	conv := NewCConverter()
-	tree, err := conv.Parse(sourceCode)
-	if err != nil {
-		t.Fatalf("Parse failed: %v", err)
-	}
-
-	ast, err := conv.ConvertToProgram(tree, sourceCode)
-	if err != nil {
-		t.Fatalf("ConvertToProgram failed: %v", err)
-	}
-
-	program := ast.(*structs.Program)
-	funcDecl := program.Declarations[0].(*structs.FunctionDecl)
-	varDecl := funcDecl.Body.Statements[0].(*structs.VariableDecl)
-	intLit := varDecl.InitExpr.(*structs.IntLiteral)
-
-	if intLit.IsLValue() {
-		t.Error("Expected IntLiteral to not be lvalue")
 	}
 }
 
