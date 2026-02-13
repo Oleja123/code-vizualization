@@ -1,0 +1,8 @@
+server:
+  port: 8080
+
+onecompiler:
+  api_url: "https://api.onecompiler.com/api/v1"
+  api_key: "oc_UzD5CvINJ2y_7LxBgxfrrepfWqLR-6o8"
+  enabled: true
+  timeout_seconds: 10

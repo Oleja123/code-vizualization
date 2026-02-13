@@ -177,6 +177,17 @@ func (c *CConverter) ConvertStmt(node *sitter.Node, sourceCode []byte) (interfac
 		return c.convertBlockStatement(node, sourceCode)
 	case "expression_statement":
 		return c.convertExpressionStatement(node, sourceCode)
+	case "assignment_expression":
+		// assignment_expression как отдельный statement (например, sum += i;)
+		expr, err := c.ConvertExpr(node, sourceCode)
+		if err != nil {
+			return nil, newConverterError(ErrStmtConversion, "failed to convert assignment_expression as statement", node, err)
+		}
+		return &structs.ExprStmt{
+			Type:       "ExprStmt",
+			Expression: expr,
+			Loc:        c.getLocation(node),
+		}, nil
 	case "break_statement":
 		return &structs.BreakStmt{Type: "BreakStmt", Loc: c.getLocation(node)}, nil
 	case "continue_statement":
