@@ -85,11 +85,23 @@ func (v *SemanticValidator) validateFunctionDecl(fn *converter.FunctionDecl) err
 			fmt.Sprintf("function '%s' has unsupported return type. Allowed: void, int", fn.Name),
 		)
 	}
+	// Запрещаем указатели в возвращаемом типе
+	if fn.ReturnType.PointerLevel > 0 {
+		return fmt.Errorf("function '%s' has pointer return type, which is not allowed", fn.Name)
+	}
 
 	// Проверяем параметры
 	for _, param := range fn.Parameters {
 		if err := v.validateType(param.Type, "parameter", param.Name, param.Loc); err != nil {
 			return err
+		}
+		// Проверка: параметры функции не должны быть массивами
+		if len(param.Type.ArraySizes) > 0 {
+			return fmt.Errorf("function parameter '%s' cannot be an array", param.Name)
+		}
+		// Запрещаем указатели в параметрах
+		if param.Type.PointerLevel > 0 {
+			return fmt.Errorf("function parameter '%s' cannot be a pointer", param.Name)
 		}
 	}
 
@@ -123,6 +135,16 @@ func (v *SemanticValidator) validateVariableDecl(varDecl *converter.VariableDecl
 // validateType проверяет, является ли тип допустимым
 func (v *SemanticValidator) validateType(t converter.Type, context string, name string, loc converter.Location) error {
 	// Типы должны быть только int (без указателей и массивов в этой версии)
+	// Запрещаем указатели для всех типов
+	if t.PointerLevel > 0 {
+		return NewSemanticError(
+			ErrInvalidVariableType,
+			fmt.Sprintf("unsupported pointer type: %s (pointerLevel=%d)", t.BaseType, t.PointerLevel),
+			loc,
+			context,
+			fmt.Sprintf("%s '%s' cannot be a pointer", context, name),
+		)
+	}
 	if t.BaseType != "int" {
 		return NewSemanticError(
 			ErrInvalidVariableType,
