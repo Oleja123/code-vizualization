@@ -19,14 +19,16 @@ type (
 	VariableDecl = structs.VariableDecl
 	FunctionDecl = structs.FunctionDecl
 	IfStmt       = structs.IfStmt
-	ElseIfClause = structs.ElseIfClause
 	WhileStmt    = structs.WhileStmt
+	DoWhileStmt  = structs.DoWhileStmt
 	ForStmt      = structs.ForStmt
 	ReturnStmt   = structs.ReturnStmt
 	BlockStmt    = structs.BlockStmt
 	ExprStmt     = structs.ExprStmt
 	BreakStmt    = structs.BreakStmt
 	ContinueStmt = structs.ContinueStmt
+	GotoStmt     = structs.GotoStmt
+	LabelStmt    = structs.LabelStmt
 
 	// Выражения
 	VariableExpr    = structs.VariableExpr
@@ -165,6 +167,8 @@ func (c *CConverter) ConvertStmt(node *sitter.Node, sourceCode []byte) (interfac
 		return c.convertIfStatement(node, sourceCode)
 	case "while_statement":
 		return c.convertWhileStatement(node, sourceCode)
+	case "do_statement":
+		return c.convertDoWhileStatement(node, sourceCode)
 	case "for_statement":
 		return c.convertForStatement(node, sourceCode)
 	case "return_statement":
@@ -177,6 +181,10 @@ func (c *CConverter) ConvertStmt(node *sitter.Node, sourceCode []byte) (interfac
 		return &structs.BreakStmt{Type: "BreakStmt", Loc: c.getLocation(node)}, nil
 	case "continue_statement":
 		return &structs.ContinueStmt{Type: "ContinueStmt", Loc: c.getLocation(node)}, nil
+	case "goto_statement":
+		return c.convertGotoStatement(node, sourceCode)
+	case "labeled_statement":
+		return c.convertLabeledStatement(node, sourceCode)
 	case "comment":
 		// Пропускаем комментарии - они не являются AST узлами
 		return nil, nil
@@ -653,7 +661,6 @@ func (c *CConverter) parseParameterList(node *sitter.Node, sourceCode []byte) []
 func (c *CConverter) convertIfStatement(node *sitter.Node, sourceCode []byte) (interfaces.Stmt, error) {
 	var condition interfaces.Expr
 	var thenBlock interfaces.Stmt
-	var elseIfList []structs.ElseIfClause
 	var elseBlock interfaces.Stmt
 
 	// Структура tree-sitter для if/else if/else:
@@ -679,7 +686,8 @@ func (c *CConverter) convertIfStatement(node *sitter.Node, sourceCode []byte) (i
 			}
 
 		case "compound_statement", "expression_statement", "return_statement",
-			"while_statement", "for_statement":
+			"while_statement", "for_statement", "do_statement",
+			"goto_statement", "labeled_statement", "break_statement", "continue_statement":
 			// Это тело if (если мы ещё не установили тело)
 			if thenBlock == nil && condition != nil {
 				stmt, err := c.ConvertStmt(child, sourceCode)
@@ -691,7 +699,11 @@ func (c *CConverter) convertIfStatement(node *sitter.Node, sourceCode []byte) (i
 
 		case "else_clause":
 			// Это else или else if блок
-			c.processElseClause(child, sourceCode, &elseIfList, &elseBlock)
+			stmt, err := c.processElseClause(child, sourceCode)
+			if err != nil {
+				return nil, err
+			}
+			elseBlock = stmt
 
 		case "if":
 			// Ключевое слово "if", пропускаем
@@ -699,59 +711,37 @@ func (c *CConverter) convertIfStatement(node *sitter.Node, sourceCode []byte) (i
 	}
 
 	return &structs.IfStmt{
-		Type:       "IfStmt",
-		Condition:  condition,
-		ThenBlock:  thenBlock,
-		ElseIfList: elseIfList,
-		ElseBlock:  elseBlock,
-		Loc:        c.getLocation(node),
+		Type:      "IfStmt",
+		Condition: condition,
+		ThenBlock: thenBlock,
+		ElseBlock: elseBlock,
+		Loc:       c.getLocation(node),
 	}, nil
 }
 
 // processElseClause обрабатывает else_clause
-// Структура: else_clause может содержать:
-// - if_statement (для else if)
-// - compound_statement (для else { ... })
-func (c *CConverter) processElseClause(node *sitter.Node, sourceCode []byte, elseIfList *[]structs.ElseIfClause, elseBlock *interfaces.Stmt) error {
+// Возвращает либо вложенный IfStmt (для else if), либо обычный statement (для else)
+// Это позволяет представить else if как else с вложенным if, как в C
+func (c *CConverter) processElseClause(node *sitter.Node, sourceCode []byte) (interfaces.Stmt, error) {
 	for i := 0; i < int(node.ChildCount()); i++ {
 		child := node.Child(i)
 
 		switch child.Type() {
 		case "if_statement":
-			// Это else if конструкция
-			nestedIfStmt, err := c.convertIfStatement(child, sourceCode)
-			if err != nil {
-				return err
-			}
+			// Это else if конструкция - возвращаем вложенный if statement
+			return c.convertIfStatement(child, sourceCode)
 
-			nestedIf := nestedIfStmt.(*structs.IfStmt)
-
-			// Добавляем условие вложенного if в elseIfList
-			*elseIfList = append(*elseIfList, structs.ElseIfClause{
-				Condition: nestedIf.Condition,
-				Block:     nestedIf.ThenBlock,
-				Loc:       nestedIf.Loc,
-			})
-
-			// Добавляем все else if из вложенного if
-			*elseIfList = append(*elseIfList, nestedIf.ElseIfList...)
-
-			// Последний else блок становится нашим else
-			*elseBlock = nestedIf.ElseBlock
-
-		case "compound_statement", "expression_statement", "return_statement":
+		case "compound_statement", "expression_statement", "return_statement",
+			"while_statement", "for_statement", "do_statement",
+			"goto_statement", "labeled_statement", "break_statement", "continue_statement":
 			// Это обычный else блок
-			stmt, err := c.ConvertStmt(child, sourceCode)
-			if err != nil {
-				return err
-			}
-			*elseBlock = stmt
+			return c.ConvertStmt(child, sourceCode)
 
 		case "else":
 			// Ключевое слово "else", пропускаем
 		}
 	}
-	return nil
+	return nil, nil
 }
 
 func (c *CConverter) convertWhileStatement(node *sitter.Node, sourceCode []byte) (interfaces.Stmt, error) {
@@ -784,6 +774,42 @@ func (c *CConverter) convertWhileStatement(node *sitter.Node, sourceCode []byte)
 		Type:      "WhileStmt",
 		Condition: condition,
 		Body:      body,
+		Loc:       c.getLocation(node),
+	}, nil
+}
+
+func (c *CConverter) convertDoWhileStatement(node *sitter.Node, sourceCode []byte) (interfaces.Stmt, error) {
+	var condition interfaces.Expr
+	var body interfaces.Stmt
+
+	for i := 0; i < int(node.ChildCount()); i++ {
+		child := node.Child(i)
+
+		switch child.Type() {
+		case "compound_statement", "expression_statement":
+			if body == nil {
+				stmt, err := c.ConvertStmt(child, sourceCode)
+				if err != nil {
+					return nil, err
+				}
+				body = stmt
+			}
+
+		case "parenthesized_expression":
+			if child.ChildCount() > 1 {
+				condExpr, err := c.ConvertExpr(child.Child(1), sourceCode)
+				if err != nil {
+					return nil, err
+				}
+				condition = condExpr
+			}
+		}
+	}
+
+	return &structs.DoWhileStmt{
+		Type:      "DoWhileStmt",
+		Body:      body,
+		Condition: condition,
 		Loc:       c.getLocation(node),
 	}, nil
 }
@@ -1242,6 +1268,67 @@ func (c *CConverter) convertArrayInitExpression(node *sitter.Node, sourceCode []
 		Type:     "ArrayInitExpr",
 		Elements: elements,
 		Loc:      c.getLocation(node),
+	}, nil
+}
+
+func (c *CConverter) convertGotoStatement(node *sitter.Node, sourceCode []byte) (interfaces.Stmt, error) {
+	// goto_statement: "goto" statement_identifier ";"
+	var label string
+
+	for i := 0; i < int(node.ChildCount()); i++ {
+		child := node.Child(i)
+		childType := child.Type()
+
+		if childType == "statement_identifier" {
+			label = c.getNodeText(child, sourceCode)
+			break
+		}
+	}
+
+	if label == "" {
+		return nil, newConverterError(ErrStmtConversion, "goto statement without label", node, nil)
+	}
+
+	return &structs.GotoStmt{
+		Type:  "GotoStmt",
+		Label: label,
+		Loc:   c.getLocation(node),
+	}, nil
+}
+
+func (c *CConverter) convertLabeledStatement(node *sitter.Node, sourceCode []byte) (interfaces.Stmt, error) {
+	// labeled_statement: statement_identifier ":" statement
+	var label string
+	var statement interfaces.Stmt
+
+	for i := 0; i < int(node.ChildCount()); i++ {
+		child := node.Child(i)
+		childType := child.Type()
+
+		if childType == "statement_identifier" {
+			label = c.getNodeText(child, sourceCode)
+		} else if childType == ":" {
+			// Пропускаем двоеточие
+			continue
+		} else if childType != "statement_identifier" && childType != ":" && statement == nil {
+			// Это оператор после метки
+			stmt, err := c.ConvertStmt(child, sourceCode)
+			if err != nil {
+				return nil, err
+			}
+			statement = stmt
+		}
+	}
+
+	if label == "" {
+		return nil, newConverterError(ErrStmtConversion, "labeled statement without label", node, nil)
+	}
+
+	return &structs.LabelStmt{
+		Type:      "LabelStmt",
+		Label:     label,
+		Statement: statement,
+		Loc:       c.getLocation(node),
 	}, nil
 }
 

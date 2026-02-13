@@ -63,21 +63,14 @@ func (f *FunctionDecl) StmtNode()             {}
 func (f *FunctionDecl) NodeType() string      { return "FunctionDecl" }
 func (f *FunctionDecl) GetLocation() Location { return f.Loc }
 
-// ElseIfClause представляет else if блок в условном операторе
-type ElseIfClause struct {
-	Condition interfaces.Expr `json:"condition"`
-	Block     interfaces.Stmt `json:"block"`
-	Loc       Location        `json:"location"`
-}
-
-// IfStmt представляет условный оператор if/else if/else
+// IfStmt представляет условный оператор if/else
+// else if представлен как else с вложенным if (как в C)
 type IfStmt struct {
-	Type       string          `json:"type"` // всегда "IfStmt"
-	Condition  interfaces.Expr `json:"condition"`
-	ThenBlock  interfaces.Stmt `json:"thenBlock"`
-	ElseIfList []ElseIfClause  `json:"elseIf,omitempty"`    // else if блоки
-	ElseBlock  interfaces.Stmt `json:"elseBlock,omitempty"` // может быть nil
-	Loc        Location        `json:"location"`
+	Type      string          `json:"type"` // всегда "IfStmt"
+	Condition interfaces.Expr `json:"condition"`
+	ThenBlock interfaces.Stmt `json:"thenBlock"`
+	ElseBlock interfaces.Stmt `json:"elseBlock,omitempty"` // может быть nil или вложенный IfStmt для else if
+	Loc       Location        `json:"location"`
 }
 
 func (i *IfStmt) StmtNode()             {}
@@ -95,6 +88,18 @@ type WhileStmt struct {
 func (w *WhileStmt) StmtNode()             {}
 func (w *WhileStmt) NodeType() string      { return "WhileStmt" }
 func (w *WhileStmt) GetLocation() Location { return w.Loc }
+
+// DoWhileStmt представляет цикл do while
+type DoWhileStmt struct {
+	Type      string          `json:"type"` // всегда "DoWhileStmt"
+	Body      interfaces.Stmt `json:"body"`
+	Condition interfaces.Expr `json:"condition"`
+	Loc       Location        `json:"location"`
+}
+
+func (d *DoWhileStmt) StmtNode()             {}
+func (d *DoWhileStmt) NodeType() string      { return "DoWhileStmt" }
+func (d *DoWhileStmt) GetLocation() Location { return d.Loc }
 
 // ForStmt представляет цикл for
 type ForStmt struct {
@@ -162,6 +167,29 @@ type ContinueStmt struct {
 func (c *ContinueStmt) StmtNode()             {}
 func (c *ContinueStmt) NodeType() string      { return "ContinueStmt" }
 func (c *ContinueStmt) GetLocation() Location { return c.Loc }
+
+// GotoStmt представляет оператор goto
+type GotoStmt struct {
+	Type  string   `json:"type"`  // всегда "GotoStmt"
+	Label string   `json:"label"` // имя метки
+	Loc   Location `json:"location"`
+}
+
+func (g *GotoStmt) StmtNode()             {}
+func (g *GotoStmt) NodeType() string      { return "GotoStmt" }
+func (g *GotoStmt) GetLocation() Location { return g.Loc }
+
+// LabelStmt представляет метку (label: statement)
+type LabelStmt struct {
+	Type      string          `json:"type"`      // всегда "LabelStmt"
+	Label     string          `json:"label"`     // имя метки
+	Statement interfaces.Stmt `json:"statement"` // оператор после метки (может быть nil)
+	Loc       Location        `json:"location"`
+}
+
+func (l *LabelStmt) StmtNode()             {}
+func (l *LabelStmt) NodeType() string      { return "LabelStmt" }
+func (l *LabelStmt) GetLocation() Location { return l.Loc }
 
 // ============= Expressions =============
 
