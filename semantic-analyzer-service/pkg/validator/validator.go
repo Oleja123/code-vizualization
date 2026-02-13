@@ -2,6 +2,7 @@ package validator
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/Oleja123/code-vizualization/cst-to-ast-service/pkg/converter"
 )
@@ -9,11 +10,15 @@ import (
 // SemanticValidator выполняет семантическую валидацию AST
 type SemanticValidator struct {
 	// Допустимые операторы и типы
-	allowedAssignOps  map[string]bool
-	allowedUnaryOps   map[string]bool
-	allowedBinaryOps  map[string]bool
-	allowedReturnType map[string]bool
+	allowedAssignOps   map[string]bool
+	allowedUnaryOps    map[string]bool
+	allowedBinaryOps   map[string]bool
+	allowedReturnTypes map[string]bool
+	allowedTypes       map[string]bool
 }
+
+var arrayMaximumDimension = 2
+var pointerMaximumDepth = 0
 
 // New создает новый семантический валидатор
 func New() *SemanticValidator {
@@ -48,11 +53,29 @@ func New() *SemanticValidator {
 			"&&": true,
 			"||": true,
 		},
-		allowedReturnType: map[string]bool{
+		allowedReturnTypes: map[string]bool{
 			"int":  true,
 			"void": true,
 		},
+		allowedTypes: map[string]bool{
+			"int": true,
+		},
 	}
+}
+
+func (v *SemanticValidator) getAllowed(allowed map[string]bool) string {
+	var sb strings.Builder
+	isFirst := true
+
+	for key := range allowed {
+		if !isFirst {
+			sb.WriteString(", ")
+		}
+		isFirst = false
+		sb.WriteString(key)
+	}
+
+	return sb.String()
 }
 
 // ValidateProgram выполняет валидацию всей программы
@@ -76,32 +99,14 @@ func (v *SemanticValidator) ValidateProgram(program *converter.Program) error {
 // validateFunctionDecl проверяет объявление функции
 func (v *SemanticValidator) validateFunctionDecl(fn *converter.FunctionDecl) error {
 	// Проверяем возвращаемый тип
-	if !v.allowedReturnType[fn.ReturnType.BaseType] {
-		return NewSemanticError(
-			ErrInvalidReturnType,
-			fmt.Sprintf("invalid return type: %s", fn.ReturnType.BaseType),
-			fn.Loc,
-			"FunctionDecl",
-			fmt.Sprintf("function '%s' has unsupported return type. Allowed: void, int", fn.Name),
-		)
-	}
-	// Запрещаем указатели в возвращаемом типе
-	if fn.ReturnType.PointerLevel > 0 {
-		return fmt.Errorf("function '%s' has pointer return type, which is not allowed", fn.Name)
+	if err := v.validateType(fn.ReturnType, "return", fn.Name, fn.Loc); err != nil {
+		return err
 	}
 
 	// Проверяем параметры
 	for _, param := range fn.Parameters {
 		if err := v.validateType(param.Type, "parameter", param.Name, param.Loc); err != nil {
 			return err
-		}
-		// Проверка: параметры функции не должны быть массивами
-		if len(param.Type.ArraySizes) > 0 {
-			return fmt.Errorf("function parameter '%s' cannot be an array", param.Name)
-		}
-		// Запрещаем указатели в параметрах
-		if param.Type.PointerLevel > 0 {
-			return fmt.Errorf("function parameter '%s' cannot be a pointer", param.Name)
 		}
 	}
 
@@ -136,22 +141,71 @@ func (v *SemanticValidator) validateVariableDecl(varDecl *converter.VariableDecl
 func (v *SemanticValidator) validateType(t converter.Type, context string, name string, loc converter.Location) error {
 	// Типы должны быть только int (без указателей и массивов в этой версии)
 	// Запрещаем указатели для всех типов
-	if t.PointerLevel > 0 {
+	if t.PointerLevel > pointerMaximumDepth {
 		return NewSemanticError(
-			ErrInvalidVariableType,
+			ErrInvalidType,
 			fmt.Sprintf("unsupported pointer type: %s (pointerLevel=%d)", t.BaseType, t.PointerLevel),
 			loc,
 			context,
-			fmt.Sprintf("%s '%s' cannot be a pointer", context, name),
+			fmt.Sprintf("%s '%s' has pointer level %v, when maximum pointer level is %v",
+				context,
+				name,
+				t.PointerLevel,
+				pointerMaximumDepth,
+			),
 		)
 	}
-	if t.BaseType != "int" {
+	if len(t.ArraySizes) > arrayMaximumDimension {
 		return NewSemanticError(
-			ErrInvalidVariableType,
+			ErrInvalidType,
+			fmt.Sprintf("unsupported array dimensions: %s (array dimensions=%d)", t.BaseType, len(t.ArraySizes)),
+			loc,
+			context,
+			fmt.Sprintf("%s '%s' has array dimensions %v, when maximum array dimensions is %v",
+				context,
+				name,
+				len(t.ArraySizes),
+				arrayMaximumDimension,
+			),
+		)
+	}
+	if (context == "return" || context == "parameter") && len(t.ArraySizes) != 0 {
+		return NewSemanticError(
+			ErrInvalidType,
+			"array is not supported as a return value or parameter",
+			loc,
+			context,
+			fmt.Sprintf("%s '%s' is an array, although arrays are not supported",
+				context,
+				name,
+			),
+		)
+	}
+	if t.ArraySizes == nil && context == "parameter" {
+		return NewSemanticError(
+			ErrInvalidType,
+			"unsupported array as parameter",
+			loc,
+			context,
+			"unsupported array as parameter",
+		)
+	}
+	if _, ok := v.allowedReturnTypes[t.BaseType]; !ok && context == "return" {
+		return NewSemanticError(
+			ErrInvalidType,
+			fmt.Sprintf("invalid %s return: %s", context, t.BaseType),
+			loc,
+			context,
+			fmt.Sprintf("only '%s' types is supported for %s '%s', got '%s'", v.getAllowed(v.allowedReturnTypes), context, name, t.BaseType),
+		)
+	}
+	if _, ok := v.allowedTypes[t.BaseType]; !ok && context != "return" {
+		return NewSemanticError(
+			ErrInvalidType,
 			fmt.Sprintf("invalid %s type: %s", context, t.BaseType),
 			loc,
-			"Type",
-			fmt.Sprintf("only 'int' type is supported for %s '%s', got '%s'", context, name, t.BaseType),
+			context,
+			fmt.Sprintf("only '%s' types is supported for %s '%s', got '%s'", v.getAllowed(v.allowedTypes), context, name, t.BaseType),
 		)
 	}
 

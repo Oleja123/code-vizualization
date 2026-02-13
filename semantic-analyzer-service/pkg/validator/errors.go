@@ -10,14 +10,14 @@ import (
 type ErrorCode string
 
 const (
-	ErrInvalidVariableType     ErrorCode = "INVALID_VAR_TYPE"
-	ErrInvalidParameterType    ErrorCode = "INVALID_PARAM_TYPE"
-	ErrInvalidReturnType       ErrorCode = "INVALID_RETURN_TYPE"
+	ErrInvalidType             ErrorCode = "INVALID_TYPE"
 	ErrUnsupportedAssignOp     ErrorCode = "UNSUPPORTED_ASSIGN_OP"
 	ErrUnsupportedUnaryOp      ErrorCode = "UNSUPPORTED_UNARY_OP"
 	ErrUnsupportedBinaryOp     ErrorCode = "UNSUPPORTED_BINARY_OP"
 	ErrInvalidFunctionCall     ErrorCode = "INVALID_FUNCTION_CALL"
 	ErrSemanticValidationError ErrorCode = "SEMANTIC_ERROR"
+	ErrUnknownStmt             ErrorCode = "UNKNOWN_STMT"
+	ErrUnknownExpr             ErrorCode = "UNKNOWN_EXPR"
 )
 
 // SemanticError представляет семантическую ошибку

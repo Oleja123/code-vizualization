@@ -1346,5 +1346,5 @@ func (c *CConverter) convertLabeledStatement(node *sitter.Node, sourceCode []byt
 func (c *CConverter) isAssignmentOperator(tokenType string) bool {
 	return tokenType == "=" || tokenType == "+=" || tokenType == "-=" || tokenType == "/=" ||
 		tokenType == "%=" || tokenType == "&=" || tokenType == "|=" || tokenType == "^=" ||
-		tokenType == "<<=" || tokenType == ">>="
+		tokenType == "<<=" || tokenType == ">>=" || tokenType == "*="
 }
