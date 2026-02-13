@@ -48,12 +48,15 @@ Node (интерфейс)
 │   ├── FunctionDecl
 │   ├── IfStmt
 │   ├── WhileStmt
+│   ├── DoWhileStmt
 │   ├── ForStmt
 │   ├── ReturnStmt
 │   ├── BlockStmt
 │   ├── ExprStmt
 │   ├── BreakStmt
-│   └── ContinueStmt
+│   ├── ContinueStmt
+│   ├── GotoStmt
+│   └── LabelStmt
 └── Expr (выражения)
     ├── VariableExpr
     ├── IntLiteral
@@ -191,20 +194,13 @@ int *createArray(int size) { }     // ReturnType.PointerLevel = 1
 
 ### 4. IfStmt
 
-Условный оператор с поддержкой `else if`:
+Условный оператор с поддержкой `else if`. Else if представляется как else с вложенным if (как в C):
 
 ```go
 type IfStmt struct {
-    Condition  Expr           `json:"condition"`
-    ThenBlock  Stmt           `json:"thenBlock"`
-    ElseIfList []ElseIfClause `json:"elseIf,omitempty"`
-    ElseBlock  Stmt           `json:"elseBlock,omitempty"` // nil если нет else
-    Loc        Location       `json:"loc"`
-}
-
-type ElseIfClause struct {
     Condition Expr     `json:"condition"`
-    Block     Stmt     `json:"block"`
+    ThenBlock Stmt     `json:"thenBlock"`
+    ElseBlock Stmt     `json:"elseBlock,omitempty"` // nil если нет else; может быть вложенный IfStmt для else if
     Loc       Location `json:"loc"`
 }
 ```
@@ -212,7 +208,7 @@ type ElseIfClause struct {
 **Примеры**:
 ```c
 if (x > 0) { return 1; }
-// IfStmt{Condition: ..., ThenBlock: ..., ElseIfList: nil, ElseBlock: nil}
+// IfStmt{Condition: ..., ThenBlock: ..., ElseBlock: nil}
 
 if (x > 0) {
     return 1;
@@ -224,18 +220,20 @@ if (x > 0) {
 // IfStmt{
 //   Condition: BinaryExpr(">", x, 0),
 //   ThenBlock: ...,
-//   ElseIfList: [ElseIfClause{Condition: BinaryExpr("<", x, 0), Block: ...}],
-//   ElseBlock: BlockStmt(...)
+//   ElseBlock: IfStmt{  // Else-if представлен как вложенный if
+//     Condition: BinaryExpr("<", x, 0),
+//     ThenBlock: ...,
+//     ElseBlock: BlockStmt(...)
+//   }
 // }
 ```
 
 **Интерпретация**:
 1. Вычислить `Condition`
 2. Если `true` → выполнить `ThenBlock`, выйти
-3. Иначе: для каждого `ElseIfClause`:
-   - Вычислить `Condition`
-   - Если `true` → выполнить `Block`, выйти
-4. Если все `false` и `ElseBlock != nil` → выполнить `ElseBlock`
+3. Иначе: если `ElseBlock != nil`:
+   - Если это IfStmt (else if) → рекурсивно интерпретировать
+   - Иначе (else) → выполнить `ElseBlock`
 
 ---
 
@@ -257,6 +255,39 @@ type WhileStmt struct {
 3. Если `false` → выйти из цикла
 4. `break` в `Body` → немедленный выход
 5. `continue` в `Body` → переход к шагу 1
+
+---
+
+### 5.1 DoWhileStmt
+
+Цикл `do while` (выполняется минимум один раз):
+
+```go
+type DoWhileStmt struct {
+    Body      Stmt     `json:"body"`
+    Condition Expr     `json:"condition"`
+    Loc       Location `json:"loc"`
+}
+```
+
+**Интерпретация**:
+1. Выполнить `Body`
+2. Вычислить `Condition`
+3. Если `true` → вернуться к шагу 1
+4. Если `false` → выйти из цикла
+5. `break` в `Body` → немедленный выход
+6. `continue` в `Body` → переход к шагу 2
+
+**Ключевое отличие от while**: Тело выполняется **минимум один раз** перед проверкой условия.
+
+**Пример:**
+```c
+int x = 0;
+do {
+    x = x + 1;
+    printf("%d\n", x);
+} while (x < 5);  // Выведет 1, 2, 3, 4, 5
+```
 
 ---
 
@@ -357,6 +388,51 @@ type ContinueStmt struct {
 ```
 
 **Интерпретация**: Управление потоком в циклах (требует context цикла)
+
+---
+
+### 11. GotoStmt
+
+Безусловный переход на метку:
+
+```go
+type GotoStmt struct {
+    Type  string   `json:"type"`    // "GotoStmt"
+    Label string   `json:"label"`   // Имя метки для перехода
+    Loc   Location `json:"loc"`
+}
+```
+
+**Интерпретация**: Выполнить скачок на соответствующий LabelStmt. Требует корректной навигации по метке.
+
+**Пример:**
+```c
+int i = 0;
+loop: i = i + 1;
+if (i < 10) goto loop;
+```
+
+---
+
+### 12. LabelStmt
+
+Метка с следующим оператором:
+
+```go
+type LabelStmt struct {
+    Type      string `json:"type"`      // "LabelStmt"
+    Label     string `json:"label"`     // Имя метки
+    Statement Stmt   `json:"statement"` // Оператор, связанный с меткой
+    Loc       Location `json:"loc"`
+}
+```
+
+**Интерпретация**: Точка назначения для goto. При выполнении: выполнить оператор Statement.
+
+**Пример:**
+```c
+end: return 0;  // LabelStmt("end", ReturnStmt(0))
+```
 
 ---
 
@@ -706,17 +782,20 @@ type Program struct {
     Loc          Location
 }
 
-// Операторы (10 типов)
+// Операторы (13 типов)
 VariableDecl    // Объявление переменной
 FunctionDecl    // Объявление функции
 IfStmt          // Условный оператор с else if цепочкой
 WhileStmt       // Цикл while
+DoWhileStmt     // Цикл do while
 ForStmt         // Цикл for
 ReturnStmt      // Оператор return
 BlockStmt       // Блок { ... }
 ExprStmt        // Выражение-оператор
 BreakStmt       // break
 ContinueStmt    // continue
+GotoStmt        // goto
+LabelStmt       // Метка с оператором
 
 // Выражения (8 типов)
 VariableExpr    // Ссылка на переменную
@@ -732,7 +811,6 @@ ArrayInitExpr   // Инициализация массива
 Location        // Позиция в коде
 Type            // Описание типа
 Parameter       // Параметр функции
-ElseIfClause    // Блок else if
 ```
 
 ### Методы type assertion
@@ -744,7 +822,8 @@ if expr, ok := node.(structs.Expr); ok { }
 
 // Конкретный тип
 if ifStmt, ok := stmt.(*structs.IfStmt); ok {
-    // Работа с ifStmt.Condition, ifStmt.ElseIfList, ...
+    // Работа с ifStmt.Condition, ifStmt.ElseBlock
+    // Если ElseBlock это IfStmt, то это else if
 }
 
 ```
@@ -797,7 +876,7 @@ AST (internal/domain/structs)
 
 **Ключевые принципы реализации**:
 1. **Type safety**: Маркер методы (`StmtNode()`, `ExprNode()`) через интерфейсы
-2. **Else-if обработка**: Рекурсивное преобразование вложенной if-else структуры в плоский список `ElseIfClause`
+2. **Else-if обработка**: Else if представлен как else с вложенным if (как в C), вместо плоского списка
 3. **Комментарии**: Фильтруются на уровне tree-sitter парсера (не присутствуют в CST)
 4. **Многомерные массивы**: Поддержка через `ArraySizes []int` в структуре `Type`
 

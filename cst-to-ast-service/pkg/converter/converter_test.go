@@ -876,20 +876,28 @@ func TestParseElseIfStatement(t *testing.T) {
 		t.Fatal("Expected then block in if statement")
 	}
 
-	if len(ifStmt.ElseIfList) != 1 {
-		t.Fatalf("Expected 1 else-if clause, got %d", len(ifStmt.ElseIfList))
+	// else if представлен как else с вложенным if
+	if ifStmt.ElseBlock == nil {
+		t.Fatal("Expected else block in if statement")
 	}
 
-	if ifStmt.ElseIfList[0].Condition == nil {
+	// ElseBlock должен быть IfStmt (else if)
+	elseIfStmt, ok := ifStmt.ElseBlock.(*structs.IfStmt)
+	if !ok {
+		t.Fatal("Expected ElseBlock to be IfStmt (else if)")
+	}
+
+	if elseIfStmt.Condition == nil {
 		t.Fatal("Expected condition in else-if clause")
 	}
 
-	if ifStmt.ElseIfList[0].Block == nil {
+	if elseIfStmt.ThenBlock == nil {
 		t.Fatal("Expected block in else-if clause")
 	}
 
-	if ifStmt.ElseBlock == nil {
-		t.Fatal("Expected else block in if-else if-else statement")
+	// Проверяем финальный else блок
+	if elseIfStmt.ElseBlock == nil {
+		t.Fatal("Expected else block after else-if")
 	}
 }
 
@@ -2016,4 +2024,355 @@ func contains(s, substr string) bool {
 		}
 	}
 	return false
+}
+
+// TestParseGoto проверяет парсинг goto statement
+func TestParseGoto(t *testing.T) {
+	sourceCode := []byte(`int main() {
+	int x = 0;
+	goto end;
+	x = 5;
+	end: return x;
+}`)
+
+	conv := NewCConverter()
+	tree, err := conv.Parse(sourceCode)
+	if err != nil {
+		t.Fatalf("Parse failed: %v", err)
+	}
+
+	ast, err := conv.ConvertToProgram(tree, sourceCode)
+	if err != nil {
+		t.Fatalf("ConvertToProgram failed: %v", err)
+	}
+
+	program := ast.(*structs.Program)
+	funcDecl := program.Declarations[0].(*structs.FunctionDecl)
+
+	// Ищем goto statement
+	var gotoFound bool
+	for _, stmt := range funcDecl.Body.Statements {
+		if g, ok := stmt.(*structs.GotoStmt); ok {
+			if g.Label == "end" {
+				gotoFound = true
+				if g.Type != "GotoStmt" {
+					t.Fatalf("Expected type 'GotoStmt', got '%s'", g.Type)
+				}
+			}
+		}
+	}
+
+	if !gotoFound {
+		t.Fatal("Expected to find GotoStmt with label 'end'")
+	}
+}
+
+// TestParseLabel проверяет парсинг labeled statement
+func TestParseLabel(t *testing.T) {
+	sourceCode := []byte(`int main() {
+	int x = 0;
+	loop: x = x + 1;
+	return x;
+}`)
+
+	conv := NewCConverter()
+	tree, err := conv.Parse(sourceCode)
+	if err != nil {
+		t.Fatalf("Parse failed: %v", err)
+	}
+
+	ast, err := conv.ConvertToProgram(tree, sourceCode)
+	if err != nil {
+		t.Fatalf("ConvertToProgram failed: %v", err)
+	}
+
+	program := ast.(*structs.Program)
+	funcDecl := program.Declarations[0].(*structs.FunctionDecl)
+
+	// Ищем label statement
+	var labelFound bool
+	for _, stmt := range funcDecl.Body.Statements {
+		if l, ok := stmt.(*structs.LabelStmt); ok {
+			if l.Label == "loop" {
+				labelFound = true
+				if l.Type != "LabelStmt" {
+					t.Fatalf("Expected type 'LabelStmt', got '%s'", l.Type)
+				}
+				if l.Statement == nil {
+					t.Fatal("Expected statement after label, got nil")
+				}
+			}
+		}
+	}
+
+	if !labelFound {
+		t.Fatal("Expected to find LabelStmt with label 'loop'")
+	}
+}
+
+// TestParseDoWhile проверяет парсинг do while statement
+func TestParseDoWhile(t *testing.T) {
+	sourceCode := []byte(`int main() {
+	int i = 0;
+	do {
+		i = i + 1;
+	} while (i < 5);
+	return i;
+}`)
+
+	conv := NewCConverter()
+	tree, err := conv.Parse(sourceCode)
+	if err != nil {
+		t.Fatalf("Parse failed: %v", err)
+	}
+
+	ast, err := conv.ConvertToProgram(tree, sourceCode)
+	if err != nil {
+		t.Fatalf("ConvertToProgram failed: %v", err)
+	}
+
+	program := ast.(*structs.Program)
+	funcDecl := program.Declarations[0].(*structs.FunctionDecl)
+
+	// Проверяем, что найден do while statement
+	var doWhileFound bool
+	for _, stmt := range funcDecl.Body.Statements {
+		if dw, ok := stmt.(*structs.DoWhileStmt); ok {
+			doWhileFound = true
+			if dw.Type != "DoWhileStmt" {
+				t.Errorf("Expected type 'DoWhileStmt', got '%s'", dw.Type)
+			}
+			if dw.Body == nil {
+				t.Error("DoWhileStmt body is nil")
+			}
+			if dw.Condition == nil {
+				t.Error("DoWhileStmt condition is nil")
+			}
+			break
+		}
+	}
+
+	if !doWhileFound {
+		t.Fatal("DoWhileStmt not found in AST")
+	}
+}
+
+// TestParseDoWhileSimple проверяет простой do while с одним оператором
+func TestParseDoWhileSimple(t *testing.T) {
+	sourceCode := []byte(`int main() {
+	int x = 0;
+	do x = x + 1; while (x < 10);
+	return x;
+}`)
+
+	conv := NewCConverter()
+	tree, err := conv.Parse(sourceCode)
+	if err != nil {
+		t.Fatalf("Parse failed: %v", err)
+	}
+
+	ast, err := conv.ConvertToProgram(tree, sourceCode)
+	if err != nil {
+		t.Fatalf("ConvertToProgram failed: %v", err)
+	}
+
+	program := ast.(*structs.Program)
+	funcDecl := program.Declarations[0].(*structs.FunctionDecl)
+
+	// Проверяем, что найден do while statement
+	var doWhileFound bool
+	for _, stmt := range funcDecl.Body.Statements {
+		if dw, ok := stmt.(*structs.DoWhileStmt); ok {
+			doWhileFound = true
+			// Тело должно быть ExprStmt, содержащим AssignmentExpr
+			if _, ok := dw.Body.(*structs.ExprStmt); !ok {
+				t.Errorf("Expected ExprStmt in body, got %T", dw.Body)
+			}
+			break
+		}
+	}
+
+	if !doWhileFound {
+		t.Fatal("DoWhileStmt not found in AST")
+	}
+}
+
+// TestParseNestedDoWhile проверяет вложенный do while
+func TestParseNestedDoWhile(t *testing.T) {
+	sourceCode := []byte(`int main() {
+	int i = 0;
+	int j = 0;
+	do {
+		j = 0;
+		do {
+			j = j + 1;
+		} while (j < 3);
+		i = i + 1;
+	} while (i < 5);
+	return i;
+}`)
+
+	conv := NewCConverter()
+	tree, err := conv.Parse(sourceCode)
+	if err != nil {
+		t.Fatalf("Parse failed: %v", err)
+	}
+
+	ast, err := conv.ConvertToProgram(tree, sourceCode)
+	if err != nil {
+		t.Fatalf("ConvertToProgram failed: %v", err)
+	}
+
+	program := ast.(*structs.Program)
+	funcDecl := program.Declarations[0].(*structs.FunctionDecl)
+
+	// Проверяем наличие внешнего do while
+	var outerDoWhileFound bool
+	for _, stmt := range funcDecl.Body.Statements {
+		if dw, ok := stmt.(*structs.DoWhileStmt); ok {
+			outerDoWhileFound = true
+			// Тело должно содержать вложенный do while
+			if blockStmt, ok := dw.Body.(*structs.BlockStmt); ok {
+				var innerDoWhileFound bool
+				for _, innerStmt := range blockStmt.Statements {
+					if _, ok := innerStmt.(*structs.DoWhileStmt); ok {
+						innerDoWhileFound = true
+						break
+					}
+				}
+				if !innerDoWhileFound {
+					t.Error("Inner DoWhileStmt not found in outer DoWhileStmt body")
+				}
+			} else {
+				t.Errorf("Expected BlockStmt in body, got %T", dw.Body)
+			}
+			break
+		}
+	}
+
+	if !outerDoWhileFound {
+		t.Fatal("Outer DoWhileStmt not found in AST")
+	}
+}
+
+// TestIfWithGoto проверяет, что goto внутри if парсится правильно
+func TestIfWithGoto(t *testing.T) {
+	sourceCode := []byte(`int main() {
+	int a = 0;
+	if (a == 0) goto end;
+	a = 5;
+end:
+	return a;
+}`)
+
+	conv := NewCConverter()
+	tree, err := conv.Parse(sourceCode)
+	if err != nil {
+		t.Fatalf("Parse failed: %v", err)
+	}
+
+	ast, err := conv.ConvertToProgram(tree, sourceCode)
+	if err != nil {
+		t.Fatalf("ConvertToProgram failed: %v", err)
+	}
+
+	program := ast.(*structs.Program)
+	funcDecl := program.Declarations[0].(*structs.FunctionDecl)
+
+	// Ищем if statement
+	var ifFound bool
+	for _, stmt := range funcDecl.Body.Statements {
+		if ifStmt, ok := stmt.(*structs.IfStmt); ok {
+			ifFound = true
+			// Проверяем, что thenBlock содержит GotoStmt, а не null
+			if ifStmt.ThenBlock == nil {
+				t.Error("IfStmt.ThenBlock is nil, expected GotoStmt")
+			} else if gotoStmt, ok := ifStmt.ThenBlock.(*structs.GotoStmt); !ok {
+				t.Errorf("Expected GotoStmt in if, got %T", ifStmt.ThenBlock)
+			} else if gotoStmt.Label != "end" {
+				t.Errorf("Expected goto label 'end', got '%s'", gotoStmt.Label)
+			}
+			break
+		}
+	}
+
+	if !ifFound {
+		t.Fatal("IfStmt not found in AST")
+	}
+}
+
+// TestComplexControlFlow проверяет сложный контрольный поток с goto, label, do-while и if
+func TestComplexControlFlow(t *testing.T) {
+	sourceCode := []byte(`int main() {
+	int a = 0;
+	int b = 0;
+
+start:
+	do {
+		a += 1;
+		if (a == 3) goto end;
+		b += 2;
+	} while (a < 5);
+
+end:
+	b += 10;
+	return 0;
+}`)
+
+	conv := NewCConverter()
+	tree, err := conv.Parse(sourceCode)
+	if err != nil {
+		t.Fatalf("Parse failed: %v", err)
+	}
+
+	ast, err := conv.ConvertToProgram(tree, sourceCode)
+	if err != nil {
+		t.Fatalf("ConvertToProgram failed: %v", err)
+	}
+
+	program := ast.(*structs.Program)
+	funcDecl := program.Declarations[0].(*structs.FunctionDecl)
+
+	// Проверяем структуру: должны быть два LabelStmt (start и end)
+	var startLabelFound, endLabelFound, ifWithGotoFound bool
+	for _, stmt := range funcDecl.Body.Statements {
+		if labelStmt, ok := stmt.(*structs.LabelStmt); ok {
+			if labelStmt.Label == "start" {
+				startLabelFound = true
+				// Проверяем, что содержит do-while
+				if _, ok := labelStmt.Statement.(*structs.DoWhileStmt); !ok {
+					t.Errorf("Expected DoWhileStmt after 'start' label, got %T", labelStmt.Statement)
+				}
+			} else if labelStmt.Label == "end" {
+				endLabelFound = true
+			}
+		}
+	}
+
+	// Также проверяем наличие if с goto внутри do-while
+	for _, stmt := range funcDecl.Body.Statements {
+		if labelStmt, ok := stmt.(*structs.LabelStmt); ok && labelStmt.Label == "start" {
+			if doWhile, ok := labelStmt.Statement.(*structs.DoWhileStmt); ok {
+				if blockStmt, ok := doWhile.Body.(*structs.BlockStmt); ok {
+					for _, innerStmt := range blockStmt.Statements {
+						if ifStmt, ok := innerStmt.(*structs.IfStmt); ok {
+							if gotoStmt, ok := ifStmt.ThenBlock.(*structs.GotoStmt); ok && gotoStmt.Label == "end" {
+								ifWithGotoFound = true
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	if !startLabelFound {
+		t.Error("'start' label not found")
+	}
+	if !endLabelFound {
+		t.Error("'end' label not found")
+	}
+	if !ifWithGotoFound {
+		t.Error("if with goto to 'end' not found inside do-while")
+	}
 }
