@@ -4,8 +4,9 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
+	"os"
 
 	"github.com/Oleja123/code-vizualization/cst-to-ast-service/pkg/converter"
 	"github.com/Oleja123/code-vizualization/semantic-analyzer-service/internal/infrastructure/config"
@@ -28,11 +29,15 @@ var (
 	val      *validator.SemanticValidator
 	ocClient *onecompiler.Client
 	cfg      *config.Config
+	logger   *slog.Logger
 )
 
 func init() {
 	conv = converter.NewCConverter()
 	val = validator.New()
+	logger = slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+		Level: slog.LevelInfo,
+	}))
 }
 
 // handleValidate обрабатывает POST запрос с кодом на валидацию
@@ -175,7 +180,8 @@ func main() {
 			cfg.OneCompiler.APIKey,
 			cfg.OneCompiler.TimeoutSeconds,
 		)
-		log.Printf("OneCompiler client initialized (timeout: %ds)", cfg.OneCompiler.TimeoutSeconds)
+		logger.Info("OneCompiler client initialized",
+			slog.Int("timeout_seconds", cfg.OneCompiler.TimeoutSeconds))
 	}
 
 	// Регистрируем обработчики
@@ -184,9 +190,11 @@ func main() {
 	http.HandleFunc("/info", handleInfo)
 
 	address := fmt.Sprintf(":%d", cfg.Server.Port)
-	log.Printf("Starting Semantic Analyzer Server on %s", address)
+	logger.Info("Starting Semantic Analyzer Server",
+		slog.String("address", address))
 
 	if err := http.ListenAndServe(address, nil); err != nil {
-		log.Fatalf("Server error: %v", err)
+		logger.Error("Server error", slog.String("error", err.Error()))
+		os.Exit(1)
 	}
 }

@@ -6,11 +6,15 @@
 
 ### 1. CST-to-AST Service
 
-Сервис парсинга и конвертации C кода в Abstract Syntax Tree.
+Сервис парсинга и конвертации C кода в Abstract Syntax Tree с REST API.
+
+**Технологии:** Go, tree-sitter, HTTP REST API
 
 ### 2. Semantic Analyzer Service
 
-Сервис семантической валидации AST для проверки соответствия подмножеству C.
+HTTP-сервис семантической валидации C кода с опциональной проверкой компиляции.
+
+**Технологии:** Go, slog, OneCompiler API, YAML конфигурация
 
 ## CST-to-AST Service
 
@@ -218,67 +222,103 @@ _ = (*converter.Type)(nil)
 
 ## Semantic Analyzer Service
 
-Сервис семантической валидации AST, проверяющий соответствие кода определённому подмножеству C.
+HTTP-сервис семантической валидации C кода с проверкой типов, операторов и опциональной компиляцией через OneCompiler API.
 
 ### Возможности
 
-✅ **Валидация типов**:
-- Переменные и параметры: только `int`
-- Возвращаемые типы: `int`, `void`
-
+✅ **HTTP REST API**: Готовый к продакшену веб-сервис на порту 8080
+✅ **Валидация типов**: Переменные и параметры только `int`, возврат `int` или `void`
 ✅ **Проверка операторов**:
 - Присваивание: `=`, `+=`, `-=`, `/=`, `%=`
 - Унарные: `-`, `!`, `++`, `--` (префикс/постфикс)
 - Бинарные: `+`, `-`, `*`, `/`, `%`, `==`, `!=`, `<`, `<=`, `>`, `>=`, `&&`, `||`
-- Отклонение: битовые операторы `&`, `|`, `^`, `<<`, `>>`
+- Отклонение битовых операторов: `&`, `|`, `^`, `<<`, `>>`
 
-✅ **Детальные сообщения об ошибках**:
-- С указанием линии и колонки
-- Тип ошибки (ErrInvalidVariableType, ErrUnsupportedBinaryOp, и т.д.)
-- Контекст ошибки
-
-✅ **Полное покрытие тестами**:
-- 15+ unit-тестов
-- Интеграционные тесты с cst-to-ast-service
+✅ **Проверка компиляции**: Опциональная интеграция с OneCompiler API
+✅ **Детальные сообщения об ошибках**: С указанием линии, колонки и кода ошибки
+✅ **Структурированное логирование**: JSON-формат с помощью slog
+✅ **Гибкая конфигурация**: YAML + переменные окружения + флаги командной строки
 
 ### Структура проекта
 
 ```
 semantic-analyzer-service/
 ├── cmd/
-│   └── example/
-│       └── main.go              # CLI пример использования
+│   └── server/
+│       └── main.go              # HTTP сервер
 ├── internal/
-│   └── domain/
-│       ├── interfaces/
-│       │   └── validator.go     # Интерфейс валидатора
-│       └── structs/
-│           └── errors.go        # Структуры ошибок
+│   ├── domain/
+│   │   └── interfaces/
+│   │       └── validator.go     # Интерфейсы валидатора
+│   └── infrastructure/
+│       ├── config/
+│       │   └── config.go        # Управление конфигурацией
+│       └── onecompiler/
+│           └── client.go        # Клиент для OneCompiler API
 ├── pkg/
 │   └── validator/
 │       ├── validator.go         # Реализация валидатора
 │       ├── validator_test.go    # Unit тесты
-│       └── validator_integration_test.go  # Интеграционные тесты
+│       └── errors.go            # Типы ошибок
+├── config.yaml                  # Конфигурация по умолчанию
+├── HTTP_API.md                  # Документация HTTP API
 ├── go.mod
 └── README.md
 ```
 
 ### Быстрый старт
 
-**CLI использование:**
+**Запуск HTTP сервера:**
 
 ```bash
 cd semantic-analyzer-service
 
-# Валидация файла с красивым выводом
-go run ./cmd/example -file code.c -pretty
+# Запуск с конфигурацией по умолчанию
+go run ./cmd/server/main.go
 
-# Сохранение результата
-go run ./cmd/example -file code.c -out result.json
+# Сервер слушает на :8080
+# Проверить статус:
+curl http://localhost:8080/health
 
-# Запуск на примере
-go run ./cmd/example
+# Валидация кода:
+curl -X POST http://localhost:8080/validate \
+  -H "Content-Type: application/json" \
+  -d '{"code":"int main() { return 0; }"}'
 ```
+
+**Конфигурация (`config.yaml`):**
+
+```yaml
+server:
+  port: 8080
+
+onecompiler:
+  api_url: "https://api.onecompiler.com/api/v1"
+  api_key: ""  # или через ONECOMPILER_API_KEY
+  enabled: true
+  timeout_seconds: 10
+```
+
+**Запуск с кастомной конфигурацией:**
+
+```bash
+# С указанием файла конфигурации
+./semantic-analyzer-service -config config.yaml
+
+# С переопределением порта
+./semantic-analyzer-service -port 9000
+
+# С API ключом OneCompiler через переменную окружения
+ONECOMPILER_API_KEY="your-key" ./semantic-analyzer-service
+```
+
+**HTTP API:**
+
+- **POST /validate** — Валидирует C код и возвращает AST или ошибку
+- **GET /health** — Проверка статуса сервиса
+- **GET /info** — Информация об API и поддерживаемых конструкциях
+
+Полная документация API: [`HTTP_API.md`](semantic-analyzer-service/HTTP_API.md)
 
 **Как библиотека:**
 
@@ -307,17 +347,97 @@ cd semantic-analyzer-service
 go test ./pkg/validator -v
 ```
 
+**Примеры с curl:**
+
+```bash
+# Валидный код
+curl -X POST http://localhost:8080/validate \
+  -H "Content-Type: application/json" \
+  -d '{"code":"int add(int a, int b) { return a + b; }"}'
+
+# Ошибка типа
+curl -X POST http://localhost:8080/validate \
+  -H "Content-Type: application/json" \
+  -d '{"code":"float x = 3.14;"}'
+
+# Проверка здоровья
+curl http://localhost:8080/health
+
+# Информация о сервисе
+curl http://localhost:8080/info
+```
+
+### Возможности OneCompiler
+
+Когда `onecompiler.enabled: true`, сервис:
+
+1. Выполняет семантическую валидацию
+2. Если семантика корректна, отправляет код на OneCompiler API
+3. Возвращает ошибку компиляции, если компиляция не удалась
+
+Это позволяет обнаружить ошибки, не покрытые семантическим анализом.
+
+### Логирование
+
+Сервис использует структурированное логирование (slog) в формате JSON:
+
+```json
+{"time":"2026-02-13T12:00:00Z","level":"INFO","msg":"Starting Semantic Analyzer Server","address":":8080"}
+{"time":"2026-02-13T12:00:01Z","level":"INFO","msg":"OneCompiler client initialized","timeout_seconds":10}
+```
+
 ---
 
-## Интеграция обоих сервисов
+## Интеграция сервисов
 
 Полный процесс парсинга и валидации:
 
 ```
-C код → cst-to-ast-service (парсинг) → AST → semantic-analyzer-service (валидация) → результат
+C код → cst-to-ast-service (HTTP API) → AST → semantic-analyzer-service (HTTP API) → результат
 ```
 
-Читайте **[INTEGRATION.md](INTEGRATION.md)** для примеров и подробных инструкций.
+**Пример интеграции:**
+
+```bash
+# 1. Запустить оба сервиса
+cd cst-to-ast-service && go run cmd/server/main.go &
+cd semantic-analyzer-service && go run cmd/server/main.go &
+
+# 2. Парсинг кода
+curl -X POST http://localhost:8080/parse \
+  -H "Content-Type: application/json" \
+  -d '{"code":"int factorial(int n) { if (n <= 1) return 1; return n * factorial(n - 1); }"}' \
+  > ast.json
+
+# 3. Валидация кода
+curl -X POST http://localhost:8081/validate \
+  -H "Content-Type: application/json" \
+  -d '{"code":"int factorial(int n) { if (n <= 1) return 1; return n * factorial(n - 1); }"}'
+```
+
+**Библиотечная интеграция:**
+
+```go
+import (
+    "github.com/Oleja123/code-vizualization/cst-to-ast-service/pkg/converter"
+    "github.com/Oleja123/code-vizualization/semantic-analyzer-service/pkg/validator"
+)
+
+// Парсинг
+conv := converter.New()
+program, err := conv.ParseToAST(code)
+if err != nil {
+    log.Fatalf("Parse error: %v", err)
+}
+
+// Валидация
+val := validator.New()
+if err := val.ValidateProgram(program); err != nil {
+    log.Fatalf("Semantic error: %v", err)
+}
+
+// Успех - можно передавать в интерпретатор
+```
 
 ### Технологии
 
@@ -332,7 +452,3 @@ C код → cst-to-ast-service (парсинг) → AST → semantic-analyzer-s
 - [ ] Interpreter Service (отдельный сервис для выполнения AST)
 - [ ] Visualization Service (отрисовка состояния переменных, call stack)
 - [ ] Web UI (Vue.js фронтенд)
-
-## Лицензия
-
-MIT
