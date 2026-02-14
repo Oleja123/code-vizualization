@@ -1,0 +1,50 @@
+package events
+
+type Event interface{}
+
+type EnterScope struct{}
+
+type ExitScope struct{}
+
+type DeclareVar struct {
+	Name  string
+	Value *int
+}
+
+type DeclareArray struct {
+	Name  string
+	Value *[]int
+}
+
+type DeclareArray2D struct {
+	Name  string
+	Value *[][]int
+}
+
+type VarChanged struct {
+	Name  string
+	Value int
+}
+
+type ArrayElementChanged struct {
+	Name  string
+	Ind   int
+	Value int
+}
+
+type Array2DElementChanged struct {
+	Name  string
+	Ind1  int
+	Ind2  int
+	Value int
+}
+
+type FunctionCall struct {
+	Name string
+	//каждый parameter в ast будет порождать DeclareVar
+}
+
+type FunctionReturn struct {
+	Name        string
+	ReturnValue *int
+}
