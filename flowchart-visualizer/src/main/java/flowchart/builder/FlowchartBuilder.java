@@ -22,71 +22,14 @@ public class FlowchartBuilder {
     private FlowchartNode buildFunction(FunctionDecl func) {
         TerminalNode start = new TerminalNode(func.getName(), true);
         start.setAstLocation(toLocation(func.getLocation()));
-        
+
         FlowchartNode body = buildStatement(func.getBody());
-        
-        // Добавляем терминатор "конец" согласно ГОСТ 19.701-90
-        TerminalNode end = new TerminalNode("конец", false);
-        
+
         if (body != null) {
             start.addNext(body);
-            // Находим все выходные узлы и присоединяем к ним "конец"
-            connectToEnd(body, end, new HashSet<>());
-        } else {
-            start.addNext(end);
         }
-        
+
         return start;
-    }
-    
-    /**
-     * Рекурсивно находит все выходные узлы (листья графа) и присоединяет к ним конечный узел
-     */
-    private void connectToEnd(FlowchartNode node, FlowchartNode end, Set<FlowchartNode> visited) {
-        if (node == null || visited.contains(node)) return;
-        visited.add(node);
-        
-        // Если это LoopStartNode, присоединяем end к его exitNode
-        if (node instanceof LoopStartNode loopStart) {
-            if (loopStart.getExitNode() != null) {
-                connectToEnd(loopStart.getExitNode(), end, visited);
-            }
-            if (loopStart.getLoopBody() != null) {
-                connectToEnd(loopStart.getLoopBody(), end, visited);
-            }
-            return;
-        }
-        
-        // Для DecisionNode НЕ обходим ветки!
-        // Ветки рендерятся внутри renderDecision и там же происходит слияние
-        // Мы работаем только с next самого DecisionNode (это узлы ПОСЛЕ слияния)
-        if (node instanceof DecisionNode decision) {
-            List<FlowchartNode> next = node.getNext();
-            if (next.isEmpty()) {
-                // Если нет next - присоединяем "конец" к самому DecisionNode
-                node.addNext(end);
-                return;
-            }
-            
-            // Рекурсивно обрабатываем узлы ПОСЛЕ слияния
-            for (FlowchartNode n : next) {
-                connectToEnd(n, end, visited);
-            }
-            return;
-        }
-        
-        List<FlowchartNode> next = node.getNext();
-        
-        // Если это листовой узел (нет следующих) и это не терминатор
-        if (next.isEmpty() && !(node instanceof TerminalNode)) {
-            node.addNext(end);
-            return;
-        }
-        
-        // Рекурсивно обрабатываем все следующие узлы
-        for (FlowchartNode n : next) {
-            connectToEnd(n, end, visited);
-        }
     }
 
     private FlowchartNode buildStatement(Statement stmt) {
@@ -267,6 +210,16 @@ public class FlowchartBuilder {
     }
 
     private flowchart.model.Location toLocation(ASTLocation a) {
-        return new flowchart.model.Location(a.getLine(), a.getColumn(), a.getEndLine(), a.getEndColumn());
+        if (a == null) {
+            // возвращаем фиктивную локацию, чтобы не падало
+            return new flowchart.model.Location(0, 0, 0, 0);
+        }
+
+        return new flowchart.model.Location(
+                a.getLine(),
+                a.getColumn(),
+                a.getEndLine(),
+                a.getEndColumn()
+        );
     }
 }
