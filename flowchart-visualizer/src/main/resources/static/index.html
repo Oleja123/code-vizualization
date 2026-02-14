@@ -1,0 +1,716 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Визуализатор блок-схем по ГОСТ</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+        
+        .header p {
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+        
+        .content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            padding: 30px;
+        }
+        
+        .panel {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 20px;
+        }
+        
+        .panel h2 {
+            color: #333;
+            margin-bottom: 15px;
+            font-size: 1.5em;
+        }
+        
+        textarea {
+            width: 100%;
+            min-height: 400px;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            padding: 15px;
+            border: 2px solid #ddd;
+            border-radius: 6px;
+            resize: vertical;
+            background: white;
+        }
+        
+        textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        .button-group {
+            margin-top: 15px;
+            display: flex;
+            gap: 10px;
+        }
+        
+        button {
+            flex: 1;
+            padding: 12px 24px;
+            font-size: 16px;
+            font-weight: 600;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+        
+        .btn-secondary {
+            background: #6c757d;
+            color: white;
+        }
+        
+        .btn-secondary:hover {
+            background: #5a6268;
+        }
+        
+        #svgOutput {
+            width: 100%;
+            min-height: 400px;
+            border: 2px solid #ddd;
+            border-radius: 6px;
+            background: white;
+            overflow: auto;
+        }
+        
+        #svgOutput svg {
+            width: 100%;
+            height: auto;
+        }
+        
+        .status {
+            margin-top: 15px;
+            padding: 12px;
+            border-radius: 6px;
+            font-size: 14px;
+            display: none;
+        }
+        
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 20px;
+        }
+        
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        /* Стили для подсветки блоков (для будущей трассировки) */
+        .flowchart-node {
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .flowchart-node:hover {
+            filter: brightness(0.9);
+        }
+        
+        .flowchart-node.active {
+            fill: #ffeb3b !important;
+            stroke: #f57c00 !important;
+            stroke-width: 3 !important;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="header">
+        <h1>🔷 Визуализатор блок-схем</h1>
+        <p>Генерация блок-схем по ГОСТ 19.701-90 из AST</p>
+    </div>
+
+    <div class="content">
+        <!-- Панель ввода AST -->
+        <div class="panel">
+            <h2>📝 AST (JSON)</h2>
+            <textarea id="astInput" placeholder='Вставьте JSON AST от Go сервиса...
+Пример:
+{
+  "type": "Program",
+  "declarations": [...]
+}'></textarea>
+
+            <div class="button-group">
+                <button class="btn-primary" onclick="generateFlowchart()">
+                    🚀 Создать блок-схему
+                </button>
+            </div>
+
+            <div class="button-group">
+                <select id="exampleSelector" style="flex: 2; padding: 12px; border-radius: 6px; border: 2px solid #ddd; font-size: 14px;">
+                    <option value="">Выберите пример...</option>
+                    <option value="simple-if">Пример 1: Простое if/else</option>
+                    <option value="while-loop">Пример 2: Цикл while</option>
+                    <option value="for-loop">Пример 3: Цикл for</option>
+                    <option value="complex">Пример 4: Сложная программа</option>
+                </select>
+                <button class="btn-secondary" onclick="loadSelectedExample()" style="flex: 1;">
+                    📄 Загрузить
+                </button>
+            </div>
+
+            <div id="status" class="status"></div>
+        </div>
+
+        <!-- Панель вывода SVG -->
+        <div class="panel">
+            <h2>📊 Блок-схема</h2>
+            <div id="svgOutput">
+                <div style="display: flex; align-items: center; justify-content: center; height: 400px; color: #999;">
+                    Здесь появится блок-схема
+                </div>
+            </div>
+
+            <div class="button-group">
+                <button class="btn-secondary" onclick="downloadSVG()">
+                    💾 Скачать SVG
+                </button>
+            </div>
+
+            <div class="loading" id="loading">
+                <div class="spinner"></div>
+                <p>Генерация блок-схемы...</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    const API_URL = 'http://localhost:8081/api/flowchart';
+
+    // Пример AST для демонстрации
+    const EXAMPLE_SIMPLE_IF = {
+        "type": "Program",
+        "declarations": [
+            {
+                "type": "FunctionDecl",
+                "name": "main",
+                "returnType": {
+                    "baseType": "int",
+                    "pointerLevel": 0,
+                    "arraySizes": []
+                },
+                "parameters": [],
+                "body": {
+                    "type": "BlockStmt",
+                    "statements": [
+                        {
+                            "type": "VariableDecl",
+                            "varType": {
+                                "baseType": "int",
+                                "pointerLevel": 0,
+                                "arraySizes": []
+                            },
+                            "name": "x",
+                            "initExpr": {
+                                "type": "IntLiteral",
+                                "value": 10,
+                                "location": {"line": 2, "column": 13, "endLine": 2, "endColumn": 15}
+                            },
+                            "location": {"line": 2, "column": 5, "endLine": 2, "endColumn": 16}
+                        },
+                        {
+                            "type": "WhileStmt",
+                            "condition": {
+                                "type": "BinaryExpr",
+                                "op": ">",
+                                "left": {
+                                    "type": "VariableExpr",
+                                    "name": "x",
+                                    "location": {"line": 3, "column": 12, "endLine": 3, "endColumn": 13}
+                                },
+                                "right": {
+                                    "type": "IntLiteral",
+                                    "value": 0,
+                                    "location": {"line": 3, "column": 16, "endLine": 3, "endColumn": 17}
+                                },
+                                "location": {"line": 3, "column": 12, "endLine": 3, "endColumn": 17}
+                            },
+                            "body": {
+                                "type": "BlockStmt",
+                                "statements": [
+                                    {
+                                        "type": "ExprStmt",
+                                        "expression": {
+                                            "type": "AssignmentExpr",
+                                            "op": "=",
+                                            "left": {
+                                                "type": "VariableExpr",
+                                                "name": "x",
+                                                "location": {"line": 4, "column": 9, "endLine": 4, "endColumn": 10}
+                                            },
+                                            "right": {
+                                                "type": "BinaryExpr",
+                                                "op": "-",
+                                                "left": {
+                                                    "type": "VariableExpr",
+                                                    "name": "x",
+                                                    "location": {"line": 4, "column": 13, "endLine": 4, "endColumn": 14}
+                                                },
+                                                "right": {
+                                                    "type": "IntLiteral",
+                                                    "value": 1,
+                                                    "location": {"line": 4, "column": 17, "endLine": 4, "endColumn": 18}
+                                                },
+                                                "location": {"line": 4, "column": 13, "endLine": 4, "endColumn": 18}
+                                            },
+                                            "location": {"line": 4, "column": 9, "endLine": 4, "endColumn": 18}
+                                        },
+                                        "location": {"line": 4, "column": 9, "endLine": 4, "endColumn": 19}
+                                    }
+                                ],
+                                "location": {"line": 3, "column": 19, "endLine": 5, "endColumn": 6}
+                            },
+                            "location": {"line": 3, "column": 5, "endLine": 5, "endColumn": 6}
+                        },
+                        {
+                            "type": "ReturnStmt",
+                            "value": {
+                                "type": "IntLiteral",
+                                "value": 0,
+                                "location": {"line": 6, "column": 12, "endLine": 6, "endColumn": 13}
+                            },
+                            "location": {"line": 6, "column": 5, "endLine": 6, "endColumn": 14}
+                        }
+                    ],
+                    "location": {"line": 1, "column": 16, "endLine": 7, "endColumn": 2}
+                },
+                "location": {"line": 1, "column": 1, "endLine": 7, "endColumn": 2}
+            }
+        ],
+        "location": {"line": 1, "column": 1, "endLine": 7, "endColumn": 2}
+    };
+
+    const EXAMPLE_WHILE_LOOP = {
+        "type": "Program",
+        "declarations": [{
+            "type": "FunctionDecl",
+            "name": "main",
+            "returnType": {"baseType": "int", "pointerLevel": 0, "arraySizes": []},
+            "parameters": [],
+            "body": {
+                "type": "BlockStmt",
+                "statements": [
+                    {
+                        "type": "VariableDecl",
+                        "varType": {"baseType": "int", "pointerLevel": 0, "arraySizes": []},
+                        "name": "x",
+                        "initExpr": {"type": "IntLiteral", "value": 10, "location": {"line": 2, "column": 13, "endLine": 2, "endColumn": 15}},
+                        "location": {"line": 2, "column": 5, "endLine": 2, "endColumn": 16}
+                    },
+                    {
+                        "type": "WhileStmt",
+                        "condition": {
+                            "type": "BinaryExpr",
+                            "op": ">",
+                            "left": {"type": "VariableExpr", "name": "x", "location": {"line": 3, "column": 12, "endLine": 3, "endColumn": 13}},
+                            "right": {"type": "IntLiteral", "value": 0, "location": {"line": 3, "column": 16, "endLine": 3, "endColumn": 17}},
+                            "location": {"line": 3, "column": 12, "endLine": 3, "endColumn": 17}
+                        },
+                        "body": {
+                            "type": "BlockStmt",
+                            "statements": [{
+                                "type": "ExprStmt",
+                                "expression": {
+                                    "type": "AssignmentExpr",
+                                    "op": "=",
+                                    "left": {"type": "VariableExpr", "name": "x", "location": {"line": 4, "column": 9, "endLine": 4, "endColumn": 10}},
+                                    "right": {
+                                        "type": "BinaryExpr",
+                                        "op": "-",
+                                        "left": {"type": "VariableExpr", "name": "x", "location": {"line": 4, "column": 13, "endLine": 4, "endColumn": 14}},
+                                        "right": {"type": "IntLiteral", "value": 1, "location": {"line": 4, "column": 17, "endLine": 4, "endColumn": 18}},
+                                        "location": {"line": 4, "column": 13, "endLine": 4, "endColumn": 18}
+                                    },
+                                    "location": {"line": 4, "column": 9, "endLine": 4, "endColumn": 18}
+                                },
+                                "location": {"line": 4, "column": 9, "endLine": 4, "endColumn": 19}
+                            }],
+                            "location": {"line": 3, "column": 19, "endLine": 5, "endColumn": 6}
+                        },
+                        "location": {"line": 3, "column": 5, "endLine": 5, "endColumn": 6}
+                    },
+                    {
+                        "type": "ReturnStmt",
+                        "value": {"type": "IntLiteral", "value": 0, "location": {"line": 6, "column": 12, "endLine": 6, "endColumn": 13}},
+                        "location": {"line": 6, "column": 5, "endLine": 6, "endColumn": 14}
+                    }
+                ],
+                "location": {"line": 1, "column": 16, "endLine": 7, "endColumn": 2}
+            },
+            "location": {"line": 1, "column": 1, "endLine": 7, "endColumn": 2}
+        }],
+        "location": {"line": 1, "column": 1, "endLine": 7, "endColumn": 2}
+    };
+
+    const EXAMPLE_FOR_LOOP = {
+        "type": "Program",
+        "declarations": [{
+            "type": "FunctionDecl",
+            "name": "main",
+            "returnType": {"baseType": "int", "pointerLevel": 0, "arraySizes": []},
+            "parameters": [],
+            "body": {
+                "type": "BlockStmt",
+                "statements": [
+                    {
+                        "type": "VariableDecl",
+                        "varType": {"baseType": "int", "pointerLevel": 0, "arraySizes": []},
+                        "name": "sum",
+                        "initExpr": {"type": "IntLiteral", "value": 0, "location": {"line": 2, "column": 15, "endLine": 2, "endColumn": 16}},
+                        "location": {"line": 2, "column": 5, "endLine": 2, "endColumn": 17}
+                    },
+                    {
+                        "type": "ForStmt",
+                        "init": {
+                            "type": "VariableDecl",
+                            "varType": {"baseType": "int", "pointerLevel": 0, "arraySizes": []},
+                            "name": "i",
+                            "initExpr": {"type": "IntLiteral", "value": 0, "location": {"line": 3, "column": 18, "endLine": 3, "endColumn": 19}},
+                            "location": {"line": 3, "column": 10, "endLine": 3, "endColumn": 19}
+                        },
+                        "condition": {
+                            "type": "BinaryExpr",
+                            "op": "<",
+                            "left": {"type": "VariableExpr", "name": "i", "location": {"line": 3, "column": 21, "endLine": 3, "endColumn": 22}},
+                            "right": {"type": "IntLiteral", "value": 5, "location": {"line": 3, "column": 25, "endLine": 3, "endColumn": 26}},
+                            "location": {"line": 3, "column": 21, "endLine": 3, "endColumn": 26}
+                        },
+                        "post": {
+                            "type": "ExprStmt",
+                            "expression": {
+                                "type": "UnaryExpr",
+                                "op": "++",
+                                "operand": {"type": "VariableExpr", "name": "i", "location": {"line": 3, "column": 28, "endLine": 3, "endColumn": 29}},
+                                "location": {"line": 3, "column": 28, "endLine": 3, "endColumn": 31}
+                            },
+                            "location": {"line": 3, "column": 28, "endLine": 3, "endColumn": 31}
+                        },
+                        "body": {
+                            "type": "BlockStmt",
+                            "statements": [{
+                                "type": "ExprStmt",
+                                "expression": {
+                                    "type": "AssignmentExpr",
+                                    "op": "+=",
+                                    "left": {"type": "VariableExpr", "name": "sum", "location": {"line": 4, "column": 9, "endLine": 4, "endColumn": 12}},
+                                    "right": {"type": "VariableExpr", "name": "i", "location": {"line": 4, "column": 16, "endLine": 4, "endColumn": 17}},
+                                    "location": {"line": 4, "column": 9, "endLine": 4, "endColumn": 17}
+                                },
+                                "location": {"line": 4, "column": 9, "endLine": 4, "endColumn": 18}
+                            }],
+                            "location": {"line": 3, "column": 33, "endLine": 5, "endColumn": 6}
+                        },
+                        "location": {"line": 3, "column": 5, "endLine": 5, "endColumn": 6}
+                    },
+                    {
+                        "type": "ReturnStmt",
+                        "value": {"type": "VariableExpr", "name": "sum", "location": {"line": 6, "column": 12, "endLine": 6, "endColumn": 15}},
+                        "location": {"line": 6, "column": 5, "endLine": 6, "endColumn": 16}
+                    }
+                ],
+                "location": {"line": 1, "column": 16, "endLine": 7, "endColumn": 2}
+            },
+            "location": {"line": 1, "column": 1, "endLine": 7, "endColumn": 2}
+        }],
+        "location": {"line": 1, "column": 1, "endLine": 7, "endColumn": 2}
+    };
+
+    const EXAMPLE_COMPLEX = {
+        "type": "Program",
+        "declarations": [{
+            "type": "FunctionDecl",
+            "name": "main",
+            "returnType": {"baseType": "int", "pointerLevel": 0, "arraySizes": []},
+            "parameters": [],
+            "body": {
+                "type": "BlockStmt",
+                "statements": [
+                    {
+                        "type": "VariableDecl",
+                        "varType": {"baseType": "int", "pointerLevel": 0, "arraySizes": []},
+                        "name": "n",
+                        "initExpr": {"type": "IntLiteral", "value": 15, "location": {"line": 2, "column": 13, "endLine": 2, "endColumn": 15}},
+                        "location": {"line": 2, "column": 5, "endLine": 2, "endColumn": 16}
+                    },
+                    {
+                        "type": "IfStmt",
+                        "condition": {
+                            "type": "BinaryExpr",
+                            "op": "%",
+                            "left": {"type": "VariableExpr", "name": "n", "location": {"line": 3, "column": 9, "endLine": 3, "endColumn": 10}},
+                            "right": {"type": "IntLiteral", "value": 2, "location": {"line": 3, "column": 13, "endLine": 3, "endColumn": 14}},
+                            "location": {"line": 3, "column": 9, "endLine": 3, "endColumn": 14}
+                        },
+                        "thenBlock": {
+                            "type": "ReturnStmt",
+                            "value": {"type": "IntLiteral", "value": 1, "location": {"line": 3, "column": 24, "endLine": 3, "endColumn": 25}},
+                            "location": {"line": 3, "column": 17, "endLine": 3, "endColumn": 26}
+                        },
+                        "elseIfList": [
+                            {
+                                "condition": {
+                                    "type": "BinaryExpr",
+                                    "op": "%",
+                                    "left": {"type": "VariableExpr", "name": "n", "location": {"line": 3, "column": 41, "endLine": 3, "endColumn": 42}},
+                                    "right": {"type": "IntLiteral", "value": 3, "location": {"line": 3, "column": 45, "endLine": 3, "endColumn": 46}},
+                                    "location": {"line": 3, "column": 41, "endLine": 3, "endColumn": 46}
+                                },
+                                "block": {
+                                    "type": "ReturnStmt",
+                                    "value": {"type": "IntLiteral", "value": 2, "location": {"line": 3, "column": 56, "endLine": 3, "endColumn": 57}},
+                                    "location": {"line": 3, "column": 49, "endLine": 3, "endColumn": 58}
+                                },
+                                "location": {"line": 3, "column": 32, "endLine": 3, "endColumn": 58}
+                            }
+                        ],
+                        "elseBlock": {
+                            "type": "ReturnStmt",
+                            "value": {"type": "IntLiteral", "value": 0, "location": {"line": 3, "column": 72, "endLine": 3, "endColumn": 73}},
+                            "location": {"line": 3, "column": 65, "endLine": 3, "endColumn": 74}
+                        },
+                        "location": {"line": 3, "column": 5, "endLine": 3, "endColumn": 74}
+                    }
+                ],
+                "location": {"line": 1, "column": 16, "endLine": 4, "endColumn": 2}
+            },
+            "location": {"line": 1, "column": 1, "endLine": 4, "endColumn": 2}
+        }],
+        "location": {"line": 1, "column": 1, "endLine": 4, "endColumn": 2}
+    };
+
+    // Загрузить выбранный пример
+    function loadSelectedExample() {
+        const selector = document.getElementById('exampleSelector');
+        const selected = selector.value;
+
+        let example = null;
+        switch(selected) {
+            case 'simple-if':
+                example = EXAMPLE_SIMPLE_IF;
+                break;
+            case 'while-loop':
+                example = EXAMPLE_WHILE_LOOP;
+                break;
+            case 'for-loop':
+                example = EXAMPLE_FOR_LOOP;
+                break;
+            case 'complex':
+                example = EXAMPLE_COMPLEX;
+                break;
+            default:
+                showStatus('Выберите пример из списка', 'error');
+                return;
+        }
+
+        if (example) {
+            document.getElementById('astInput').value = JSON.stringify(example, null, 2);
+            showStatus('✓ Пример загружен!', 'success');
+        }
+    }
+
+    // Старая функция для обратной совместимости
+    function loadExample() {
+        document.getElementById('exampleSelector').value = 'while-loop';
+        loadSelectedExample();
+    }
+
+    // Генерация блок-схемы
+    async function generateFlowchart() {
+        const astInput = document.getElementById('astInput').value.trim();
+
+        if (!astInput) {
+            showStatus('Пожалуйста, введите JSON AST', 'error');
+            return;
+        }
+
+        // Парсим JSON
+        let ast;
+        try {
+            ast = JSON.parse(astInput);
+        } catch (e) {
+            showStatus('Ошибка парсинга JSON: ' + e.message, 'error');
+            return;
+        }
+
+        // Показываем загрузку
+        document.getElementById('loading').style.display = 'block';
+        document.getElementById('svgOutput').innerHTML = '';
+        hideStatus();
+
+        try {
+            // Отправляем запрос к API
+            const response = await fetch(`${API_URL}/generate`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ ast: ast })
+            });
+
+            const data = await response.json();
+
+            if (data.metadata && data.metadata.success) {
+                // Отображаем SVG
+                document.getElementById('svgOutput').innerHTML = data.svg;
+                showStatus('✓ Блок-схема успешно создана!', 'success');
+
+                // Добавляем интерактивность (для будущей трассировки)
+                addInteractivity();
+            } else {
+                showStatus('Ошибка: ' + (data.metadata.error || 'Неизвестная ошибка'), 'error');
+            }
+        } catch (e) {
+            showStatus('Ошибка связи с сервером: ' + e.message +
+                '\n\nПроверьте:\n1. Сервер запущен (mvn spring-boot:run)\n2. Доступен http://localhost:8081', 'error');
+            console.error('Детали ошибки:', e);
+        } finally {
+            document.getElementById('loading').style.display = 'none';
+        }
+    }
+
+    // Добавить интерактивность к SVG блокам
+    function addInteractivity() {
+        const svg = document.querySelector('#svgOutput svg');
+        if (!svg) return;
+
+        // Находим все группы (блоки)
+        const groups = svg.querySelectorAll('g[id]');
+        groups.forEach(group => {
+            group.classList.add('flowchart-node');
+
+            // При клике - подсветка (демонстрация будущей трассировки)
+            group.addEventListener('click', function() {
+                // Убираем подсветку со всех
+                groups.forEach(g => g.classList.remove('active'));
+                // Подсвечиваем текущий
+                this.classList.add('active');
+
+                console.log('Clicked node:', this.id);
+            });
+        });
+    }
+
+    // Скачать SVG
+    function downloadSVG() {
+        const svgElement = document.querySelector('#svgOutput svg');
+        if (!svgElement) {
+            showStatus('Сначала создайте блок-схему', 'error');
+            return;
+        }
+
+        const svgData = new XMLSerializer().serializeToString(svgElement);
+        const blob = new Blob([svgData], { type: 'image/svg+xml' });
+        const url = URL.createObjectURL(blob);
+
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'flowchart.svg';
+        a.click();
+
+        URL.revokeObjectURL(url);
+        showStatus('✓ SVG скачан!', 'success');
+    }
+
+    // Показать статус
+    function showStatus(message, type) {
+        const status = document.getElementById('status');
+        status.textContent = message;
+        status.className = 'status ' + type;
+        status.style.display = 'block';
+    }
+
+    // Скрыть статус
+    function hideStatus() {
+        document.getElementById('status').style.display = 'none';
+    }
+
+    // Проверка подключения к API при загрузке
+    window.addEventListener('load', async () => {
+        try {
+            const response = await fetch(`${API_URL}/health`);
+            const data = await response.json();
+            console.log('API Health:', data);
+        } catch (e) {
+            console.warn('API not available:', e);
+        }
+    });
+</script>
+</body>
+</html>
