@@ -1,6 +1,6 @@
 module github.com/Oleja123/code-vizualization/semantic-analyzer-service
 
-go 1.25.6
+go 1.23.0
 
 require (
 	github.com/Oleja123/code-vizualization/cst-to-ast-service v0.0.0
