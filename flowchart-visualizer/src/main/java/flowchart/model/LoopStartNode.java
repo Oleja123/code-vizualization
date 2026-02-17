@@ -2,8 +2,7 @@ package flowchart.model;
 
 /**
  * Начало цикла (for/while)
- * ГОСТ 19.701-90: Граница цикла - трапеция с условием внутри
- * Обе части (начало и конец) имеют одинаковый идентификатор
+ * ГОСТ: шестиугольник
  */
 public class LoopStartNode extends FlowchartNode {
     private FlowchartNode loopBody;

@@ -135,21 +135,33 @@ public class FlowchartController {
                         .body(createErrorResponse("Missing 'code' field in request"));
             }
 
+            // Убираем директивы препроцессора (#include, #define, #pragma и т.д.)
+            // Go сервис их не поддерживает
+            code = code.lines()
+                    .filter(line -> !line.trim().startsWith("#"))
+                    .collect(java.util.stream.Collectors.joining("\n"));
+
+            System.out.println("[FlowchartController] Received code (" + code.length() + " chars)");
+
             // 1. Парсим код через semantic-analyzer API
             Program program;
             try {
                 program = astClient.parse(code);
+                System.out.println("[FlowchartController] AST parsed successfully");
             } catch (ParseException e) {
+                System.err.println("[FlowchartController] Parse error: " + e.getMessage());
                 return ResponseEntity.badRequest()
-                        .body(createErrorResponse("Parse error: " + e.getMessage()));
+                        .body(createErrorResponse(e.getMessage()));
             }
 
             // 2. Конвертируем Program в JSON
             com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
             String astJson = mapper.writeValueAsString(program);
+            System.out.println("[FlowchartController] AST JSON length: " + astJson.length());
 
             // 3. Генерируем SVG
             String svg = generator.generateSVG(astJson);
+            System.out.println("[FlowchartController] SVG generated, length: " + svg.length());
 
             // 4. Формируем ответ
             Map<String, Object> response = new HashMap<>();
@@ -164,8 +176,10 @@ public class FlowchartController {
             return ResponseEntity.ok(response);
 
         } catch (Exception e) {
+            System.err.println("[FlowchartController] Unexpected error: " + e.getClass().getName() + ": " + e.getMessage());
+            e.printStackTrace();
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(createErrorResponse("Error generating flowchart from code: " + e.getMessage()));
+                    .body(createErrorResponse(e.getMessage()));
         }
     }
 

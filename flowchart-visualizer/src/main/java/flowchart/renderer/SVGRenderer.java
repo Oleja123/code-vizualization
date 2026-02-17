@@ -42,12 +42,7 @@ public class SVGRenderer {
 
         renderNode(start, 700, 100);
 
-        // Блок "конец"
-        double endY = maxY + VERTICAL_SPACING;
-        double centerX = 700;
-        line(centerX, maxY, centerX, endY - 5);
-        arrow(centerX, endY - 5, centerX, endY);
-        renderTerminalEnd(centerX, endY);
+
 
         svg.append("</svg>");
         return svg.toString();

@@ -1,5 +1,7 @@
 package flowchart.model;
 
+import lombok.Setter;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -18,6 +20,11 @@ public abstract class FlowchartNode {
     protected double x;
     protected double y;
     protected double width;
+
+    public void setHeight(double height) {
+        this.height = height;
+    }
+
     protected double height;
     
     public enum NodeType {

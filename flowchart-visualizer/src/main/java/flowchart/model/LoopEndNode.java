@@ -2,7 +2,7 @@ package flowchart.model;
 
 /**
  * Конец цикла - возврат к началу
- * ГОСТ 19.701-90: Граница цикла - трапеция (такая же как начало)
+ * ГОСТ: шестиугольник
  */
 public class LoopEndNode extends FlowchartNode {
     private FlowchartNode loopStart;

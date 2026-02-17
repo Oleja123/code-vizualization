@@ -5,7 +5,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 
 /**
  * Главный класс Spring Boot приложения
- * Запускает REST API сервер на порту 8081
+ * Запускает REST API сервер на порту 8080
  */
 @SpringBootApplication
 public class FlowchartVisualizerApplication {
