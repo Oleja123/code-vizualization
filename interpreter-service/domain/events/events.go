@@ -13,12 +13,15 @@ type DeclareVar struct {
 
 type DeclareArray struct {
 	Name  string
-	Value *[]int
+	Value []int
+	Size  int
 }
 
 type DeclareArray2D struct {
 	Name  string
-	Value *[][]int
+	Value [][]int
+	Size1 int
+	Size2 int
 }
 
 type VarChanged struct {
@@ -41,10 +44,14 @@ type Array2DElementChanged struct {
 
 type FunctionCall struct {
 	Name string
-	//каждый parameter в ast будет порождать DeclareVar
+	// каждый parameter в ast будет порождать DeclareVar
 }
 
 type FunctionReturn struct {
 	Name        string
-	ReturnValue *int
+	ReturnValue *int // nil если void функция
+}
+
+type LineChanged struct {
+	Line int
 }

@@ -888,7 +888,7 @@ func TestStackFrameExitScopeGlobal(t *testing.T) {
 	err := stackFrame.ExitScope()
 
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "undefined behavior")
+	assert.Contains(t, err.Error(), "unexpected internal error")
 	assert.Len(t, stackFrame.Scopes, 1)
 }
 
@@ -933,7 +933,7 @@ func TestStackFrameGetReturnValueNotSet(t *testing.T) {
 	_, err := stackFrame.GetReturnValue()
 
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "undefined behavior")
+	assert.Contains(t, err.Error(), "unexpected internal error")
 }
 
 func TestStackFrameSetReturnValueMultipleTimes(t *testing.T) {
@@ -1141,7 +1141,7 @@ func TestCallStackPopMainFrame(t *testing.T) {
 	err := callStack.PopFrame()
 
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "undefined behavior")
+	assert.Contains(t, err.Error(), "unexpected internal error")
 	assert.Equal(t, 1, callStack.FramesCount())
 }
 

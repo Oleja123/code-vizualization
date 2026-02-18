@@ -23,7 +23,7 @@ func (sf *StackFrame) EnterScope() {
 
 func (sf *StackFrame) ExitScope() error {
 	if len(sf.Scopes) == 1 {
-		return runtimeerrors.NewErrUndefinedBehavior("exit global scope in stack frame")
+		return runtimeerrors.NewErrUnexpectedInternalError("exit global scope in stack frame")
 	}
 	sf.Scopes = sf.Scopes[:len(sf.Scopes)-1]
 	return nil
@@ -49,7 +49,7 @@ func (sf *StackFrame) SetReturnValue(val int) {
 
 func (sf *StackFrame) GetReturnValue() (*int, error) {
 	if sf.ReturnValue == nil {
-		return nil, runtimeerrors.NewErrUndefinedBehavior("return value not set")
+		return nil, runtimeerrors.NewErrUnexpectedInternalError("return value not set")
 	}
 	return sf.ReturnValue, nil
 }

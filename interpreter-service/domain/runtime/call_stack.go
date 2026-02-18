@@ -21,7 +21,7 @@ func (cs *CallStack) PushFrame(frame *StackFrame) {
 
 func (cs *CallStack) PopFrame() error {
 	if len(cs.Frames) <= 1 {
-		return runtimeerrors.NewErrUndefinedBehavior("cannot pop main frame from call stack")
+		return runtimeerrors.NewErrUnexpectedInternalError("cannot pop main frame from call stack")
 	}
 	cs.Frames = cs.Frames[:len(cs.Frames)-1]
 	return nil
