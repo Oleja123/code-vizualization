@@ -21,15 +21,35 @@ func (cs *CallStack) PushFrame(frame *StackFrame) {
 
 func (cs *CallStack) PopFrame() error {
 	if len(cs.Frames) <= 1 {
-		return runtimeerrors.NewUnexpectedInternalErr("cannot pop main frame from call stack")
+		return runtimeerrors.NewErrUndefinedBehavior("cannot pop main frame from call stack")
 	}
 	cs.Frames = cs.Frames[:len(cs.Frames)-1]
 	return nil
 }
 
-func (cs *CallStack) CurrentFrame() *StackFrame {
+func (cs *CallStack) GetCurrentFrame() *StackFrame {
 	if len(cs.Frames) > 0 {
 		return cs.Frames[len(cs.Frames)-1]
 	}
 	return nil
+}
+
+func (cs *CallStack) FramesCount() int {
+	return len(cs.Frames)
+}
+
+func (cs *CallStack) DeclareInCurrentFrame(decl Declared) {
+	cs.GetCurrentFrame().Declare(decl)
+}
+
+func (cs *CallStack) GetVariableInCurrentFrame(name string) (*Variable, bool) {
+	return cs.GetCurrentFrame().GetVariable(name)
+}
+
+func (cs *CallStack) GetArrayInCurrentFrame(name string) (*Array, bool) {
+	return cs.GetCurrentFrame().GetArray(name)
+}
+
+func (cs *CallStack) GetArray2DInCurrentFrame(name string) (*Array2D, bool) {
+	return cs.GetCurrentFrame().GetArray2D(name)
 }

@@ -1,24 +1,37 @@
 package runtime
 
+import (
+	runtimeerrors "github.com/Oleja123/code-vizualization/interpreter-service/domain/runtime/errors"
+)
+
 type ArrayElement struct {
 	Value       *int
 	StepChanged int //для подстветки на фронте
 }
 
-func NewArrayElement(value *int, step int, isGlobal bool) ArrayElement {
+func NewArrayElement(value *int, step int, isGlobal bool) *ArrayElement {
+	var v *int
 	if value != nil {
-		return ArrayElement{Value: value, StepChanged: step}
-	} else {
-		if isGlobal {
-			val := 0
-			return ArrayElement{Value: &val, StepChanged: step}
-		} else {
-			return ArrayElement{StepChanged: step}
-		}
+		v = value
+	} else if isGlobal {
+		val := 0
+		v = &val
 	}
+	return &ArrayElement{Value: v, StepChanged: step}
 }
 
 func (ae *ArrayElement) ChangeValue(value int, step int) {
-	ae.Value = &value
+	if ae.Value == nil {
+		ae.Value = new(int)
+	}
+	*ae.Value = value
 	ae.StepChanged = step
+}
+
+func (ae *ArrayElement) GetValue() (int, error) {
+	if ae.Value == nil {
+		return 0, runtimeerrors.NewErrUndefinedBehavior("getting an uninitialized array element")
+	} else {
+		return *ae.Value, nil
+	}
 }
