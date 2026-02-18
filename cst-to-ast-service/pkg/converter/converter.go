@@ -14,6 +14,11 @@ import (
 
 // Переэкспорт для публичного API
 type (
+	//interfaces
+	Node = interfaces.Node
+	Stmt = interfaces.Stmt
+	Expr = interfaces.Expr
+
 	// structs переэкспортируются через пакет
 	Program      = structs.Program
 	VariableDecl = structs.VariableDecl
