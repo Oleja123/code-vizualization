@@ -298,7 +298,7 @@ func (i *Interpreter) executeAssignmentExpr(expr *converter.AssignmentExpr) (int
 	return nil, nil
 }
 
-func (i *Interpreter) executeArrayInitExpr(expr *converter.ArrayInitExpr) ([]interface{}, error) {
+func (i *Interpreter) executeArrayInitExpr(expr *converter.ArrayInitExpr) (interface{}, error) {
 	interfaceSlice := make([]interface{}, len(expr.Elements))
 	for ind, element := range expr.Elements {
 		val, err := i.executeExpression(element)
@@ -312,14 +312,18 @@ func (i *Interpreter) executeArrayInitExpr(expr *converter.ArrayInitExpr) ([]int
 	case int:
 		arrayElementSlice := make([]runtime.ArrayElement, len(expr.Elements))
 		for ind, element := range interfaceSlice {
-			val, _ := element.(*int)
-			arrayElementSlice[ind] = *runtime.NewArrayElement(val, 0, false)
+			val, ok := element.(int)
+			if !ok {
+				valPtr, ok := element.(*int)
+				if !ok {
+					return nil, runtimeerrors.NewErrUnexpectedInternalError("array element is not int")
+				}
+				arrayElementSlice[ind] = *runtime.NewArrayElement(valPtr, 0, false)
+			} else {
+				arrayElementSlice[ind] = *runtime.NewArrayElement(&val, 0, false)
+			}
 		}
-		out := make([]interface{}, len(arrayElementSlice))
-		for i, v := range arrayElementSlice {
-			out[i] = v
-		}
-		return out, nil
+		return arrayElementSlice, nil
 	default:
 		return nil, runtimeerrors.NewErrUnexpectedInternalError("unexpected array element type")
 	}
@@ -400,30 +404,18 @@ func (i *Interpreter) executeUnaryExpr(expr *converter.UnaryExpr) (int, error) {
 }
 
 func (i *Interpreter) executeCallExpr(expr *converter.CallExpr) (interface{}, error) {
-	defer i.CallStack.PopFrame()
-	i.CallStack.PushFrame(runtime.NewStackFrame(expr.FunctionName, i.GlobalScope))
-	i.CallStack.GetCurrentFrame().EnterScope()
-
 	declNode, ok := i.Functions[expr.FunctionName]
 
 	if !ok {
 		return nil, runtimeerrors.NewErrUnexpectedInternalError(fmt.Sprintf("unknown function named: %s", expr.FunctionName))
 	}
 
-	parameters := make([]*runtime.Variable, len(declNode.Parameters))
-
 	if len(expr.Arguments) != len(declNode.Parameters) {
 		return nil, runtimeerrors.NewErrUnexpectedInternalError(fmt.Sprintf("function %s expects %d arguments, got %d", expr.FunctionName, len(declNode.Parameters), len(expr.Arguments)))
 	}
 
-	for ind, val := range declNode.Parameters {
-		variable := runtime.NewVariable(val.Name, nil, 0, false)
-		parameters[ind] = variable
-
-		frame := i.CallStack.GetCurrentFrame()
-		frame.GetCurrentScope().Declare(variable)
-	}
-
+	// Evaluate arguments in the CALLER's context BEFORE pushing new frame
+	argumentValues := make([]int, len(expr.Arguments))
 	for ind, val := range expr.Arguments {
 		val, err := i.executeExpression(val)
 		if err != nil {
@@ -431,12 +423,28 @@ func (i *Interpreter) executeCallExpr(expr *converter.CallExpr) (interface{}, er
 		}
 
 		value, ok := val.(int)
-
 		if !ok {
 			return nil, runtimeerrors.NewErrUnexpectedInternalError("function argument is not an integer")
 		}
+		argumentValues[ind] = value
+	}
 
-		parameters[ind].ChangeValue(value, 0)
+	// NOW push the new frame and initialize parameters with evaluated values
+	defer i.CallStack.PopFrame()
+	i.CallStack.PushFrame(runtime.NewStackFrame(expr.FunctionName, i.GlobalScope))
+	i.CallStack.GetCurrentFrame().EnterScope()
+
+	parameters := make([]*runtime.Variable, len(declNode.Parameters))
+
+	for ind, val := range declNode.Parameters {
+		variable := runtime.NewVariable(val.Name, nil, 0, false)
+		parameters[ind] = variable
+
+		frame := i.CallStack.GetCurrentFrame()
+		frame.GetCurrentScope().Declare(variable)
+
+		// Initialize with the pre-evaluated argument value
+		parameters[ind].ChangeValue(argumentValues[ind], 0)
 	}
 
 	res, err := i.executeStatement(declNode.Body)

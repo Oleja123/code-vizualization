@@ -85,7 +85,7 @@ func (i *Interpreter) executeArrayDecl(v VariableDecl) (ExecResult, error) {
 		}
 		v, ok := val.([]runtime.ArrayElement)
 		if !ok {
-			return ExecResult{}, runtimeerrors.NewErrUnexpectedInternalError("types mismatch")
+			return ExecResult{}, runtimeerrors.NewErrUnexpectedInternalError(fmt.Sprintf("types mismatch: expected []ArrayElement, got %T", val))
 		}
 		value = v
 	}
