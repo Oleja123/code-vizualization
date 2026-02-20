@@ -11,10 +11,8 @@ import (
 func main() {
 	sourceCode := `
 int main() {
-    int a = 1;
-	int b = 3;
-
-    return a + b;
+	int i = -1;
+	return i;
 }
 `
 

@@ -842,7 +842,7 @@ func TestNewCallStack(t *testing.T) {
 
 	assert.NotNil(t, callStack)
 	assert.Len(t, callStack.Frames, 1)
-	assert.Equal(t, "main", callStack.Frames[0].FuncName)
+	assert.Equal(t, "global", callStack.Frames[0].FuncName)
 }
 
 func TestCallStackGetCurrentFrame(t *testing.T) {
@@ -852,7 +852,7 @@ func TestCallStackGetCurrentFrame(t *testing.T) {
 	frame := callStack.GetCurrentFrame()
 
 	assert.NotNil(t, frame)
-	assert.Equal(t, "main", frame.FuncName)
+	assert.Equal(t, "global", frame.FuncName)
 }
 
 func TestCallStackFramesCount(t *testing.T) {
@@ -900,7 +900,7 @@ func TestCallStackPopFrame(t *testing.T) {
 
 	assert.NoError(t, err)
 	assert.Equal(t, 1, callStack.FramesCount())
-	assert.Equal(t, "main", callStack.GetCurrentFrame().FuncName)
+	assert.Equal(t, "global", callStack.GetCurrentFrame().FuncName)
 }
 
 func TestCallStackPopMultipleFrames(t *testing.T) {
@@ -919,7 +919,7 @@ func TestCallStackPopMultipleFrames(t *testing.T) {
 
 	callStack.PopFrame()
 	assert.Equal(t, 1, callStack.FramesCount())
-	assert.Equal(t, "main", callStack.GetCurrentFrame().FuncName)
+	assert.Equal(t, "global", callStack.GetCurrentFrame().FuncName)
 }
 
 func TestCallStackPopMainFrame(t *testing.T) {

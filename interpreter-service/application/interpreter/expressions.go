@@ -53,7 +53,13 @@ func (i *Interpreter) executeExpression(expr converter.Expr) (interface{}, error
 }
 
 func (i *Interpreter) executeArrayAccessExpr(a *ArrayAccessExpr) (interface{}, error) {
-	array, err := i.executeExpression(a.Array)
+	arrayLvalue, err := i.convertToLvalue(a.Array)
+	if err != nil {
+		return nil, err
+	}
+
+	array, err := i.executeExpression(arrayLvalue)
+
 	if err != nil {
 		return nil, err
 	}
@@ -236,13 +242,7 @@ func (i *Interpreter) executeAssignmentExpr(expr *converter.AssignmentExpr) (int
 		return nil, runtimeerrors.NewErrUnexpectedInternalError("left expression is not lvalue")
 	}
 
-	rightRvalue, err := i.convertToRvalue(expr.Right)
-
-	if err != nil {
-		return 0, err
-	}
-
-	rightValRaw, err := i.executeExpression(rightRvalue)
+	rightValRaw, err := i.executeExpression(expr.Right)
 	if err != nil {
 		return nil, err
 	}
@@ -326,7 +326,7 @@ func (i *Interpreter) executeArrayInitExpr(expr *converter.ArrayInitExpr) ([]int
 }
 
 func (i *Interpreter) executeUnaryExpr(expr *converter.UnaryExpr) (int, error) {
-	if expr.Operator == "!" {
+	if expr.Operator == "!" || expr.Operator == "+" || expr.Operator == "-" {
 		operandRvalue, err := i.convertToRvalue(expr.Operand)
 		if err != nil {
 			return 0, err
@@ -343,10 +343,19 @@ func (i *Interpreter) executeUnaryExpr(expr *converter.UnaryExpr) (int, error) {
 			return 0, runtimeerrors.NewErrUnexpectedInternalError("unary operator ! get non int value")
 		}
 
-		if v == 0 {
-			return 1, nil
+		switch expr.Operator {
+		case "!":
+			if v == 0 {
+				return 1, nil
+			}
+			return 0, nil
+		case "-":
+			return -v, nil
+		case "+":
+			return v, nil
+		default:
+			return 0, runtimeerrors.NewErrUnexpectedInternalError(fmt.Sprintf("unknown unary operator: %s", expr.Operator))
 		}
-		return 0, nil
 	} else {
 		operandLvalue, err := i.convertToLvalue(expr.Operand)
 		if err != nil {
@@ -463,6 +472,6 @@ func (i *Interpreter) convertToRvalue(expr converter.Expr) (converter.Expr, erro
 	case *converter.ArrayAccessExpr:
 		return &ArrayAccessExpr{*e, false}, nil
 	default:
-		return nil, runtimeerrors.NewErrUnexpectedInternalError("unexpected rvalue type")
+		return e, nil
 	}
 }

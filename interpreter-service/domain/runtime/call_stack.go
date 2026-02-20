@@ -9,7 +9,7 @@ type CallStack struct {
 }
 
 func NewCallStack(globalScope *Scope) *CallStack {
-	mainFrame := NewStackFrame("main", globalScope)
+	mainFrame := NewStackFrame("global", globalScope)
 	return &CallStack{
 		Frames: []*StackFrame{mainFrame},
 	}
