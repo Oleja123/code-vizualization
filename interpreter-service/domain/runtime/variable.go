@@ -23,12 +23,13 @@ func NewVariable(name string, value *int, step int, isGlobal bool) *Variable {
 	return &Variable{Name: name, Value: v, StepChanged: step}
 }
 
-func (v *Variable) ChangeValue(value int, step int) {
+func (v *Variable) ChangeValue(value int, step int) int {
 	if v.Value == nil {
 		v.Value = new(int)
 	}
 	*v.Value = value
 	v.StepChanged = step
+	return value
 }
 
 func (v *Variable) GetValue() (int, error) {

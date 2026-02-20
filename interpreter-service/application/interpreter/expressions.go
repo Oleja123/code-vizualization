@@ -1,0 +1,416 @@
+package interpreter
+
+import (
+	"fmt"
+
+	"github.com/Oleja123/code-vizualization/cst-to-ast-service/pkg/converter"
+	"github.com/Oleja123/code-vizualization/interpreter-service/domain/runtime"
+	runtimeerrors "github.com/Oleja123/code-vizualization/interpreter-service/domain/runtime/errors"
+	runtimeinterfaces "github.com/Oleja123/code-vizualization/interpreter-service/domain/runtime/interfaces"
+)
+
+func (i *Interpreter) executeExpression(expr converter.Expr) (interface{}, error) {
+	switch e := expr.(type) {
+	case *converter.IntLiteral:
+		value := e.Value
+		return &value, nil
+
+	case *VariableExpr:
+		v, err := i.resolveVariable(e.Name)
+		if err != nil {
+			return nil, err
+		}
+		if e.IsLvalue {
+			return v, nil
+		}
+		val, ok := v.(*runtime.Variable)
+		if !ok {
+			return nil, runtimeerrors.NewErrUnexpectedInternalError("no variable as rvalue")
+		}
+		return &val, nil
+	case *ArrayAccessExpr:
+		return i.executeArrayAccessExpr(e)
+	case *converter.BinaryExpr:
+		return i.executeBinaryExpr(e)
+	case *converter.AssignmentExpr:
+		return i.executeAssignmentExpr(e)
+	case *converter.ArrayInitExpr:
+		return i.executeArrayInitExpr(e)
+	case *converter.UnaryExpr:
+		return i.executeUnaryExpr(e)
+	}
+}
+
+func (i *Interpreter) executeArrayAccessExpr(a *ArrayAccessExpr) (interface{}, error) {
+	array, err := i.executeExpression(a.Array)
+	if err != nil {
+		return nil, err
+	}
+
+	index, err := i.executeExpression(a.Index)
+
+	if err != nil {
+		return nil, err
+	}
+
+	ind, ok := index.(int)
+
+	if !ok {
+		return nil, runtimeerrors.NewErrUnexpectedInternalError("index iS not an intenger")
+	}
+
+	///Если у нас массив
+
+	arr, ok := array.(*runtime.Array)
+
+	if !ok {
+		return nil, runtimeerrors.NewErrUnexpectedInternalError("array type mismatch")
+	}
+
+	val, err := arr.GetElement(ind)
+	if err != nil {
+		return nil, err
+	}
+
+	if a.IsLvalue {
+		return val, nil
+	} else {
+		intVal, err := val.GetValue()
+		if err != nil {
+			return nil, err
+		}
+		return intVal, nil
+	}
+}
+
+func (i *Interpreter) executeBinaryExpr(expr *converter.BinaryExpr) (int, error) {
+	leftRvalue, err := i.convertToRvalue(expr.Left)
+
+	if err != nil {
+		return 0, err
+	}
+
+	leftValRaw, err := i.executeExpression(leftRvalue)
+	if err != nil {
+		return 0, err
+	}
+
+	leftVal, ok := leftValRaw.(int)
+	if !ok {
+		return 0, runtimeerrors.NewErrUnexpectedInternalError("left expression is not int")
+	}
+
+	var result int
+	var was bool
+
+	switch expr.Operator {
+	case "&&":
+		if leftVal == 0 {
+			result = 0
+			was = true
+		}
+	case "||":
+		if leftVal == 1 {
+			result = 1
+			was = true
+		}
+	}
+
+	if was {
+		return result, nil
+	}
+
+	rightRvalue, err := i.convertToRvalue(expr.Right)
+
+	if err != nil {
+		return 0, err
+	}
+
+	rightValRaw, err := i.executeExpression(rightRvalue)
+	if err != nil {
+		return 0, err
+	}
+
+	rightVal, ok := rightValRaw.(int)
+	if !ok {
+		return 0, runtimeerrors.NewErrUnexpectedInternalError("right expression is not int")
+	}
+
+	switch expr.Operator {
+	case "+":
+		result = leftVal + rightVal
+	case "-":
+		result = leftVal - rightVal
+	case "*":
+		result = leftVal * rightVal
+	case "/":
+		if rightVal == 0 {
+			return 0, runtimeerrors.NewErrRuntime("division by zero")
+		}
+		result = leftVal / rightVal
+	case "%":
+		if rightVal == 0 {
+			return 0, runtimeerrors.NewErrRuntime("modulo by zero")
+		}
+		result = leftVal % rightVal
+	case "==":
+		if leftVal == rightVal {
+			result = 1
+		} else {
+			result = 0
+		}
+	case "!=":
+		if leftVal != rightVal {
+			result = 1
+		} else {
+			result = 0
+		}
+	case "<":
+		if leftVal < rightVal {
+			result = 1
+		} else {
+			result = 0
+		}
+	case "<=":
+		if leftVal <= rightVal {
+			result = 1
+		} else {
+			result = 0
+		}
+	case ">":
+		if leftVal > rightVal {
+			result = 1
+		} else {
+			result = 0
+		}
+	case ">=":
+		if leftVal >= rightVal {
+			result = 1
+		} else {
+			result = 0
+		}
+	case "&&":
+		if leftVal != 0 && rightVal != 0 {
+			result = 1
+		} else {
+			result = 0
+		}
+	case "||":
+		if leftVal != 0 || rightVal != 0 {
+			result = 1
+		} else {
+			result = 0
+		}
+	default:
+		return 0, runtimeerrors.NewErrUnexpectedInternalError(fmt.Sprintf("unknown binary operator: %s", expr.Operator))
+	}
+
+	return result, nil
+}
+
+func (i *Interpreter) executeAssignmentExpr(expr *converter.AssignmentExpr) (interface{}, error) {
+	leftLvalue, err := i.convertToLvalue(expr.Left)
+
+	if err != nil {
+		return 0, err
+	}
+
+	leftValRaw, err := i.executeExpression(leftLvalue)
+	if err != nil {
+		return nil, err
+	}
+
+	leftVal, ok := leftValRaw.(runtimeinterfaces.Changeable)
+	if !ok {
+		return nil, runtimeerrors.NewErrUnexpectedInternalError("left expression is not lvalue")
+	}
+
+	rightRvalue, err := i.convertToRvalue(expr.Right)
+
+	if err != nil {
+		return 0, err
+	}
+
+	rightValRaw, err := i.executeExpression(rightRvalue)
+	if err != nil {
+		return nil, err
+	}
+
+	rightVal, ok := rightValRaw.(int)
+	if !ok {
+		return nil, runtimeerrors.NewErrUnexpectedInternalError("right expression is not int")
+	}
+
+	switch expr.Operator {
+	case "=":
+		leftVal.ChangeValue(rightVal, 0)
+	case "+=":
+		curVal, err := leftVal.GetValue()
+		if err != nil {
+			return nil, err
+		}
+		leftVal.ChangeValue(curVal+rightVal, 0)
+	case "-=":
+		curVal, err := leftVal.GetValue()
+		if err != nil {
+			return nil, err
+		}
+		leftVal.ChangeValue(curVal-rightVal, 0)
+	case "*=":
+		curVal, err := leftVal.GetValue()
+		if err != nil {
+			return nil, err
+		}
+		leftVal.ChangeValue(curVal*rightVal, 0)
+	case "/=":
+		curVal, err := leftVal.GetValue()
+		if err != nil {
+			return nil, err
+		}
+		if rightVal == 0 {
+			return nil, runtimeerrors.NewErrRuntime("division by zero")
+		}
+		leftVal.ChangeValue(curVal/rightVal, 0)
+	case "%=":
+		curVal, err := leftVal.GetValue()
+		if err != nil {
+			return nil, err
+		}
+		if rightVal == 0 {
+			return nil, runtimeerrors.NewErrRuntime("division by zero")
+		}
+		leftVal.ChangeValue(curVal%rightVal, 0)
+	default:
+		return nil, runtimeerrors.NewErrUnexpectedInternalError(fmt.Sprintf("unknown assignment operator: %s", expr.Operator))
+	}
+
+	return nil, nil
+}
+
+func (i *Interpreter) executeArrayInitExpr(expr *converter.ArrayInitExpr) ([]interface{}, error) {
+	interfaceSlice := make([]interface{}, len(expr.Elements))
+	for ind, element := range expr.Elements {
+		val, err := i.executeExpression(element)
+		if err != nil {
+			return nil, err
+		}
+		interfaceSlice[ind] = val
+	}
+
+	switch interfaceSlice[0].(type) {
+	case *int:
+		arrayElementSlice := make([]runtime.ArrayElement, len(expr.Elements))
+		for ind, element := range interfaceSlice {
+			val, _ := element.(*int)
+			arrayElementSlice[ind] = *runtime.NewArrayElement(val, 0, false)
+		}
+		out := make([]interface{}, len(arrayElementSlice))
+		for i, v := range arrayElementSlice {
+			out[i] = v
+		}
+		return out, nil
+	default:
+		return nil, runtimeerrors.NewErrUnexpectedInternalError("unexpected array element type")
+	}
+}
+
+func (i *Interpreter) executeUnaryExpr(expr *converter.UnaryExpr) (int, error) {
+	if expr.Operator == "!" {
+		operandRvalue, err := i.convertToRvalue(expr)
+		if err != nil {
+			return 0, err
+		}
+
+		operand, err := i.executeExpression(operandRvalue)
+		if err != nil {
+			return 0, err
+		}
+
+		v, ok := operand.(int)
+
+		if !ok {
+			return 0, runtimeerrors.NewErrUnexpectedInternalError("unary operator ! get non int value")
+		}
+
+		if v == 0 {
+			return 1, nil
+		}
+		return 0, nil
+	} else {
+		operandLvalue, err := i.convertToLvalue(expr)
+		if err != nil {
+			return 0, err
+		}
+
+		operand, err := i.executeExpression(operandLvalue)
+		if err != nil {
+			return 0, err
+		}
+
+		operandVal, ok := operand.(runtimeinterfaces.Changeable)
+
+		if !ok {
+			return 0, runtimeerrors.NewErrUnexpectedInternalError("unary operator ++ or -- get non lvalue")
+		}
+
+		old, err := operandVal.GetValue()
+		if err != nil {
+			return 0, err
+		}
+
+		switch expr.Operator {
+		case "++":
+			operandVal.ChangeValue(old+1, 0)
+			if expr.IsPostfix {
+				return old, nil
+			} else {
+				return old + 1, nil
+			}
+		case "--":
+			operandVal.ChangeValue(old-1, 0)
+			if expr.IsPostfix {
+				return old, nil
+			} else {
+				return old - 1, nil
+			}
+		default:
+			return 0, runtimeerrors.NewErrUnexpectedInternalError(fmt.Sprintf("unknown unary operator: %s", expr.Operator))
+		}
+	}
+}
+
+func (i *Interpreter) executeCallExpr(expr *converter.CallExpr) ([]interface{}, error) {
+	i.CallStack.PushFrame(runtime.NewStackFrame(expr.FunctionName, i.GlobalScope))
+	i.CallStack.GetCurrentFrame().EnterScope()
+
+	for _, val := range expr.Arguments {
+		par, ok := val.(converter.Parameter)
+		variable := runtime.NewVariable(val.Name, value, 0, v.IsGlobal) // step=0 пока
+
+		frame := i.CallStack.GetCurrentFrame()
+		currentScope := frame.GetCurrentScope()
+		currentScope.Declare(variable)
+	}
+}
+
+func (i *Interpreter) convertToLvalue(expr converter.Expr) (converter.Expr, error) {
+	switch e := expr.(type) {
+	case *converter.VariableExpr:
+		return &VariableExpr{*e, true}, nil
+	case *converter.ArrayAccessExpr:
+		return &ArrayAccessExpr{*e, true}, nil
+	default:
+		return nil, runtimeerrors.NewErrUnexpectedInternalError("unexpected lvalue type")
+	}
+}
+
+func (i *Interpreter) convertToRvalue(expr converter.Expr) (converter.Expr, error) {
+	switch e := expr.(type) {
+	case *converter.VariableExpr:
+		return &VariableExpr{*e, false}, nil
+	case *converter.ArrayAccessExpr:
+		return &ArrayAccessExpr{*e, false}, nil
+	default:
+		return nil, runtimeerrors.NewErrUnexpectedInternalError("unexpected rvalue type")
+	}
+}

@@ -20,12 +20,13 @@ func NewArrayElement(value *int, step int, isGlobal bool) *ArrayElement {
 	return &ArrayElement{Value: v, StepChanged: step}
 }
 
-func (ae *ArrayElement) ChangeValue(value int, step int) {
+func (ae *ArrayElement) ChangeValue(value int, step int) int {
 	if ae.Value == nil {
 		ae.Value = new(int)
 	}
 	*ae.Value = value
 	ae.StepChanged = step
+	return value
 }
 
 func (ae *ArrayElement) GetValue() (int, error) {

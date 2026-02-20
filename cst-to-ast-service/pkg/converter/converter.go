@@ -46,8 +46,9 @@ type (
 	ArrayInitExpr   = structs.ArrayInitExpr
 
 	// Базовые типы
-	Location = structs.Location
-	Type     = structs.Type
+	Location  = structs.Location
+	Type      = structs.Type
+	Parameter = structs.Parameter
 )
 
 // CConverter реализует конвертер tree-sitter CST в AST для языка C
