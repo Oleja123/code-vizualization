@@ -38,6 +38,10 @@ func (i *Interpreter) executeExpression(expr converter.Expr) (interface{}, error
 		return i.executeArrayInitExpr(e)
 	case *converter.UnaryExpr:
 		return i.executeUnaryExpr(e)
+	case *converter.CallExpr:
+		return i.executeCallExpr(e)
+	default:
+		return ExecResult{}, runtimeerrors.NewErrUnexpectedInternalError(fmt.Sprintf("unknown expression type %T", expr))
 	}
 }
 
@@ -379,18 +383,47 @@ func (i *Interpreter) executeUnaryExpr(expr *converter.UnaryExpr) (int, error) {
 	}
 }
 
-func (i *Interpreter) executeCallExpr(expr *converter.CallExpr) ([]interface{}, error) {
+func (i *Interpreter) executeCallExpr(expr *converter.CallExpr) (interface{}, error) {
 	i.CallStack.PushFrame(runtime.NewStackFrame(expr.FunctionName, i.GlobalScope))
 	i.CallStack.GetCurrentFrame().EnterScope()
 
-	for _, val := range expr.Arguments {
-		par, ok := val.(converter.Parameter)
-		variable := runtime.NewVariable(val.Name, value, 0, v.IsGlobal) // step=0 пока
+	declNode, ok := i.Functions[expr.FunctionName]
+
+	if !ok {
+		return nil, runtimeerrors.NewErrUnexpectedInternalError(fmt.Sprintf("unknown function named: %s", expr.FunctionName))
+	}
+
+	parameters := make([]*runtime.Variable, len(declNode.Parameters))
+
+	for ind, val := range declNode.Parameters {
+		variable := runtime.NewVariable(val.Name, nil, 0, false)
+		parameters[ind] = variable
 
 		frame := i.CallStack.GetCurrentFrame()
-		currentScope := frame.GetCurrentScope()
-		currentScope.Declare(variable)
+		frame.GetCurrentScope().Declare(variable)
 	}
+
+	for ind, val := range expr.Arguments {
+		val, err := i.executeExpression(val)
+		if err != nil {
+			return nil, err
+		}
+
+		value, ok := val.(int)
+
+		if !ok {
+			return nil, runtimeerrors.NewErrUnexpectedInternalError("function argument is not an integer")
+		}
+
+		parameters[ind].ChangeValue(value, 0)
+	}
+
+	res, err := i.executeStatement(declNode.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	return res, nil
 }
 
 func (i *Interpreter) convertToLvalue(expr converter.Expr) (converter.Expr, error) {

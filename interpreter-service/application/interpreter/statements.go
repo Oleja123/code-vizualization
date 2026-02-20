@@ -29,9 +29,9 @@ func (i *Interpreter) executeStatement(stmt converter.Stmt) (ExecResult, error) 
 	case *converter.ExprStmt:
 		return i.executeExprStmt(t)
 	case *converter.BreakStmt:
-		return i.executeBreakStmt(t)
+		return i.executeBreakStmt()
 	case *converter.ContinueStmt:
-		return i.executeContinueStmt(t)
+		return i.executeContinueStmt()
 
 	default:
 		return ExecResult{}, runtimeerrors.NewErrUnexpectedInternalError(fmt.Sprintf("unknown statement type %T", stmt))
@@ -309,11 +309,11 @@ func (i *Interpreter) executeForStmt(loop *converter.ForStmt) (ExecResult, error
 	return NormalResult(), nil
 }
 
-func (i *Interpreter) executeBreakStmt(b *converter.BreakStmt) (ExecResult, error) {
+func (i *Interpreter) executeBreakStmt() (ExecResult, error) {
 	return ExecResult{Signal: SignalBreak}, nil
 }
 
-func (i *Interpreter) executeContinueStmt(c *converter.ContinueStmt) (ExecResult, error) {
+func (i *Interpreter) executeContinueStmt() (ExecResult, error) {
 	return ExecResult{Signal: SignalContinue}, nil
 }
 
