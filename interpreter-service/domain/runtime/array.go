@@ -35,13 +35,9 @@ func (a *Array) ChangeElement(ind int, value int, step int) error {
 	return nil
 }
 
-func (a *Array) GetElement(ind int) (int, error) {
+func (a *Array) GetElement(ind int) (*ArrayElement, error) {
 	if ind < 0 || ind >= len(a.Values) {
-		return 0, runtimeerrors.NewErrUndefinedBehavior(fmt.Sprintf("index out of bounds in array %s", a.Name))
+		return nil, runtimeerrors.NewErrUndefinedBehavior(fmt.Sprintf("index out of bounds in array %s", a.Name))
 	}
-	val, err := a.Values[ind].GetValue()
-	if err != nil {
-		return 0, runtimeerrors.NewErrUndefinedBehavior(fmt.Sprintf("undefined behavior: error getting element by index: [%d]: %s", ind, err))
-	}
-	return val, nil
+	return &a.Values[ind], nil
 }
