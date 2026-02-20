@@ -12,8 +12,11 @@ import (
 func (i *Interpreter) executeExpression(expr converter.Expr) (interface{}, error) {
 	switch e := expr.(type) {
 	case *converter.IntLiteral:
-		value := e.Value
-		return &value, nil
+		return e.Value, nil
+	case *converter.VariableExpr:
+		return i.executeExpression(&VariableExpr{VariableExpr: *e, IsLvalue: false})
+	case *converter.ArrayAccessExpr:
+		return i.executeExpression(&ArrayAccessExpr{ArrayAccessExpr: *e, IsLvalue: false})
 
 	case *VariableExpr:
 		v, err := i.resolveVariable(e.Name)
@@ -27,7 +30,11 @@ func (i *Interpreter) executeExpression(expr converter.Expr) (interface{}, error
 		if !ok {
 			return nil, runtimeerrors.NewErrUnexpectedInternalError("no variable as rvalue")
 		}
-		return &val, nil
+		value, err := val.GetValue()
+		if err != nil {
+			return nil, err
+		}
+		return value, nil
 	case *ArrayAccessExpr:
 		return i.executeArrayAccessExpr(e)
 	case *converter.BinaryExpr:
@@ -302,7 +309,7 @@ func (i *Interpreter) executeArrayInitExpr(expr *converter.ArrayInitExpr) ([]int
 	}
 
 	switch interfaceSlice[0].(type) {
-	case *int:
+	case int:
 		arrayElementSlice := make([]runtime.ArrayElement, len(expr.Elements))
 		for ind, element := range interfaceSlice {
 			val, _ := element.(*int)
@@ -320,7 +327,7 @@ func (i *Interpreter) executeArrayInitExpr(expr *converter.ArrayInitExpr) ([]int
 
 func (i *Interpreter) executeUnaryExpr(expr *converter.UnaryExpr) (int, error) {
 	if expr.Operator == "!" {
-		operandRvalue, err := i.convertToRvalue(expr)
+		operandRvalue, err := i.convertToRvalue(expr.Operand)
 		if err != nil {
 			return 0, err
 		}
@@ -341,7 +348,7 @@ func (i *Interpreter) executeUnaryExpr(expr *converter.UnaryExpr) (int, error) {
 		}
 		return 0, nil
 	} else {
-		operandLvalue, err := i.convertToLvalue(expr)
+		operandLvalue, err := i.convertToLvalue(expr.Operand)
 		if err != nil {
 			return 0, err
 		}
@@ -384,6 +391,7 @@ func (i *Interpreter) executeUnaryExpr(expr *converter.UnaryExpr) (int, error) {
 }
 
 func (i *Interpreter) executeCallExpr(expr *converter.CallExpr) (interface{}, error) {
+	defer i.CallStack.PopFrame()
 	i.CallStack.PushFrame(runtime.NewStackFrame(expr.FunctionName, i.GlobalScope))
 	i.CallStack.GetCurrentFrame().EnterScope()
 
@@ -394,6 +402,10 @@ func (i *Interpreter) executeCallExpr(expr *converter.CallExpr) (interface{}, er
 	}
 
 	parameters := make([]*runtime.Variable, len(declNode.Parameters))
+
+	if len(expr.Arguments) != len(declNode.Parameters) {
+		return nil, runtimeerrors.NewErrUnexpectedInternalError(fmt.Sprintf("function %s expects %d arguments, got %d", expr.FunctionName, len(declNode.Parameters), len(expr.Arguments)))
+	}
 
 	for ind, val := range declNode.Parameters {
 		variable := runtime.NewVariable(val.Name, nil, 0, false)
@@ -423,7 +435,14 @@ func (i *Interpreter) executeCallExpr(expr *converter.CallExpr) (interface{}, er
 		return nil, err
 	}
 
-	return res, nil
+	if res.Signal == SignalReturn {
+		if res.Value == nil {
+			return nil, nil
+		}
+		return *res.Value, nil
+	}
+
+	return nil, nil
 }
 
 func (i *Interpreter) convertToLvalue(expr converter.Expr) (converter.Expr, error) {

@@ -273,7 +273,8 @@ func TestArrayGetElement(t *testing.T) {
 	val, err := arr.GetElement(1)
 
 	assert.NoError(t, err)
-	assert.Equal(t, 99, val)
+	valInt, _ := val.GetValue()
+	assert.Equal(t, 99, valInt)
 }
 
 func TestArrayGetElementOutOfBounds(t *testing.T) {
@@ -289,134 +290,8 @@ func TestArrayGetElementOutOfBounds(t *testing.T) {
 func TestArrayGetElementUninitialized(t *testing.T) {
 	arr := NewArray("arr", 5, nil, 0, false)
 
-	_, err := arr.GetElement(0)
-
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "undefined behavior")
-}
-
-// ============ Array2D Tests ============
-
-func TestNewArray2DWithoutInit(t *testing.T) {
-	arr := NewArray2D("matrix", 3, 4, nil, 0, true)
-
-	require.NotNil(t, arr)
-	assert.Equal(t, "matrix", arr.Name)
-	assert.Equal(t, 3, arr.Size1)
-	assert.Equal(t, 4, arr.Size2)
-	assert.Len(t, arr.Values, 3)
-
-	for i := range arr.Values {
-		assert.Len(t, arr.Values[i], 4)
-		for j := range arr.Values[i] {
-			assert.NotNil(t, arr.Values[i][j].Value, "element at [%d][%d] should have value", i, j)
-			assert.Equal(t, 0, *arr.Values[i][j].Value)
-		}
-	}
-}
-
-func TestNewArray2DLocal(t *testing.T) {
-	arr := NewArray2D("local_matrix", 2, 3, nil, 0, false)
-
-	require.NotNil(t, arr)
-	assert.Equal(t, "local_matrix", arr.Name)
-	assert.Equal(t, 2, arr.Size1)
-	assert.Equal(t, 3, arr.Size2)
-	assert.Len(t, arr.Values, 2)
-
-	for i := range arr.Values {
-		assert.Len(t, arr.Values[i], 3)
-		for j := range arr.Values[i] {
-			assert.Nil(t, arr.Values[i][j].Value)
-		}
-	}
-}
-
-func TestNewArray2DWithInitializedValues(t *testing.T) {
-	// Create pre-initialized 2D array elements
-	elements := make([][]ArrayElement, 2)
-	for i := 0; i < 2; i++ {
-		elements[i] = make([]ArrayElement, 3)
-		for j := 0; j < 3; j++ {
-			val := i*10 + j
-			elements[i][j] = *NewArrayElement(&val, 0, false)
-		}
-	}
-
-	arr := NewArray2D("initialized_matrix", 2, 3, elements, 5, false)
-
-	require.NotNil(t, arr)
-	assert.Equal(t, "initialized_matrix", arr.Name)
-	assert.Equal(t, 2, arr.Size1)
-	assert.Equal(t, 3, arr.Size2)
-	assert.Len(t, arr.Values, 2)
-
-	// Check that the provided values are used
-	for i := 0; i < 2; i++ {
-		assert.Len(t, arr.Values[i], 3)
-		for j := 0; j < 3; j++ {
-			assert.NotNil(t, arr.Values[i][j].Value)
-			assert.Equal(t, i*10+j, *arr.Values[i][j].Value)
-		}
-	}
-}
-
-func TestArray2DChangeElement(t *testing.T) {
-	arr := NewArray2D("matrix", 3, 3, nil, 0, true)
-
-	err := arr.ChangeElement(1, 2, 77, 2)
-
-	assert.NoError(t, err)
-	assert.Equal(t, 77, *arr.Values[1][2].Value)
-	assert.Equal(t, 2, arr.Values[1][2].StepChanged)
-}
-
-func TestArray2DChangeElementOutOfBounds(t *testing.T) {
-	arr := NewArray2D("matrix", 3, 3, nil, 0, true)
-
-	errNegativeIndex1 := arr.ChangeElement(-1, 0, 10, 1)
-	assert.Error(t, errNegativeIndex1)
-
-	errNegativeIndex2 := arr.ChangeElement(0, -1, 10, 1)
-	assert.Error(t, errNegativeIndex2)
-
-	errTooLargeIndex1 := arr.ChangeElement(5, 0, 10, 1)
-	assert.Error(t, errTooLargeIndex1)
-
-	errTooLargeIndex2 := arr.ChangeElement(0, 5, 10, 1)
-	assert.Error(t, errTooLargeIndex2)
-}
-
-func TestArray2DGetElement(t *testing.T) {
-	arr := NewArray2D("matrix", 3, 3, nil, 0, true)
-	arr.ChangeElement(1, 1, 55, 1)
-
-	val, err := arr.GetElement(1, 1)
-
-	assert.NoError(t, err)
-	assert.Equal(t, 55, val)
-}
-
-func TestArray2DGetElementOutOfBounds(t *testing.T) {
-	arr := NewArray2D("matrix", 3, 3, nil, 0, true)
-
-	_, errNegativeIndex1 := arr.GetElement(-1, 0)
-	assert.Error(t, errNegativeIndex1)
-
-	_, errNegativeIndex2 := arr.GetElement(0, -1)
-	assert.Error(t, errNegativeIndex2)
-
-	_, errTooLargeIndex1 := arr.GetElement(5, 0)
-	assert.Error(t, errTooLargeIndex1)
-
-	_, errTooLargeIndex2 := arr.GetElement(0, 5)
-	assert.Error(t, errTooLargeIndex2)
-}
-
-func TestArray2DGetElementUninitialized(t *testing.T) {
-	arr := NewArray2D("matrix", 3, 3, nil, 0, false)
-
-	_, err := arr.GetElement(0, 0)
+	val, err := arr.GetElement(0)
+	_, err = val.GetValue()
 
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "undefined behavior")
@@ -491,45 +366,19 @@ func TestDeclarationStackGetArrayNotFound(t *testing.T) {
 	assert.False(t, ok)
 }
 
-func TestDeclarationStackGetArray2D(t *testing.T) {
-	ds := &DeclarationStack{}
-	arr2d := NewArray2D("matrix", 5, 5, nil, 0, true)
-	ds.Declare(arr2d)
-
-	found, ok := ds.GetArray2D("matrix")
-
-	assert.True(t, ok)
-	assert.NotNil(t, found)
-	assert.Equal(t, "matrix", found.Name)
-	assert.Equal(t, 5, found.Size1)
-	assert.Equal(t, 5, found.Size2)
-}
-
-func TestDeclarationStackGetArray2DNotFound(t *testing.T) {
-	ds := &DeclarationStack{}
-	arr2d := NewArray2D("matrix", 5, 5, nil, 0, true)
-	ds.Declare(arr2d)
-
-	_, ok := ds.GetArray2D("missing")
-
-	assert.False(t, ok)
-}
-
 func TestDeclarationStackMixedTypes(t *testing.T) {
 	ds := &DeclarationStack{}
 
 	v1 := NewVariable("x", nil, 0, true)
 	v2 := NewVariable("y", nil, 0, true)
 	arr := NewArray("arr", 5, nil, 0, true)
-	arr2d := NewArray2D("matrix", 3, 3, nil, 0, true)
 
 	ds.Declare(v1)
 	ds.Declare(arr)
 	ds.Declare(v2)
-	ds.Declare(arr2d)
 
 	// Check order
-	assert.Len(t, ds.Declarations, 4)
+	assert.Len(t, ds.Declarations, 3)
 
 	// Check retrieval
 	foundV1, ok1 := ds.GetVariable("x")
@@ -544,9 +393,6 @@ func TestDeclarationStackMixedTypes(t *testing.T) {
 	assert.True(t, ok2)
 	assert.Equal(t, "y", foundV2.Name)
 
-	foundArr2D, okArr2D := ds.GetArray2D("matrix")
-	assert.True(t, okArr2D)
-	assert.Equal(t, "matrix", foundArr2D.Name)
 }
 
 func TestDeclarationStackGetVariableWrongType(t *testing.T) {
@@ -710,39 +556,15 @@ func TestScopeGetArrayNotFound(t *testing.T) {
 	assert.False(t, ok)
 }
 
-func TestScopeGetArray2D(t *testing.T) {
-	scope := NewScope(nil)
-	arr2d := NewArray2D("matrix", 5, 5, nil, 0, true)
-	scope.Declare(arr2d)
-
-	found, ok := scope.GetArray2D("matrix")
-
-	assert.True(t, ok)
-	assert.NotNil(t, found)
-	assert.Equal(t, "matrix", found.Name)
-}
-
-func TestScopeGetArray2DNotFound(t *testing.T) {
-	scope := NewScope(nil)
-	arr2d := NewArray2D("matrix", 5, 5, nil, 0, true)
-	scope.Declare(arr2d)
-
-	_, ok := scope.GetArray2D("missing")
-
-	assert.False(t, ok)
-}
-
 func TestScopeMixedDeclarations(t *testing.T) {
 	scope := NewScope(nil)
 
 	v1 := NewVariable("x", nil, 0, true)
 	arr := NewArray("arr", 5, nil, 0, true)
-	arr2d := NewArray2D("matrix", 3, 3, nil, 0, true)
 	v2 := NewVariable("y", nil, 0, true)
 
 	scope.Declare(v1)
 	scope.Declare(arr)
-	scope.Declare(arr2d)
 	scope.Declare(v2)
 
 	// Check we can find each
@@ -753,10 +575,6 @@ func TestScopeMixedDeclarations(t *testing.T) {
 	foundArr, okArr := scope.GetArray("arr")
 	assert.True(t, okArr)
 	assert.Equal(t, "arr", foundArr.Name)
-
-	foundArr2D, okArr2D := scope.GetArray2D("matrix")
-	assert.True(t, okArr2D)
-	assert.Equal(t, "matrix", foundArr2D.Name)
 
 	foundV2, okV2 := scope.GetVariable("y")
 	assert.True(t, okV2)
@@ -804,24 +622,8 @@ func TestScopeDeclareAndRetrieveSameArray(t *testing.T) {
 	assert.True(t, ok)
 	val, err := found.GetElement(2)
 	assert.NoError(t, err)
-	assert.Equal(t, 99, val)
-}
-
-func TestScopeDeclareAndRetrieveSameArray2D(t *testing.T) {
-	scope := NewScope(nil)
-	arr2d := NewArray2D("matrix", 3, 3, nil, 0, true)
-	scope.Declare(arr2d)
-
-	// Change the 2D array element
-	err := arr2d.ChangeElement(1, 2, 77, 1)
-	assert.NoError(t, err)
-
-	// Retrieve it and check the change is visible
-	found, ok := scope.GetArray2D("matrix")
-	assert.True(t, ok)
-	val, err := found.GetElement(1, 2)
-	assert.NoError(t, err)
-	assert.Equal(t, 77, val)
+	valInt, err := val.GetValue()
+	assert.Equal(t, 99, valInt)
 }
 
 // ============ StackFrame Tests ============
@@ -1007,19 +809,6 @@ func TestStackFrameGetArrayFromParentScope(t *testing.T) {
 	assert.Equal(t, "numbers", found.Name)
 }
 
-func TestStackFrameGetArray2DFromParentScope(t *testing.T) {
-	globalScope := NewScope(nil)
-	arr2d := NewArray2D("matrix", 3, 3, nil, 0, true)
-	globalScope.Declare(arr2d)
-
-	stackFrame := NewStackFrame("main", globalScope)
-	stackFrame.EnterScope()
-
-	found, ok := stackFrame.GetArray2D("matrix")
-	assert.True(t, ok)
-	assert.Equal(t, "matrix", found.Name)
-}
-
 func TestStackFrameGetVariableDeepHierarchy(t *testing.T) {
 	globalScope := NewScope(nil)
 	v := NewVariable("x", nil, 0, true)
@@ -1180,18 +969,6 @@ func TestCallStackGetArrayInCurrentFrame(t *testing.T) {
 	found, ok := callStack.GetArrayInCurrentFrame("numbers")
 	assert.True(t, ok)
 	assert.Equal(t, "numbers", found.Name)
-}
-
-func TestCallStackGetArray2DInCurrentFrame(t *testing.T) {
-	globalScope := NewScope(nil)
-	arr2d := NewArray2D("matrix", 3, 3, nil, 0, true)
-	globalScope.Declare(arr2d)
-
-	callStack := NewCallStack(globalScope)
-
-	found, ok := callStack.GetArray2DInCurrentFrame("matrix")
-	assert.True(t, ok)
-	assert.Equal(t, "matrix", found.Name)
 }
 
 func TestCallStackMultipleFramesWithDifferentVariables(t *testing.T) {

@@ -195,7 +195,8 @@ func TestSnapshotApplyArrayElementChanged(t *testing.T) {
 	assert.True(t, ok)
 	value, err := arr.GetElement(1)
 	assert.NoError(t, err)
-	assert.Equal(t, 42, value)
+	valInt, err := value.GetValue()
+	assert.Equal(t, 42, valInt)
 }
 
 func TestSnapshotApplyArray2DElementChanged(t *testing.T) {
@@ -386,7 +387,8 @@ func TestSnapshotComplexScenario(t *testing.T) {
 	assert.True(t, ok)
 	elemVal, err := arr.GetElement(0)
 	assert.NoError(t, err)
-	assert.Equal(t, 100, elemVal)
+	elemValInt, err := elemVal.GetValue()
+	assert.Equal(t, 100, elemValInt)
 }
 
 func TestSnapshotGetArrayNotFound(t *testing.T) {
@@ -618,9 +620,12 @@ func TestScenarioBubbleSort(t *testing.T) {
 	val0, _ := arr.GetElement(0)
 	val1, _ := arr.GetElement(1)
 	val2, _ := arr.GetElement(2)
-	assert.Equal(t, 2, val0)
-	assert.Equal(t, 1, val1)
-	assert.Equal(t, 5, val2)
+	val0Int, _ := val0.GetValue()
+	val1Int, _ := val1.GetValue()
+	val2Int, _ := val2.GetValue()
+	assert.Equal(t, 2, val0Int)
+	assert.Equal(t, 1, val1Int)
+	assert.Equal(t, 5, val2Int)
 }
 
 // Тест: Поиск в матрице (2D массив)

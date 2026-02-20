@@ -12,6 +12,8 @@ func (i *Interpreter) executeStatement(stmt converter.Stmt) (ExecResult, error) 
 	switch t := stmt.(type) {
 	case *VariableDecl:
 		return i.executeNonFunctionDecl(t)
+	case *converter.VariableDecl:
+		return i.executeNonFunctionDecl(&VariableDecl{VariableDecl: *t, IsGlobal: false})
 	case *converter.FunctionDecl:
 		return i.executeFunctionDecl(t)
 	case *converter.IfStmt:
