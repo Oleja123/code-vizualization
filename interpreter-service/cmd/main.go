@@ -10,15 +10,7 @@ import (
 
 func main() {
 	sourceCode := `
-int main() {
-    int a[2][2];
-	for(int i = 0; i < 2; i++){
-		for(int j = 0; j < 2; j++) {
-			a[i][j] = i * 2 + j + 1;
-		}
-	}
-	return a[1][1];
-}
+int f() { return 1; }
 `
 
 	conv := converter.New()

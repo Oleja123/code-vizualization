@@ -480,6 +480,21 @@ func TestWhileLoop(t *testing.T) {
 			code:     `int main() { int count = 0; int i = 0; while (i < 2) { int j = 0; while (j < 3) { count++; j++; if (j < 3) { continue; } } i++; } return count; }`,
 			expected: 6,
 		},
+		{
+			name:     "return from while loop early",
+			code:     `int main() { int i = 0; while (i < 10) { if (i == 5) { return 42; } i++; } return 0; }`,
+			expected: 42,
+		},
+		{
+			name:     "return from nested while loop",
+			code:     `int main() { int i = 0; while (i < 3) { int j = 0; while (j < 3) { if (j == 1) { return 100; } j++; } i++; } return 0; }`,
+			expected: 100,
+		},
+		{
+			name:     "return from while with accumulation",
+			code:     `int main() { int sum = 0; int i = 0; while (i < 5) { sum += i; if (sum > 5) { return sum; } i++; } return 0; }`,
+			expected: 6,
+		},
 	}
 
 	for _, tt := range tests {
@@ -588,6 +603,21 @@ func TestForLoop(t *testing.T) {
 			code:     `int main() { int count = 0; int i = 0; for (count = 2; count < 4; count++) { i += count; } return i; }`,
 			expected: 5,
 		},
+		{
+			name:     "return from for loop early",
+			code:     `int main() { for (int i = 0; i < 10; i++) { if (i == 5) { return 42; } } return 0; }`,
+			expected: 42,
+		},
+		{
+			name:     "return from nested for loop",
+			code:     `int main() { for (int i = 0; i < 3; i++) { for (int j = 0; j < 3; j++) { if (j == 1) { return 100; } } } return 0; }`,
+			expected: 100,
+		},
+		{
+			name:     "return from for with accumulation",
+			code:     `int main() { int sum = 0; for (int i = 0; i < 5; i++) { sum += i; if (sum > 5) { return sum; } } return 0; }`,
+			expected: 6,
+		},
 	}
 
 	for _, tt := range tests {
@@ -655,6 +685,21 @@ func TestDoWhileLoop(t *testing.T) {
 			name:     "nested do-while triple nesting",
 			code:     `int main() { int count = 0; int i = 0; do { int j = 0; do { int k = 0; do { count++; k++; } while (k < 2); j++; } while (j < 2); i++; } while (i < 2); return count; }`,
 			expected: 8,
+		},
+		{
+			name:     "return from do-while loop early",
+			code:     `int main() { int i = 0; do { if (i == 5) { return 42; } i++; } while (i < 10); return 0; }`,
+			expected: 42,
+		},
+		{
+			name:     "return from nested do-while loop",
+			code:     `int main() { int i = 0; do { int j = 0; do { if (j == 1) { return 100; } j++; } while (j < 3); i++; } while (i < 3); return 0; }`,
+			expected: 100,
+		},
+		{
+			name:     "return from do-while with accumulation",
+			code:     `int main() { int sum = 0; int i = 0; do { sum += i; if (sum > 5) { return sum; } i++; } while (i < 5); return 0; }`,
+			expected: 6,
 		},
 	}
 
@@ -748,6 +793,69 @@ func TestArray(t *testing.T) {
 			name:     "large array access",
 			code:     `int main() { int arr[10] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10}; return arr[0] + arr[9]; }`,
 			expected: 11,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := runCode(t, tt.code)
+			assert.Equal(t, tt.expected, *result)
+		})
+	}
+}
+
+// TestArray2D tests 2D array operations
+func TestArray2D(t *testing.T) {
+	tests := []testCase{
+		{
+			name:     "declaration and access",
+			code:     `int main() { int matrix[2][3] = {{1, 2, 3}, {4, 5, 6}}; return matrix[1][2]; }`,
+			expected: 6,
+		},
+		{
+			name:     "sum of two elements",
+			code:     `int main() { int matrix[2][2] = {{10, 20}, {30, 40}}; return matrix[0][1] + matrix[1][0]; }`,
+			expected: 50,
+		},
+		{
+			name:     "modification",
+			code:     `int main() { int matrix[2][2] = {{1, 2}, {3, 4}}; matrix[1][0] = 99; return matrix[1][0]; }`,
+			expected: 99,
+		},
+		{
+			name:     "multiple modifications",
+			code:     `int main() { int matrix[2][3] = {{1, 2, 3}, {4, 5, 6}}; matrix[0][2] = 30; matrix[1][1] = 50; return matrix[0][2] + matrix[1][1]; }`,
+			expected: 80,
+		},
+		{
+			name:     "iteration with nested loops",
+			code:     `int main() { int matrix[2][3] = {{1, 2, 3}, {4, 5, 6}}; int sum = 0; for (int i = 0; i < 2; i++) { for (int j = 0; j < 3; j++) { sum += matrix[i][j]; } } return sum; }`,
+			expected: 21,
+		},
+		{
+			name:     "write in nested loops",
+			code:     `int main() { int matrix[2][2] = {{0, 0}, {0, 0}}; for (int i = 0; i < 2; i++) { for (int j = 0; j < 2; j++) { matrix[i][j] = i + j; } } return matrix[0][0] + matrix[0][1] + matrix[1][0] + matrix[1][1]; }`,
+			expected: 4,
+		},
+		{
+			name:     "index expression access",
+			code:     `int main() { int matrix[2][3] = {{10, 20, 30}, {40, 50, 60}}; int i = 1; int j = 2; return matrix[i - 1][j - 1] + matrix[i][j - 2]; }`,
+			expected: 60,
+		},
+		{
+			name:     "read modify write",
+			code:     `int main() { int matrix[2][2] = {{5, 6}, {7, 8}}; matrix[0][1] = matrix[1][0] + matrix[1][1]; return matrix[0][1]; }`,
+			expected: 15,
+		},
+		{
+			name:     "global 2d array access",
+			code:     `int matrix[2][2] = {{1, 2}, {3, 4}}; int main() { return matrix[0][0] + matrix[1][1]; }`,
+			expected: 5,
+		},
+		{
+			name:     "global 2d array modification",
+			code:     `int matrix[2][2] = {{1, 2}, {3, 4}}; int main() { matrix[0][1] = 20; return matrix[0][1] + matrix[1][0]; }`,
+			expected: 23,
 		},
 	}
 
@@ -1104,8 +1212,92 @@ func TestErrors(t *testing.T) {
 			code: `int main() { int arr[4] = {10, 20, 30, 40}; int i; return arr[i]; }`,
 		},
 		{
+			name: "2d array out of bounds row",
+			code: `int main() { int matrix[2][2] = {{1, 2}, {3, 4}}; return matrix[2][0]; }`,
+		},
+		{
+			name: "2d array out of bounds col",
+			code: `int main() { int matrix[2][2] = {{1, 2}, {3, 4}}; return matrix[0][2]; }`,
+		},
+		{
+			name: "2d uninitialized element access",
+			code: `int main() { int matrix[2][2]; return matrix[1][1]; }`,
+		},
+		{
+			name: "2d array with uninitialized index",
+			code: `int main() { int matrix[2][2] = {{1, 2}, {3, 4}}; int i; return matrix[i][1]; }`,
+		},
+		{
 			name: "uninitialized variable in function call",
 			code: `int test(int x) { return x * 2; } int main() { int y; return test(y); }`,
+		},
+		{
+			name: "undefined variable access at global",
+			code: `int main() { return undefined_var; }`,
+		},
+		{
+			name: "division by zero in binary expression",
+			code: `int main() { return 10 / 0; }`,
+		},
+		{
+			name: "modulo by zero in binary expression",
+			code: `int main() { return 17 % 0; }`,
+		},
+		{
+			name: "division by zero in compound assignment",
+			code: `int main() { int x = 20; x /= 0; return x; }`,
+		},
+		{
+			name: "modulo by zero in compound assignment",
+			code: `int main() { int x = 17; x %= 0; return x; }`,
+		},
+		{
+			name: "pre increment on literal",
+			code: `int main() { int x = ++5; return x; }`,
+		},
+		{
+			name: "pre decrement on literal",
+			code: `int main() { int x = --10; return x; }`,
+		},
+		{
+			name: "post increment on literal",
+			code: `int main() { int x = 5++; return x; }`,
+		},
+		{
+			name: "post decrement on literal",
+			code: `int main() { int x = 10--; return x; }`,
+		},
+		{
+			name: "post increment on expression result",
+			code: `int main() { return (5 + 2)++; }`,
+		},
+		{
+			name: "pre decrement on expression result",
+			code: `int main() { return --(3 * 2); }`,
+		},
+		{
+			name: "call undefined function",
+			code: `int main() { return undefined_function(5); }`,
+		},
+		{
+			name: "call function with too few arguments",
+			code: `int add(int a, int b) { return a + b; } int main() { return add(5); }`,
+		},
+		{
+			name: "call function with too many arguments",
+			code: `int add(int a, int b) { return a + b; } int main() { return add(5, 10, 15); }`,
+		},
+		{
+			name: "call function expecting no args with args",
+			code: `int get_constant() { return 42; } int main() { return get_constant(5); }`,
+		},
+		{
+			name: "duplicate function definition",
+			code: `int get_value() { return 10; } int get_value() { return 20; } int main() { return get_value(); }`,
+		},
+		{
+			name: "missing main function",
+			code: `int helper() { return 42; }`,
 		},
 	}
 
@@ -1169,6 +1361,31 @@ func TestGlobal(t *testing.T) {
 			name:     "global array accessed in function",
 			code:     `int arr[4] = {10, 20, 30, 40}; int sum() { int s = 0; for (int i = 0; i < 4; i++) { s += arr[i]; } return s; } int main() { return sum(); }`,
 			expected: 100,
+		},
+		{
+			name:     "global array zero initialization",
+			code:     `int arr[5]; int main() { return arr[0] + arr[2] + arr[4]; }`,
+			expected: 0,
+		},
+		{
+			name:     "global 2d array declaration and access",
+			code:     `int matrix[2][3] = {{1, 2, 3}, {4, 5, 6}}; int main() { return matrix[1][2]; }`,
+			expected: 6,
+		},
+		{
+			name:     "global 2d array declaration without init",
+			code:     `int matrix[2][2]; int main() { matrix[0][0] = 7; matrix[1][1] = 9; return matrix[0][0] + matrix[1][1]; }`,
+			expected: 16,
+		},
+		{
+			name:     "global 2d array zero initialization",
+			code:     `int matrix[2][3]; int main() { return matrix[0][0] + matrix[0][2] + matrix[1][1]; }`,
+			expected: 0,
+		},
+		{
+			name:     "global 2d array declaration used in function",
+			code:     `int matrix[2][2] = {{10, 20}, {30, 40}}; int get_sum() { return matrix[0][1] + matrix[1][0]; } int main() { return get_sum(); }`,
+			expected: 50,
 		},
 		{
 			name:     "global variable shadowed by local",

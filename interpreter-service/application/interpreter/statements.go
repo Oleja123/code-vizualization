@@ -173,7 +173,7 @@ func (i *Interpreter) executeReturnStmt(r *converter.ReturnStmt) (ExecResult, er
 		}
 		val = &t
 	}
-	return ExecResult{Signal: SignalReturn, Value: val}, nil
+	return ReturnResult(val), nil
 }
 
 func (i *Interpreter) executeExprStmt(e *converter.ExprStmt) (ExecResult, error) {
@@ -312,11 +312,11 @@ func (i *Interpreter) executeForStmt(loop *converter.ForStmt) (ExecResult, error
 }
 
 func (i *Interpreter) executeBreakStmt() (ExecResult, error) {
-	return ExecResult{Signal: SignalBreak}, nil
+	return BreakResult(), nil
 }
 
 func (i *Interpreter) executeContinueStmt() (ExecResult, error) {
-	return ExecResult{Signal: SignalContinue}, nil
+	return ContinueResult(), nil
 }
 
 func (i *Interpreter) executeFunctionDecl(f *converter.FunctionDecl) (ExecResult, error) {
