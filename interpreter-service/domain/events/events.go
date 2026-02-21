@@ -7,21 +7,24 @@ type EnterScope struct{}
 type ExitScope struct{}
 
 type DeclareVar struct {
-	Name  string
-	Value *int
+	Name     string
+	Value    *int
+	IsGlobal bool
 }
 
 type DeclareArray struct {
-	Name  string
-	Value []int
-	Size  int
+	Name     string
+	Value    []int
+	Size     int
+	IsGlobal bool
 }
 
 type DeclareArray2D struct {
-	Name  string
-	Value [][]int
-	Size1 int
-	Size2 int
+	Name     string
+	Value    [][]int
+	Size1    int
+	Size2    int
+	IsGlobal bool
 }
 
 type VarChanged struct {

@@ -297,6 +297,136 @@ func TestArrayGetElementUninitialized(t *testing.T) {
 	assert.Contains(t, err.Error(), "undefined behavior")
 }
 
+// ============ Array2D Tests ============
+
+func TestNewArray2DWithoutInitGlobal(t *testing.T) {
+	arr2d := NewArray2D("matrix", 2, 3, nil, 0, true)
+
+	require.NotNil(t, arr2d)
+	assert.Equal(t, "matrix", arr2d.Name)
+	assert.Equal(t, 2, arr2d.Size1)
+	assert.Equal(t, 3, arr2d.Size2)
+	assert.Len(t, arr2d.Values, 2)
+
+	for i, row := range arr2d.Values {
+		assert.Equal(t, 3, row.Size)
+		assert.Len(t, row.Values, 3)
+		for j, el := range row.Values {
+			assert.NotNil(t, el.Value, "element at [%d][%d] should have value", i, j)
+			assert.Equal(t, 0, *el.Value, "element at [%d][%d] should be 0", i, j)
+		}
+	}
+}
+
+func TestNewArray2DWithoutInitLocal(t *testing.T) {
+	arr2d := NewArray2D("local_matrix", 2, 2, nil, 0, false)
+
+	require.NotNil(t, arr2d)
+	assert.Equal(t, "local_matrix", arr2d.Name)
+	assert.Equal(t, 2, arr2d.Size1)
+	assert.Equal(t, 2, arr2d.Size2)
+	assert.Len(t, arr2d.Values, 2)
+
+	for _, row := range arr2d.Values {
+		assert.Equal(t, 2, row.Size)
+		assert.Len(t, row.Values, 2)
+		for _, el := range row.Values {
+			assert.Nil(t, el.Value)
+		}
+	}
+}
+
+func TestNewArray2DWithInitializedValues(t *testing.T) {
+	rows := make([]Array, 2)
+	for i := range rows {
+		elements := make([]ArrayElement, 3)
+		for j := range elements {
+			val := i*100 + j*10
+			elements[j] = *NewArrayElement(&val, 0, false)
+		}
+		rows[i] = *NewArray("", 3, elements, 0, false)
+	}
+
+	arr2d := NewArray2D("initialized_matrix", 2, 3, rows, 5, false)
+
+	require.NotNil(t, arr2d)
+	assert.Equal(t, "initialized_matrix", arr2d.Name)
+	assert.Len(t, arr2d.Values, 2)
+
+	for i, row := range arr2d.Values {
+		for j, el := range row.Values {
+			require.NotNil(t, el.Value)
+			assert.Equal(t, i*100+j*10, *el.Value)
+		}
+	}
+}
+
+func TestArray2DChangeElement(t *testing.T) {
+	arr2d := NewArray2D("matrix", 2, 3, nil, 0, true)
+
+	err := arr2d.ChangeElement(1, 2, 42, 3)
+
+	assert.NoError(t, err)
+	assert.Equal(t, 42, *arr2d.Values[1].Values[2].Value)
+	assert.Equal(t, 3, arr2d.Values[1].Values[2].StepChanged)
+}
+
+func TestArray2DChangeElementOutOfBounds(t *testing.T) {
+	arr2d := NewArray2D("matrix", 2, 3, nil, 0, true)
+
+	errRowNegative := arr2d.ChangeElement(-1, 0, 10, 1)
+	assert.Error(t, errRowNegative)
+	assert.Contains(t, errRowNegative.Error(), "undefined behavior")
+
+	errRowTooLarge := arr2d.ChangeElement(2, 0, 10, 1)
+	assert.Error(t, errRowTooLarge)
+	assert.Contains(t, errRowTooLarge.Error(), "undefined behavior")
+
+	errColNegative := arr2d.ChangeElement(0, -1, 10, 1)
+	assert.Error(t, errColNegative)
+	assert.Contains(t, errColNegative.Error(), "undefined behavior")
+
+	errColTooLarge := arr2d.ChangeElement(0, 3, 10, 1)
+	assert.Error(t, errColTooLarge)
+	assert.Contains(t, errColTooLarge.Error(), "undefined behavior")
+}
+
+func TestArray2DGetElement(t *testing.T) {
+	arr2d := NewArray2D("matrix", 2, 3, nil, 0, true)
+	err := arr2d.ChangeElement(0, 1, 99, 1)
+	require.NoError(t, err)
+
+	val, err := arr2d.GetElement(0, 1)
+
+	assert.NoError(t, err)
+	assert.Equal(t, 99, val)
+}
+
+func TestArray2DGetElementOutOfBounds(t *testing.T) {
+	arr2d := NewArray2D("matrix", 2, 3, nil, 0, true)
+
+	_, errRowNegative := arr2d.GetElement(-1, 0)
+	assert.Error(t, errRowNegative)
+
+	_, errRowTooLarge := arr2d.GetElement(2, 0)
+	assert.Error(t, errRowTooLarge)
+
+	_, errColNegative := arr2d.GetElement(0, -1)
+	assert.Error(t, errColNegative)
+
+	_, errColTooLarge := arr2d.GetElement(0, 3)
+	assert.Error(t, errColTooLarge)
+}
+
+func TestArray2DGetElementUninitialized(t *testing.T) {
+	arr2d := NewArray2D("matrix", 2, 3, nil, 0, false)
+
+	_, err := arr2d.GetElement(0, 0)
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "undefined behavior")
+}
+
 // ============ DeclarationStack Tests ============
 
 func TestDeclarationStackDeclareVariable(t *testing.T) {

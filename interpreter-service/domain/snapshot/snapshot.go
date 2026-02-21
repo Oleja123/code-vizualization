@@ -69,12 +69,17 @@ func (sn *Snapshot) applyExitScope() error {
 }
 
 func (sn *Snapshot) applyDeclareVar(e events.DeclareVar, step int) error {
-	variable := runtime.NewVariable(e.Name, e.Value, step, false)
+	variable := runtime.NewVariable(e.Name, e.Value, step, e.IsGlobal)
 	sn.CallStack.DeclareInCurrentFrame(variable)
 	return nil
 }
 
 func (sn *Snapshot) applyDeclareArray(e events.DeclareArray, step int) error {
+	if e.Value == nil {
+		arr := runtime.NewArray(e.Name, e.Size, nil, step, e.IsGlobal)
+		sn.CallStack.DeclareInCurrentFrame(arr)
+		return nil
+	}
 	elements := make([]runtime.ArrayElement, len(e.Value))
 	for i, v := range e.Value {
 		val := v
@@ -86,13 +91,19 @@ func (sn *Snapshot) applyDeclareArray(e events.DeclareArray, step int) error {
 }
 
 func (sn *Snapshot) applyDeclareArray2D(e events.DeclareArray2D, step int) error {
-	elements := make([][]runtime.ArrayElement, len(e.Value))
+	if e.Value == nil {
+		arr := runtime.NewArray2D(e.Name, e.Size1, e.Size2, nil, step, e.IsGlobal)
+		sn.CallStack.DeclareInCurrentFrame(arr)
+		return nil
+	}
+	elements := make([]runtime.Array, len(e.Value))
 	for i := range e.Value {
-		elements[i] = make([]runtime.ArrayElement, len(e.Value[i]))
+		tmp := make([]runtime.ArrayElement, len(e.Value[i]))
 		for j, v := range e.Value[i] {
 			val := v
-			elements[i][j] = *runtime.NewArrayElement(&val, step, false)
+			tmp[j] = *runtime.NewArrayElement(&val, step, false)
 		}
+		elements[i] = *runtime.NewArray("", e.Size2, tmp, step, false)
 	}
 	arr := runtime.NewArray2D(e.Name, e.Size1, e.Size2, elements, step, false)
 	sn.CallStack.DeclareInCurrentFrame(arr)
