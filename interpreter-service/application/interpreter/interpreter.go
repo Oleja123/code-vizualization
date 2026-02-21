@@ -36,10 +36,10 @@ func (i *Interpreter) resolveVariable(name string) (interface{}, error) {
 		return valArray, nil
 	}
 
-	// valArray2D, found := stackFrame.GetArray2D(name)
-	// if found {
-	// 	return valArray2D, nil
-	// }
+	valArray2D, found := stackFrame.GetArray2D(name)
+	if found {
+		return valArray2D, nil
+	}
 
 	return nil, runtimeerrors.NewErrUnexpectedInternalError(fmt.Sprintf("no variable named %s", name))
 }

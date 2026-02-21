@@ -10,14 +10,14 @@ import (
 
 func main() {
 	sourceCode := `
-int fact(int n) {
-	if(n == 0) {
-		return 1;
-	}
-	return n * fact(n - 1);
-}
 int main() {
-    return fact(10);
+    int a[2][2];
+	for(int i = 0; i < 2; i++){
+		for(int j = 0; j < 2; j++) {
+			a[i][j] = i * 2 + j + 1;
+		}
+	}
+	return a[1][1];
 }
 `
 

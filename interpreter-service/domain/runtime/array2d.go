@@ -52,3 +52,10 @@ func (a *Array2D) GetElement(ind1, ind2 int) (int, error) {
 	}
 	return val, nil
 }
+
+func (a *Array2D) GetArray(ind int) (*Array, error) {
+	if ind < 0 || ind >= len(a.Values) {
+		return nil, runtimeerrors.NewErrUndefinedBehavior(fmt.Sprintf("index out of bounds in array2d %s", a.Name))
+	}
+	return &a.Values[ind], nil
+}

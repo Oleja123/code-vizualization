@@ -73,30 +73,38 @@ func (i *Interpreter) executeArrayAccessExpr(a *ArrayAccessExpr) (interface{}, e
 	ind, ok := index.(int)
 
 	if !ok {
-		return nil, runtimeerrors.NewErrUnexpectedInternalError("index iS not an intenger")
+		return nil, runtimeerrors.NewErrUnexpectedInternalError("index is not an intenger")
 	}
 
-	///Если у нас массив
-
-	arr, ok := array.(*runtime.Array)
-
-	if !ok {
-		return nil, runtimeerrors.NewErrUnexpectedInternalError("array type mismatch")
-	}
-
-	val, err := arr.GetElement(ind)
-	if err != nil {
-		return nil, err
-	}
-
-	if a.IsLvalue {
-		return val, nil
-	} else {
-		intVal, err := val.GetValue()
+	switch arr := array.(type) {
+	case *runtime.Array:
+		val, err := arr.GetElement(ind)
 		if err != nil {
 			return nil, err
 		}
-		return intVal, nil
+
+		if a.IsLvalue {
+			return val, nil
+		} else {
+			intVal, err := val.GetValue()
+			if err != nil {
+				return nil, err
+			}
+			return intVal, nil
+		}
+	case *runtime.Array2D:
+		val, err := arr.GetArray(ind)
+		if err != nil {
+			return nil, err
+		}
+
+		if a.IsLvalue {
+			return val, nil
+		} else {
+			return nil, runtimeerrors.NewErrUnexpectedInternalError("array as rvalue")
+		}
+	default:
+		return nil, runtimeerrors.NewErrUnexpectedInternalError("array type mismatch")
 	}
 }
 
@@ -324,6 +332,17 @@ func (i *Interpreter) executeArrayInitExpr(expr *converter.ArrayInitExpr) (inter
 			}
 		}
 		return arrayElementSlice, nil
+	case []runtime.ArrayElement:
+		arraySlice := make([]runtime.Array, len(expr.Elements))
+		for ind, element := range interfaceSlice {
+			val, ok := element.([]runtime.ArrayElement)
+			if !ok {
+				return nil, runtimeerrors.NewErrUnexpectedInternalError("array2d element is not slice of array elements")
+			} else {
+				arraySlice[ind] = *runtime.NewArray("", len(val), val, 0, false)
+			}
+		}
+		return arraySlice, nil
 	default:
 		return nil, runtimeerrors.NewErrUnexpectedInternalError("unexpected array element type")
 	}

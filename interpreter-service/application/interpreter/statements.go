@@ -46,8 +46,8 @@ func (i *Interpreter) executeNonFunctionDecl(v *VariableDecl) (ExecResult, error
 		return i.executeVariableDecl(*v)
 	case 1:
 		return i.executeArrayDecl(*v)
-	// case 2:
-	// 	return i.executeArray2DDecl(*v)
+	case 2:
+		return i.executeArray2DDecl(*v)
 	default:
 		return ExecResult{}, runtimeerrors.NewErrUnexpectedInternalError("unknown decaration type")
 	}
@@ -99,28 +99,28 @@ func (i *Interpreter) executeArrayDecl(v VariableDecl) (ExecResult, error) {
 	return NormalResult(), nil
 }
 
-// func (i *Interpreter) executeArray2DDecl(v VariableDecl) (ExecResult, error) {
-// 	var value []runtime.A
-// 	if v.InitExpr != nil {
-// 		val, err := i.executeExpression(v.InitExpr)
-// 		if err != nil {
-// 			return NormalResult(), err
-// 		}
-// 		v, ok := val.([][]runtime.ArrayElement)
-// 		if !ok {
-// 			return ExecResult{}, runtimeerrors.NewErrUnexpectedInternalError("types mismatch")
-// 		}
-// 		value = v
-// 	}
+func (i *Interpreter) executeArray2DDecl(v VariableDecl) (ExecResult, error) {
+	var value []runtime.Array
+	if v.InitExpr != nil {
+		val, err := i.executeExpression(v.InitExpr)
+		if err != nil {
+			return NormalResult(), err
+		}
+		v, ok := val.([]runtime.Array)
+		if !ok {
+			return ExecResult{}, runtimeerrors.NewErrUnexpectedInternalError("types mismatch")
+		}
+		value = v
+	}
 
-// 	variable := runtime.NewArray2D(v.Name, v.VarType.ArraySizes[0], v.VarType.ArraySizes[1], value, 0, v.IsGlobal) // step=0 пока
+	variable := runtime.NewArray2D(v.Name, v.VarType.ArraySizes[0], v.VarType.ArraySizes[1], value, 0, v.IsGlobal) // step=0 пока
 
-// 	frame := i.CallStack.GetCurrentFrame()
-// 	currentScope := frame.GetCurrentScope()
-// 	currentScope.Declare(variable)
+	frame := i.CallStack.GetCurrentFrame()
+	currentScope := frame.GetCurrentScope()
+	currentScope.Declare(variable)
 
-// 	return NormalResult(), nil
-// }
+	return NormalResult(), nil
+}
 
 func (i *Interpreter) executeBlockStmt(b *converter.BlockStmt) (ExecResult, error) {
 	frame := i.CallStack.GetCurrentFrame()
