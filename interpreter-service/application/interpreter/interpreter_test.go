@@ -1451,3 +1451,229 @@ func TestGlobal(t *testing.T) {
 		})
 	}
 }
+
+// TestDeclarations тестирует разные виды объявлений переменных
+func TestDeclarations(t *testing.T) {
+	tests := []testCase{
+		{
+			name:     "multiple variables no init",
+			code:     `int main() { int a, b, c; a = 5; b = 10; c = 15; return a + b + c; }`,
+			expected: 30,
+		},
+		{
+			name:     "multiple variables with init",
+			code:     `int main() { int x = 1, y = 2, z = 3; return x + y + z; }`,
+			expected: 6,
+		},
+		{
+			name:     "multiple variables mixed init",
+			code:     `int main() { int a = 10, b, c = 30; b = 20; return a + b + c; }`,
+			expected: 60,
+		},
+		{
+			name:     "multiple variables in loop",
+			code:     `int main() { int i, sum, product; i = 0; sum = 0; product = 1; for (i = 1; i <= 5; i++) { sum += i; product *= i; } return sum; }`,
+			expected: 15,
+		},
+		{
+			name:     "multiple variables in condition",
+			code:     `int main() { int x, y, result; x = 5; y = 10; if (x < y) { result = x; } else { result = y; } return result; }`,
+			expected: 5,
+		},
+		{
+			name:     "global multiple variables",
+			code:     `int x = 10, y = 20, z = 30; int main() { return x + y + z; }`,
+			expected: 60,
+		},
+		{
+			name:     "global multiple with no init",
+			code:     `int a, b, c; int main() { a = 5; b = 10; c = 15; return a + b + c; }`,
+			expected: 30,
+		},
+		{
+			name:     "global multiple mixed init",
+			code:     `int first = 100, second, third = 300; int main() { second = 200; return first + second + third; }`,
+			expected: 600,
+		},
+		{
+			name:     "multiple in function parameters and locals",
+			code:     `int add(int a, int b) { int x, y, sum; x = a; y = b; sum = x + y; return sum; } int main() { return add(3, 4); }`,
+			expected: 7,
+		},
+		{
+			name:     "multiple declarations in nested scope",
+			code:     `int main() { int a = 5, b = 10; { int x, y; x = a; y = b; return x + y; } }`,
+			expected: 15,
+		},
+		{
+			name:     "multiple variables in while loop",
+			code:     `int main() { int i, sum; i = 0; sum = 0; while (i < 5) { sum += i; i++; } return sum; }`,
+			expected: 10,
+		},
+		{
+			name:     "multiple variables in do-while",
+			code:     `int main() { int i, count; i = 1; count = 0; do { count++; i++; } while (i <= 3); return count; }`,
+			expected: 3,
+		},
+		{
+			name:     "multiple declarations combined assignment",
+			code:     `int main() { int a, b, c; c = 5; b = c; a = b; return a + b + c; }`,
+			expected: 15,
+		},
+		{
+			name:     "multiple with compound operators",
+			code:     `int main() { int x = 10, y = 5, z = 2; x += y; y *= z; z -= 1; return x + y + z; }`,
+			expected: 26,
+		},
+		{
+			name:     "multiple variables used in expression",
+			code:     `int main() { int a = 2, b = 3, c = 4; return a * b + c; }`,
+			expected: 10,
+		},
+		{
+			name:     "global multiple in functions",
+			code:     `int a = 2, b = 3, c = 4; int calc() { return a * b + c; } int main() { return calc(); }`,
+			expected: 10,
+		},
+		{
+			name:     "multiple declarations with recursion",
+			code:     `int factorial(int n) { int result; if (n <= 1) { result = 1; } else { result = n * factorial(n - 1); } return result; } int main() { int x, y; x = 5; y = factorial(x); return y; }`,
+			expected: 120,
+		},
+		{
+			name:     "multiple variables in array initialization",
+			code:     `int main() { int i, sum, arr[3]; i = 0; sum = 0; arr[0] = 10; arr[1] = 20; arr[2] = 30; for (i = 0; i < 3; i++) { sum += arr[i]; } return sum; }`,
+			expected: 60,
+		},
+		{
+			name:     "multiple in complex expression",
+			code:     `int main() { int x = 1, y = 2, z = 3; int result = (x + y) * (z - 1) + x; return result; }`,
+			expected: 7,
+		},
+		{
+			name:     "multiple with logical operators",
+			code:     `int main() { int a = 5, b = 10, c = 15; int result; if ((a < b) && (b < c)) { result = 1; } else { result = 0; } return result; }`,
+			expected: 1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := runCode(t, tt.code)
+			assert.Equal(t, tt.expected, *result)
+		})
+	}
+}
+
+// TestMultipleArrayDeclarations тестирует объявления нескольких массивов в одном операторе
+func TestMultipleArrayDeclarations(t *testing.T) {
+	tests := []testCase{
+		{
+			name:     "multiple arrays no init",
+			code:     `int main() { int a[2], b[3]; a[0] = 10; a[1] = 20; b[0] = 30; b[1] = 40; b[2] = 50; return a[0] + a[1] + b[0] + b[1] + b[2]; }`,
+			expected: 150,
+		},
+		{
+			name:     "multiple arrays with init",
+			code:     `int main() { int a[2] = {1, 2}, b[3] = {3, 4, 5}; return a[0] + a[1] + b[0] + b[1] + b[2]; }`,
+			expected: 15,
+		},
+		{
+			name:     "multiple arrays mixed init",
+			code:     `int main() { int a[2] = {10, 20}, b[2], c[2] = {30, 40}; b[0] = 25; b[1] = 35; return a[0] + b[0] + c[0] + c[1]; }`,
+			expected: 105,
+		},
+		{
+			name:     "multiple arrays in loop",
+			code:     `int main() { int a[3], b[3]; int i, sum = 0; for (i = 0; i < 3; i++) { a[i] = i + 1; b[i] = (i + 1) * 10; sum += a[i] + b[i]; } return sum; }`,
+			expected: 66,
+		},
+		{
+			name:     "global multiple arrays",
+			code:     `int arr[2] = {5, 10}, brr[3] = {1, 2, 3}; int main() { return arr[0] + arr[1] + brr[0] + brr[1] + brr[2]; }`,
+			expected: 21,
+		},
+		{
+			name:     "global multiple no init",
+			code:     `int a[2], b[3]; int main() { a[0] = 100; a[1] = 200; b[0] = 1; b[1] = 2; b[2] = 3; return a[0] + a[1] + b[0] + b[1] + b[2]; }`,
+			expected: 306,
+		},
+		{
+			name:     "variable and array together",
+			code:     `int main() { int x = 10, arr[2] = {5, 15}; return x + arr[0] + arr[1]; }`,
+			expected: 30,
+		},
+		{
+			name:     "variable arrays and variables",
+			code:     `int main() { int x = 5, a[2] = {10, 20}, y = 15; return x + a[0] + a[1] + y; }`,
+			expected: 50,
+		},
+		{
+			name:     "global variables and arrays",
+			code:     `int x = 10, arr[2] = {5, 15}, y = 20; int main() { return x + arr[0] + arr[1] + y; }`,
+			expected: 50,
+		},
+		{
+			name:     "multiple arrays accessed in function",
+			code:     `int get_sum() { int a[2] = {1, 2}, b[2] = {3, 4}; return a[0] + a[1] + b[0] + b[1]; } int main() { return get_sum(); }`,
+			expected: 10,
+		},
+		{
+			name:     "2d and 1d arrays together",
+			code:     `int main() { int a[2] = {10, 20}, m[2][2] = {{1, 2}, {3, 4}}; return a[0] + m[1][1]; }`,
+			expected: 14,
+		},
+		{
+			name:     "multiple 2d arrays",
+			code:     `int main() { int m1[2][2] = {{1, 2}, {3, 4}}, m2[2][2] = {{5, 6}, {7, 8}}; return m1[0][0] + m2[1][1]; }`,
+			expected: 9,
+		},
+		{
+			name:     "multiple 2d no init",
+			code:     `int main() { int m1[2][2], m2[2][2]; m1[0][0] = 5; m1[1][1] = 10; m2[0][0] = 20; m2[1][1] = 30; return m1[0][0] + m1[1][1] + m2[0][0] + m2[1][1]; }`,
+			expected: 65,
+		},
+		{
+			name:     "global multiple 2d arrays",
+			code:     `int m1[2][2] = {{10, 20}, {30, 40}}, m2[2][2] = {{1, 2}, {3, 4}}; int main() { return m1[0][0] + m2[1][1]; }`,
+			expected: 14,
+		},
+		{
+			name:     "multiple arrays in nested scopes",
+			code:     `int main() { int a[2] = {1, 2}; { int b[2] = {3, 4}; int c[2]; c[0] = 5; c[1] = 6; return a[0] + b[0] + c[1]; } }`,
+			expected: 10,
+		},
+		{
+			name:     "multiple arrays modification in loop",
+			code:     `int main() { int a[2] = {1, 1}, b[2] = {1, 1}; int i; for (i = 0; i < 2; i++) { a[i] *= 5; b[i] *= 10; } return a[0] + a[1] + b[0] + b[1]; }`,
+			expected: 30,
+		},
+		{
+			name:     "multiple with array expression",
+			code:     `int main() { int a[3] = {2, 3, 4}, b[3] = {1, 1, 1}; int i, sum = 0; for (i = 0; i < 3; i++) { sum += a[i] * b[i]; } return sum; }`,
+			expected: 9,
+		},
+		{
+			name:     "global mixed multiple declarations",
+			code:     `int x = 5, arr[2] = {10, 20}, y = 15, brr[3] = {1, 2, 3}; int main() { return x + arr[0] + y + brr[2]; }`,
+			expected: 33,
+		},
+		{
+			name:     "multiple arrays in condition",
+			code:     `int main() { int a[2] = {5, 10}, b[2] = {7, 3}; int result; if (a[0] < a[1] && b[0] > b[1]) { result = 100; } else { result = 0; } return result; }`,
+			expected: 100,
+		},
+		{
+			name:     "multiple arrays parameter and local",
+			code:     `int process(int val) { int a[2] = {1, 2}, b[2] = {3, 4}; return val + a[0] + b[1]; } int main() { return process(10); }`,
+			expected: 15,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := runCode(t, tt.code)
+			assert.Equal(t, tt.expected, *result)
+		})
+	}
+}

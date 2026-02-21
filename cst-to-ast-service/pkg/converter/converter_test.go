@@ -2376,3 +2376,214 @@ end:
 		t.Error("if with goto to 'end' not found inside do-while")
 	}
 }
+
+// TestMultipleVariableDeclarations проверяет парсинг нескольких переменных в одном объявлении
+func TestMultipleVariableDeclarations(t *testing.T) {
+	sourceCode := []byte(`int main() {
+	int a, b, c;
+	return 0;
+}`)
+
+	conv := NewCConverter()
+	tree, err := conv.Parse(sourceCode)
+	if err != nil {
+		t.Fatalf("Parse failed: %v", err)
+	}
+
+	ast, err := conv.ConvertToProgram(tree, sourceCode)
+	if err != nil {
+		t.Fatalf("ConvertToProgram failed: %v", err)
+	}
+
+	program := ast.(*structs.Program)
+	funcDecl, ok := program.Declarations[0].(*structs.FunctionDecl)
+	if !ok {
+		t.Fatalf("Expected FunctionDecl, got %T", program.Declarations[0])
+	}
+
+	// Должно быть как минимум 3 statement: три VariableDecl и ReturnStmt
+	if len(funcDecl.Body.Statements) < 3 {
+		t.Fatalf("Expected at least 3 statements, got %d", len(funcDecl.Body.Statements))
+	}
+
+	varDeclA, ok := funcDecl.Body.Statements[0].(*structs.VariableDecl)
+	if !ok {
+		t.Fatalf("Expected first statement to be VariableDecl, got %T", funcDecl.Body.Statements[0])
+	}
+
+	varDeclB, ok := funcDecl.Body.Statements[1].(*structs.VariableDecl)
+	if !ok {
+		t.Fatalf("Expected second statement to be VariableDecl, got %T", funcDecl.Body.Statements[1])
+	}
+
+	varDeclC, ok := funcDecl.Body.Statements[2].(*structs.VariableDecl)
+	if !ok {
+		t.Fatalf("Expected third statement to be VariableDecl, got %T", funcDecl.Body.Statements[2])
+	}
+
+	if varDeclA.Name != "a" {
+		t.Errorf("Expected first variable name 'a', got '%s'", varDeclA.Name)
+	}
+	if varDeclB.Name != "b" {
+		t.Errorf("Expected second variable name 'b', got '%s'", varDeclB.Name)
+	}
+	if varDeclC.Name != "c" {
+		t.Errorf("Expected third variable name 'c', got '%s'", varDeclC.Name)
+	}
+
+	if varDeclA.VarType.BaseType != "int" {
+		t.Errorf("Expected type 'int', got '%s'", varDeclA.VarType.BaseType)
+	}
+	if varDeclB.VarType.BaseType != "int" {
+		t.Errorf("Expected type 'int', got '%s'", varDeclB.VarType.BaseType)
+	}
+	if varDeclC.VarType.BaseType != "int" {
+		t.Errorf("Expected type 'int', got '%s'", varDeclC.VarType.BaseType)
+	}
+}
+
+// TestMultipleVariableDeclarationsWithInit проверяет парсинг нескольких переменных с инициализацией
+func TestMultipleVariableDeclarationsWithInit(t *testing.T) {
+	sourceCode := []byte(`int main() {
+	int x = 1, y = 2, z = 3;
+	return 0;
+}`)
+
+	conv := NewCConverter()
+	tree, err := conv.Parse(sourceCode)
+	if err != nil {
+		t.Fatalf("Parse failed: %v", err)
+	}
+
+	ast, err := conv.ConvertToProgram(tree, sourceCode)
+	if err != nil {
+		t.Fatalf("ConvertToProgram failed: %v", err)
+	}
+
+	program := ast.(*structs.Program)
+	funcDecl, ok := program.Declarations[0].(*structs.FunctionDecl)
+	if !ok {
+		t.Fatalf("Expected FunctionDecl, got %T", program.Declarations[0])
+	}
+
+	if len(funcDecl.Body.Statements) < 3 {
+		t.Fatalf("Expected at least 3 statements, got %d", len(funcDecl.Body.Statements))
+	}
+
+	varDeclX, ok := funcDecl.Body.Statements[0].(*structs.VariableDecl)
+	if !ok {
+		t.Fatalf("Expected first statement to be VariableDecl, got %T", funcDecl.Body.Statements[0])
+	}
+
+	varDeclY, ok := funcDecl.Body.Statements[1].(*structs.VariableDecl)
+	if !ok {
+		t.Fatalf("Expected second statement to be VariableDecl, got %T", funcDecl.Body.Statements[1])
+	}
+
+	varDeclZ, ok := funcDecl.Body.Statements[2].(*structs.VariableDecl)
+	if !ok {
+		t.Fatalf("Expected third statement to be VariableDecl, got %T", funcDecl.Body.Statements[2])
+	}
+
+	if varDeclX.Name != "x" {
+		t.Errorf("Expected first variable name 'x', got '%s'", varDeclX.Name)
+	}
+	if varDeclY.Name != "y" {
+		t.Errorf("Expected second variable name 'y', got '%s'", varDeclY.Name)
+	}
+	if varDeclZ.Name != "z" {
+		t.Errorf("Expected third variable name 'z', got '%s'", varDeclZ.Name)
+	}
+
+	// Проверяем инициализацию
+	if varDeclX.InitExpr == nil {
+		t.Error("Expected x to have initializer")
+	} else {
+		intLitX, ok := varDeclX.InitExpr.(*structs.IntLiteral)
+		if !ok {
+			t.Fatalf("Expected x to have IntLiteral initializer, got %T", varDeclX.InitExpr)
+		}
+		if intLitX.Value != 1 {
+			t.Errorf("Expected x initializer to be 1, got %d", intLitX.Value)
+		}
+	}
+
+	if varDeclY.InitExpr == nil {
+		t.Error("Expected y to have initializer")
+	} else {
+		intLitY, ok := varDeclY.InitExpr.(*structs.IntLiteral)
+		if !ok {
+			t.Fatalf("Expected y to have IntLiteral initializer, got %T", varDeclY.InitExpr)
+		}
+		if intLitY.Value != 2 {
+			t.Errorf("Expected y initializer to be 2, got %d", intLitY.Value)
+		}
+	}
+
+	if varDeclZ.InitExpr == nil {
+		t.Error("Expected z to have initializer")
+	} else {
+		intLitZ, ok := varDeclZ.InitExpr.(*structs.IntLiteral)
+		if !ok {
+			t.Fatalf("Expected z to have IntLiteral initializer, got %T", varDeclZ.InitExpr)
+		}
+		if intLitZ.Value != 3 {
+			t.Errorf("Expected z initializer to be 3, got %d", intLitZ.Value)
+		}
+	}
+}
+
+// TestMultipleGlobalVariableDeclarations проверяет парсинг нескольких глобальных переменных
+func TestMultipleGlobalVariableDeclarations(t *testing.T) {
+	sourceCode := []byte(`int a, b, c;
+int main() {
+	return 0;
+}`)
+
+	conv := NewCConverter()
+	tree, err := conv.Parse(sourceCode)
+	if err != nil {
+		t.Fatalf("Parse failed: %v", err)
+	}
+
+	ast, err := conv.ConvertToProgram(tree, sourceCode)
+	if err != nil {
+		t.Fatalf("ConvertToProgram failed: %v", err)
+	}
+
+	program := ast.(*structs.Program)
+
+	// Проверяем что есть 3 глобальные переменные и 1 функция
+	if len(program.Declarations) < 4 {
+		t.Fatalf("Expected at least 4 declarations (3 vars + 1 function), got %d", len(program.Declarations))
+	}
+
+	varA, ok := program.Declarations[0].(*structs.VariableDecl)
+	if !ok {
+		t.Fatalf("Expected first declaration to be VariableDecl, got %T", program.Declarations[0])
+	}
+	if varA.Name != "a" {
+		t.Errorf("Expected first variable name 'a', got '%s'", varA.Name)
+	}
+
+	varB, ok := program.Declarations[1].(*structs.VariableDecl)
+	if !ok {
+		t.Fatalf("Expected second declaration to be VariableDecl, got %T", program.Declarations[1])
+	}
+	if varB.Name != "b" {
+		t.Errorf("Expected second variable name 'b', got '%s'", varB.Name)
+	}
+
+	varC, ok := program.Declarations[2].(*structs.VariableDecl)
+	if !ok {
+		t.Fatalf("Expected third declaration to be VariableDecl, got %T", program.Declarations[2])
+	}
+	if varC.Name != "c" {
+		t.Errorf("Expected third variable name 'c', got '%s'", varC.Name)
+	}
+
+	_, ok = program.Declarations[3].(*structs.FunctionDecl)
+	if !ok {
+		t.Fatalf("Expected fourth declaration to be FunctionDecl, got %T", program.Declarations[3])
+	}
+}

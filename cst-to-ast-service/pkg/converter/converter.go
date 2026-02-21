@@ -137,6 +137,16 @@ func (c *CConverter) ConvertToProgram(tree *sitter.Tree, sourceCode []byte) (int
 			continue
 		}
 
+		// Специальная обработка для declarations с несколькими declarators
+		if child.Type() == "declaration" {
+			stmts, err := c.convertDeclarationsMultiple(child, sourceCode)
+			if err != nil {
+				return nil, newConverterError(ErrStmtConversion, "failed to convert declaration", child, err)
+			}
+			program.Declarations = append(program.Declarations, stmts...)
+			continue
+		}
+
 		stmt, err := c.ConvertStmt(child, sourceCode)
 		if err != nil {
 			return nil, newConverterError(ErrStmtConversion, "failed to convert statement", child, err)
@@ -460,6 +470,107 @@ func (c *CConverter) convertDeclaration(node *sitter.Node, sourceCode []byte) (i
 		InitExpr: initExpr,
 		Loc:      c.getLocation(node),
 	}, nil
+}
+
+// convertDeclarationsMultiple обрабатывает объявление с несколькими declarators (например, int a, b, c;)
+// Возвращает срез VariableDecl для каждого declarator
+func (c *CConverter) convertDeclarationsMultiple(node *sitter.Node, sourceCode []byte) ([]interfaces.Stmt, error) {
+	var typeNode *sitter.Node
+	var declaratorNodes []*sitter.Node // Собираем все declarators
+	var initNodes map[int]*sitter.Node // Карта инициализаторов по индексу
+	var declarations []interfaces.Stmt
+
+	initNodes = make(map[int]*sitter.Node)
+
+	// Первый проход: найти тип и собрать все declarators с их инициализаторами
+	declIndex := 0
+	for i := 0; i < int(node.ChildCount()); i++ {
+		child := node.Child(i)
+		childType := child.Type()
+
+		switch childType {
+		case "primitive_type", "type_identifier":
+			typeNode = child
+
+		case "init_declarator":
+			// init_declarator содержит: declarator [= initializer]
+			// Нужно извлечь declarator часть
+			var declarator *sitter.Node
+			var foundEquals bool
+
+			for j := 0; j < int(child.ChildCount()); j++ {
+				subChild := child.Child(j)
+				subType := subChild.Type()
+
+				if subType == "=" {
+					foundEquals = true
+				}
+
+				// До '=' это declarator
+				if !foundEquals && (subType == "identifier" || subType == "pointer_declarator" || subType == "array_declarator") {
+					declarator = subChild
+				}
+
+				// После '=' это initializer
+				if foundEquals && subType != "=" && subType != "comment" {
+					if declarator != nil { // Убедимся что мы нашли declarator
+						initNodes[declIndex] = subChild
+						break
+					}
+				}
+			}
+
+			if declarator != nil {
+				declaratorNodes = append(declaratorNodes, declarator)
+				declIndex++
+			}
+
+		case "identifier", "pointer_declarator", "array_declarator":
+			// Это declarator без инициализации
+			declaratorNodes = append(declaratorNodes, child)
+			declIndex++
+		}
+	}
+
+	if typeNode == nil {
+		return nil, newConverterError(ErrStmtConversion, "declaration without type", node, nil)
+	}
+
+	if len(declaratorNodes) == 0 {
+		return nil, newConverterError(ErrStmtConversion, "declaration without declarators", node, nil)
+	}
+
+	// Для каждого declarator создаём отдельное VariableDecl
+	for idx, declNode := range declaratorNodes {
+		varType, varName := c.parseDeclarator(declNode, sourceCode)
+		varType.BaseType = c.getNodeText(typeNode, sourceCode)
+
+		if varName == "" {
+			return nil, newConverterError(ErrStmtConversion, "declaration without variable name", declNode, nil)
+		}
+
+		// Проверяем есть ли инициализатор для этого declarator
+		var initExpr interfaces.Expr
+		var err error
+
+		if initNode, hasInit := initNodes[idx]; hasInit {
+			initExpr, err = c.ConvertExpr(initNode, sourceCode)
+			if err != nil {
+				return nil, newConverterError(ErrStmtConversion, "failed to convert initializer", initNode, err)
+			}
+		}
+
+		varDecl := &structs.VariableDecl{
+			Type:     "VariableDecl",
+			VarType:  varType,
+			Name:     varName,
+			InitExpr: initExpr,
+			Loc:      c.getLocation(declNode),
+		}
+		declarations = append(declarations, varDecl)
+	}
+
+	return declarations, nil
 }
 
 func (c *CConverter) parseDeclarator(node *sitter.Node, sourceCode []byte) (structs.Type, string) {
@@ -909,11 +1020,20 @@ func (c *CConverter) convertForStatement(node *sitter.Node, sourceCode []byte) (
 
 		switch child.Type() {
 		case "declaration":
-			stmt, err := c.ConvertStmt(child, sourceCode)
+			stmts, err := c.convertDeclarationsMultiple(child, sourceCode)
 			if err != nil {
 				return nil, err
 			}
-			init = stmt
+			// Если несколько statements из declaration, оборачиваем их в BlockStmt
+			if len(stmts) > 1 {
+				init = &structs.BlockStmt{
+					Type:       "BlockStmt",
+					Statements: stmts,
+					Loc:        c.getLocation(child),
+				}
+			} else if len(stmts) == 1 {
+				init = stmts[0]
+			}
 
 		case "expression_statement":
 			if partIndex == 0 {
@@ -994,6 +1114,16 @@ func (c *CConverter) convertBlockStatement(node *sitter.Node, sourceCode []byte)
 
 		// Пропускаем фигурные скобки и комментарии
 		if child.Type() == "{" || child.Type() == "}" || child.Type() == "comment" {
+			continue
+		}
+
+		// Специальная обработка для declarations с несколькими declarators
+		if child.Type() == "declaration" {
+			stmts, err := c.convertDeclarationsMultiple(child, sourceCode)
+			if err != nil {
+				return nil, err
+			}
+			statements = append(statements, stmts...)
 			continue
 		}
 

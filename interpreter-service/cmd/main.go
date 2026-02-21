@@ -10,7 +10,20 @@ import (
 
 func main() {
 	sourceCode := `
-int f() { return 1; }
+int main() {
+	int a = 0, b = 10, min, max;
+	
+	if (a < b) {
+		min = a;
+		max = b;
+	}
+	else {
+		min = b;
+		max = a;
+	}
+
+	return max;
+}
 `
 
 	conv := converter.New()
