@@ -3,6 +3,7 @@ package flowchart;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import flowchart.ast.Program;
 import flowchart.builder.FlowchartBuilder;
+import flowchart.builder.GraphDebugPrinter;
 import flowchart.model.FlowchartNode;
 import flowchart.renderer.SVGRenderer;
 
@@ -43,6 +44,8 @@ public class FlowchartGenerator {
         
         // 2. Строим граф блок-схемы
         FlowchartNode flowchart = builder.buildFromProgram(program);
+
+        GraphDebugPrinter.print(flowchart);
         
         // 3. Рендерим в SVG
         return renderer.render(flowchart);

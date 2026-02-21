@@ -25,14 +25,10 @@ public class FlowchartBuilder {
         TerminalNode start = new TerminalNode(func.getName(), true);
         start.setAstLocation(toLocation(func.getLocation()));
 
-        // Конец — всегда один, всегда самый последний
         TerminalNode end = new TerminalNode("конец", false);
 
-        // Строим тело
         FlowchartNode body = buildStatement(func.getBody());
 
-        // Ищем «хвост» линейной цепочки (последний узел перед концом)
-        // и подцепляем конец к нему
         if (body != null) {
             start.addNext(body);
             attachEnd(body, end, new HashSet<>());
@@ -44,18 +40,14 @@ public class FlowchartBuilder {
     }
 
     /**
-     * Рекурсивно обходит граф и цепляет `end` ко всем
-     * «листьям» — узлам у которых нет исходящих рёбер.
-     *
-     * Правило одно: листом считается узел, у которого next пуст,
-     * и при этом это не сам терминал конца.
+     * Рекурсивно обходит граф и цепляет `end` ко всем листьям.
      */
     private void attachEnd(FlowchartNode node, TerminalNode end, Set<FlowchartNode> visited) {
         if (node == null || visited.contains(node)) return;
         if (node == end) return;
         visited.add(node);
 
-        // ProcessNode с return — подключаем к концу
+        // return-узел → привязываем конец
         if (node instanceof ProcessNode p
                 && p.getLabel() != null
                 && p.getLabel().startsWith("return")) {
@@ -65,32 +57,46 @@ public class FlowchartBuilder {
             return;
         }
 
-        // Листовой узел (нет next) — подключаем к концу
+        // break/continue коннекторы — не трогаем, они управляются циклом
+        if (node instanceof ConnectorNode) {
+            return;
+        }
+
+        if (node instanceof LoopStartNode loop) {
+            // Обходим тело цикла
+            attachEnd(loop.getLoopBody(), end, visited);
+            // EXIT цикла — НЕ трогаем: exitNode должен быть следующим узлом после цикла,
+            // который будет подключён через linkNodes в buildBlock.
+            // Если exitNode уже установлен — обходим его продолжение.
+            if (loop.getExitNode() != null) {
+                attachEnd(loop.getExitNode(), end, visited);
+            }
+            // Если exitNode == null — его подключит linkNodes или он останется null
+            // (attachEnd не должен сам ставить end как exitNode!)
+            return;
+        }
+
+        if (node instanceof DecisionNode decision) {
+            attachEnd(decision.getTrueBranch(), end, visited);
+            attachEnd(decision.getFalseBranch(), end, visited);
+            // Sanitize NEXT: remove any entries that are branches or null (guard against builder bugs)
+            decision.getNext().removeIf(n ->
+                    n == null ||
+                            n == decision.getTrueBranch() ||
+                            n == decision.getFalseBranch());
+            for (FlowchartNode n : new ArrayList<>(decision.getNext())) {
+                attachEnd(n, end, visited);
+            }
+            return;
+        }
+
         if (node.getNext().isEmpty()) {
             node.addNext(end);
             return;
         }
 
-        // Рекурсия по всем дочерним
         for (FlowchartNode next : new ArrayList<>(node.getNext())) {
             attachEnd(next, end, visited);
-        }
-
-        // DecisionNode: дополнительно обходим ветки
-        if (node instanceof DecisionNode decision) {
-            attachEnd(decision.getTrueBranch(), end, visited);
-            attachEnd(decision.getFalseBranch(), end, visited);
-        }
-
-        // LoopStartNode: обходим тело и exitNode
-        if (node instanceof LoopStartNode loop) {
-            attachEnd(loop.getLoopBody(), end, visited);
-            // Для exitNode тоже нужно вызвать attachEnd
-            if (loop.getExitNode() != null && loop.getExitNode() != end) {
-                attachEnd(loop.getExitNode(), end, visited);
-            } else if (loop.getExitNode() == null) {
-                loop.setExitNode(end);
-            }
         }
     }
 
@@ -99,15 +105,15 @@ public class FlowchartBuilder {
     // ──────────────────────────────────────────────────────────
 
     private FlowchartNode buildStatement(Statement stmt) {
-        if (stmt instanceof BlockStmt b)   return buildBlock(b);
+        if (stmt instanceof BlockStmt b)    return buildBlock(b);
         if (stmt instanceof VariableDecl v) return buildVar(v);
-        if (stmt instanceof ExprStmt e)    return buildExpr(e);
-        if (stmt instanceof IfStmt i)      return buildIf(i);
-        if (stmt instanceof WhileStmt w)   return buildWhile(w);
-        if (stmt instanceof ForStmt f)     return buildFor(f);
-        if (stmt instanceof ReturnStmt r)  return buildReturn(r);
-        if (stmt instanceof BreakStmt)     return new ConnectorNode("break");
-        if (stmt instanceof ContinueStmt)  return new ConnectorNode("continue");
+        if (stmt instanceof ExprStmt e)     return buildExpr(e);
+        if (stmt instanceof IfStmt i)       return buildIf(i);
+        if (stmt instanceof WhileStmt w)    return buildWhile(w);
+        if (stmt instanceof ForStmt f)      return buildFor(f);
+        if (stmt instanceof ReturnStmt r)   return buildReturn(r);
+        if (stmt instanceof BreakStmt)      return new ConnectorNode("break");
+        if (stmt instanceof ContinueStmt)   return new ConnectorNode("continue");
         throw new RuntimeException("Unknown stmt: " + stmt);
     }
 
@@ -122,29 +128,79 @@ public class FlowchartBuilder {
             if (first == null) first = node;
 
             if (prev != null) {
-                FlowchartNode last = findTail(prev);
-                if (last != null) {
-                    // Для LoopStartNode нужно подключить следующий узел как exitNode
-                    if (last instanceof LoopStartNode loop) {
-                        // Если у цикла еще нет exitNode, устанавливаем его
-                        if (loop.getExitNode() == null) {
-                            loop.setExitNode(node);
-                        } else {
-                            // Если exitNode уже установлен, добавляем следующий узел к нему
-                            FlowchartNode exitTail = findTail(loop.getExitNode());
-                            if (exitTail != null && exitTail.getNext().isEmpty()) {
-                                exitTail.addNext(node);
-                            }
-                        }
-                    } else {
-                        last.addNext(node);
-                    }
-                }
+                linkNodes(prev, node);
             }
             prev = node;
         }
 
         return first;
+    }
+
+    /**
+     * Соединяет конец предыдущего узла с началом следующего.
+     */
+    private void linkNodes(FlowchartNode prev, FlowchartNode next) {
+        if (prev instanceof LoopStartNode loop) {
+            if (loop.getExitNode() == null) {
+                loop.setExitNode(next);
+            } else {
+                linkNodes(loop.getExitNode(), next);
+            }
+            return;
+        }
+
+        if (prev instanceof DecisionNode decision) {
+            // Не добавлять в NEXT то, что уже является веткой
+            if (next == decision.getTrueBranch()) return;
+            if (next == decision.getFalseBranch()) return;
+            if (next != null && next != decision.getTrueBranch() && next != decision.getFalseBranch()
+                    && !decision.getNext().contains(next)) {
+                decision.addNext(next);
+            }
+            return;
+        }
+
+        Set<FlowchartNode> visited = new HashSet<>();
+        linkLeaves(prev, next, visited);
+    }
+
+    private void linkLeaves(FlowchartNode node, FlowchartNode next, Set<FlowchartNode> visited) {
+        if (node == null || visited.contains(node) || node == next) return;
+        visited.add(node);
+
+        if (node instanceof LoopStartNode loop) {
+            if (loop.getExitNode() == null) {
+                loop.setExitNode(next);
+            } else {
+                linkLeaves(loop.getExitNode(), next, visited);
+            }
+            return;
+        }
+
+        if (node instanceof DecisionNode decision) {
+            if (next == decision.getTrueBranch()) return;
+            if (next == decision.getFalseBranch()) return;
+            if (next != null && next != decision.getTrueBranch() && next != decision.getFalseBranch()
+                    && !decision.getNext().contains(next)) {
+                decision.addNext(next);
+            }
+            return;
+        }
+
+        // break/continue — не подключаем к следующему узлу блока
+        if (node instanceof ConnectorNode) {
+            return;
+        }
+
+        if (node.getNext().isEmpty()) {
+            node.addNext(next);
+            return;
+        }
+
+        for (FlowchartNode child : new ArrayList<>(node.getNext())) {
+            if (child instanceof LoopEndNode) continue;
+            linkLeaves(child, next, visited);
+        }
     }
 
     private FlowchartNode buildVar(VariableDecl d) {
@@ -195,10 +251,20 @@ public class FlowchartBuilder {
         LoopEndNode end = new LoopEndNode();
         end.setLoopStart(start);
 
-        FlowchartNode lastBody = findTail(body);
-        if (lastBody != null && lastBody != start) {
-            lastBody.addNext(end);
+        // Хвосты тела → LoopEndNode
+        if (body != null) {
+            Set<FlowchartNode> visited = new HashSet<>();
+            linkLeaves(body, end, visited);
         }
+
+        // LoopEndNode → обратно к началу (только один раз!)
+        if (!end.getNext().contains(start)) {
+            end.addNext(start);
+        }
+
+        // exitNode будет установлен через linkNodes в buildBlock,
+        // когда после while идёт следующий оператор.
+        // Здесь намеренно НЕ устанавливаем exitNode.
 
         return start;
     }
@@ -217,15 +283,18 @@ public class FlowchartBuilder {
         LoopEndNode end = new LoopEndNode();
         end.setLoopStart(start);
 
-        FlowchartNode lastBody = findTail(body);
-        if (lastBody != null && lastBody != start) {
+        if (body != null) {
+            Set<FlowchartNode> visited = new HashSet<>();
             if (post != null) {
-                lastBody.addNext(post);
+                linkLeaves(body, post, visited);
                 post.addNext(end);
             } else {
-                lastBody.addNext(end);
+                linkLeaves(body, end, visited);
             }
         }
+
+        // Только один переход назад
+        end.addNext(start);
 
         if (init != null) {
             init.addNext(start);
@@ -239,34 +308,11 @@ public class FlowchartBuilder {
     //  Helpers
     // ──────────────────────────────────────────────────────────
 
-    /**
-     * Находит «хвостовой» узел линейной цепочки.
-     * Останавливается на LoopStart/LoopEnd/Decision — они сами управляют ветвлением.
-     */
-    private FlowchartNode findTail(FlowchartNode node) {
-        return findTail(node, new HashSet<>());
-    }
-
-    private FlowchartNode findTail(FlowchartNode node, Set<FlowchartNode> visited) {
-        if (node == null || visited.contains(node)) return null;
-        visited.add(node);
-
-        if (node instanceof TerminalNode t && !t.isStart()) return node;
-        if (node instanceof LoopStartNode) return node;
-        if (node instanceof LoopEndNode)   return node;
-        if (node instanceof DecisionNode)  return node;
-
-        List<FlowchartNode> next = node.getNext();
-        if (next.isEmpty())  return node;
-        if (next.size() > 1) return node;
-
-        return findTail(next.get(0), visited);
-    }
-
     private String expr(Expression e) {
         if (e == null) return "?";
-        if (e instanceof IntLiteral i)    return String.valueOf(i.getValue());
-        if (e instanceof VariableExpr v)  return v.getName();
+        if (e instanceof IntLiteral i)       return String.valueOf(i.getValue());
+        if (e instanceof VariableExpr v)     return v.getName();
+        if (e instanceof ArrayAccessExpr a)  return expr(a.getArray()) + "[" + expr(a.getIndex()) + "]";
         if (e instanceof BinaryExpr b)
             return expr(b.getLeft()) + " " + b.getOp() + " " + expr(b.getRight());
         if (e instanceof UnaryExpr u)
