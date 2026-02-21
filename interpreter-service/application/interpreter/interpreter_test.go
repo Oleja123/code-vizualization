@@ -930,6 +930,81 @@ func TestFunction(t *testing.T) {
 			code:     `int test(int x) { if (x > 10) { int x = 100; return x; } return x; } int main() { return test(5) + test(15); }`,
 			expected: 105,
 		},
+		{
+			name:     "void function modifies global",
+			code:     `int g = 0; void set_value(int val) { g = val; } int main() { set_value(42); return g; }`,
+			expected: 42,
+		},
+		{
+			name:     "void function no params",
+			code:     `int counter = 0; void increment() { counter = counter + 1; } int main() { increment(); increment(); increment(); return counter; }`,
+			expected: 3,
+		},
+		{
+			name:     "void function with multiple params",
+			code:     `int a = 0, b = 0; void set_both(int x, int y) { a = x; b = y; } int main() { set_both(10, 20); return a + b; }`,
+			expected: 30,
+		},
+		{
+			name:     "void function calls int function",
+			code:     `int g = 0; int get_value() { return 100; } void update() { g = get_value(); } int main() { update(); return g; }`,
+			expected: 100,
+		},
+		{
+			name:     "void function with conditional",
+			code:     `int result = 0; void check(int x) { if (x > 5) { result = 10; } else { result = 20; } } int main() { check(3); int r1 = result; check(8); return r1 + result; }`,
+			expected: 30,
+		},
+		{
+			name:     "void function with loop",
+			code:     `int sum = 0; void add_range(int n) { int i; for (i = 0; i < n; i++) { sum = sum + i; } } int main() { add_range(5); return sum; }`,
+			expected: 10,
+		},
+		{
+			name:     "void function with early return",
+			code:     `int val = 0; void set_if_positive(int x) { if (x < 0) { return; } val = x; } int main() { set_if_positive(-5); int r1 = val; set_if_positive(25); return r1 + val; }`,
+			expected: 25,
+		},
+		{
+			name:     "void function called multiple times",
+			code:     `int acc = 0; void add(int x) { acc = acc + x; } int main() { add(5); add(10); add(15); return acc; }`,
+			expected: 30,
+		},
+		{
+			name:     "void function modifies multiple globals",
+			code:     `int x = 0, y = 0, z = 0; void init() { x = 1; y = 2; z = 3; } int main() { init(); return x + y + z; }`,
+			expected: 6,
+		},
+		{
+			name:     "void function with nested calls",
+			code:     `int value = 0; void set_ten() { value = 10; } void double_it() { set_ten(); value = value * 2; } int main() { double_it(); return value; }`,
+			expected: 20,
+		},
+		{
+			name:     "void function in conditional",
+			code:     `int flag = 0; void set_flag() { flag = 1; } int main() { if (5 > 3) { set_flag(); } return flag; }`,
+			expected: 1,
+		},
+		{
+			name:     "void function in loop",
+			code:     `int total = 0; void add_five() { total = total + 5; } int main() { int i; for (i = 0; i < 3; i++) { add_five(); } return total; }`,
+			expected: 15,
+		},
+		{
+			name:     "void function with while loop inside",
+			code:     `int count = 0; void count_to(int n) { int i = 0; while (i < n) { count = count + 1; i++; } } int main() { count_to(7); return count; }`,
+			expected: 7,
+		},
+		{
+			name:     "void function return in do-while",
+			code:     `int result = 0; void process(int n) { int i = 0; do { result = result + i; i++; if (result > 10) { return; } } while (i < n); } int main() { process(20); return result; }`,
+			expected: 15,
+		},
+		{
+			name:     "void function sequential calls",
+			code:     `int n = 0; void add_one() { n = n + 1; } void add_two() { n = n + 2; } void add_three() { n = n + 3; } int main() { add_one(); add_two(); add_three(); return n; }`,
+			expected: 6,
+		},
 	}
 
 	for _, tt := range tests {
