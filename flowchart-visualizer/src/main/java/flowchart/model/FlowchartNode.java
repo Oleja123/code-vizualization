@@ -35,6 +35,7 @@ public abstract class FlowchartNode {
         PREPARATION,   // Предопределённый процесс - прямоугольник с вертикальными полосами
         LOOP_START,    // Начало цикла - шестиугольник
         LOOP_END,      // Конец цикла - шестиугольник
+        DO_WHILE,
         CONNECTOR      // Соединитель - круг
     }
     

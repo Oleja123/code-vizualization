@@ -76,6 +76,17 @@ public class FlowchartBuilder {
             return;
         }
 
+        if (node instanceof DoWhileNode doWhile) {
+            attachEnd(doWhile.getLoopBody(), end, visited);
+            if (doWhile.getExitNode() != null) {
+                attachEnd(doWhile.getExitNode(), end, visited);
+            } else {
+                // do-while последний оператор — конец идёт сразу после него
+                doWhile.setExitNode(end);
+            }
+            return;
+        }
+
         if (node instanceof DecisionNode decision) {
             attachEnd(decision.getTrueBranch(), end, visited);
             attachEnd(decision.getFalseBranch(), end, visited);
@@ -111,6 +122,7 @@ public class FlowchartBuilder {
         if (stmt instanceof IfStmt i)       return buildIf(i);
         if (stmt instanceof WhileStmt w)    return buildWhile(w);
         if (stmt instanceof ForStmt f)      return buildFor(f);
+        if (stmt instanceof DoWhileStmt d)  return buildDoWhile(d);
         if (stmt instanceof ReturnStmt r)   return buildReturn(r);
         if (stmt instanceof BreakStmt)      return new ConnectorNode("break");
         if (stmt instanceof ContinueStmt)   return new ConnectorNode("continue");
@@ -149,6 +161,15 @@ public class FlowchartBuilder {
             return;
         }
 
+        if (prev instanceof DoWhileNode doWhile) {
+            if (doWhile.getExitNode() == null) {
+                doWhile.setExitNode(next);
+            } else {
+                linkNodes(doWhile.getExitNode(), next);
+            }
+            return;
+        }
+
         if (prev instanceof DecisionNode decision) {
             // Не добавлять в NEXT то, что уже является веткой
             if (next == decision.getTrueBranch()) return;
@@ -173,6 +194,15 @@ public class FlowchartBuilder {
                 loop.setExitNode(next);
             } else {
                 linkLeaves(loop.getExitNode(), next, visited);
+            }
+            return;
+        }
+
+        if (node instanceof DoWhileNode doWhile) {
+            if (doWhile.getExitNode() == null) {
+                doWhile.setExitNode(next);
+            } else {
+                linkLeaves(doWhile.getExitNode(), next, visited);
             }
             return;
         }
@@ -338,5 +368,30 @@ public class FlowchartBuilder {
         return new flowchart.model.Location(
                 a.getLine(), a.getColumn(),
                 a.getEndLine(), a.getEndColumn());
+    }
+
+    private FlowchartNode buildDoWhile(DoWhileStmt stmt) {
+        DoWhileNode node = new DoWhileNode(expr(stmt.getCondition()));
+        node.setAstLocation(toLocation(stmt.getLocation()));
+
+        FlowchartNode body = buildStatement(stmt.getBody());
+        node.setLoopBody(body);
+
+        LoopEndNode end = new LoopEndNode();
+        end.setLoopStart(node); // reuse LoopEndNode pointing back to DoWhileNode
+
+        // Connect body leaves → LoopEndNode → back to condition (DoWhileNode renders this as back-arrow)
+        if (body != null) {
+            Set<FlowchartNode> visited = new HashSet<>();
+            linkLeaves(body, end, visited);
+        }
+
+        // LoopEndNode → back to DoWhileNode (the renderer uses this to know body is done)
+        if (!end.getNext().contains(node)) {
+            end.addNext(node);
+        }
+
+        // exitNode will be set by linkNodes when the statement after do-while is connected
+        return node;
     }
 }
