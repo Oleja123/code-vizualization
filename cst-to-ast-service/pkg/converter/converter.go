@@ -46,7 +46,7 @@ type (
 	ArrayInitExpr   = structs.ArrayInitExpr
 
 	// Базовые типы
-	Location  = structs.Location
+	Location  = interfaces.Location
 	Type      = structs.Type
 	Parameter = structs.Parameter
 )
@@ -381,11 +381,11 @@ func (c *CConverter) findMissingNode(node *sitter.Node) *sitter.Node {
 	return nil
 }
 
-func (c *CConverter) getLocation(node *sitter.Node) structs.Location {
+func (c *CConverter) getLocation(node *sitter.Node) interfaces.Location {
 	startPoint := node.StartPoint()
 	endPoint := node.EndPoint()
 
-	return structs.Location{
+	return interfaces.Location{
 		Line:      startPoint.Row + 1,
 		Column:    startPoint.Column,
 		EndLine:   endPoint.Row + 1,

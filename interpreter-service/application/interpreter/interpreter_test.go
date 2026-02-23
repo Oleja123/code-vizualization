@@ -19,7 +19,7 @@ func runCode(t *testing.T, code string) *int {
 	require.NotNil(t, program, "program should not be nil")
 
 	runner := NewInterpreter()
-	result, err := runner.ExecuteProgram(program)
+	result, _, _, err := runner.ExecuteProgram(program)
 	if err != nil {
 		t.Fatalf("runtime error: %v", err)
 	}
@@ -36,7 +36,7 @@ func runCodeExpectError(t *testing.T, code string) error {
 	}
 
 	runner := NewInterpreter()
-	_, err := runner.ExecuteProgram(program)
+	_, _, _, err := runner.ExecuteProgram(program)
 	return err
 }
 

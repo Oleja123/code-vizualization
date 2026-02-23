@@ -4,14 +4,20 @@ import (
 	"fmt"
 
 	"github.com/Oleja123/code-vizualization/cst-to-ast-service/pkg/converter"
+	"github.com/Oleja123/code-vizualization/interpreter-service/domain/eventdispatcher"
+	"github.com/Oleja123/code-vizualization/interpreter-service/domain/events"
 	"github.com/Oleja123/code-vizualization/interpreter-service/domain/runtime"
 	runtimeerrors "github.com/Oleja123/code-vizualization/interpreter-service/domain/runtime/errors"
 )
 
 type Interpreter struct {
-	CallStack   *runtime.CallStack
-	GlobalScope *runtime.Scope
-	Functions   map[string]*converter.FunctionDecl
+	CallStack         *runtime.CallStack
+	GlobalScope       *runtime.Scope
+	Functions         map[string]*converter.FunctionDecl
+	currentStepNumber int
+	currentLine       int
+	CurrentStep       eventdispatcher.Step
+	Steps             []eventdispatcher.Step
 }
 
 func NewInterpreter() *Interpreter {
@@ -20,7 +26,12 @@ func NewInterpreter() *Interpreter {
 		GlobalScope: globalScope,
 		CallStack:   runtime.NewCallStack(globalScope),
 		Functions:   make(map[string]*converter.FunctionDecl),
+		currentLine: -1,
 	}
+}
+
+func (i *Interpreter) incrementStep() {
+	i.currentStepNumber++
 }
 
 func (i *Interpreter) resolveVariable(name string) (interface{}, error) {
@@ -42,4 +53,14 @@ func (i *Interpreter) resolveVariable(name string) (interface{}, error) {
 	}
 
 	return nil, runtimeerrors.NewErrUnexpectedInternalError(fmt.Sprintf("no variable named %s", name))
+}
+
+func (i *Interpreter) addEvents(events ...events.Event) {
+	i.CurrentStep.Events = append(i.CurrentStep.Events, events...)
+}
+
+func (i *Interpreter) addStep() {
+	defer i.incrementStep()
+	i.Steps = append(i.Steps, i.CurrentStep)
+	i.CurrentStep = eventdispatcher.Step{}
 }

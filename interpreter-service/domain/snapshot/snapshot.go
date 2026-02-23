@@ -12,6 +12,7 @@ type Snapshot struct {
 	CallStack   *runtime.CallStack
 	GlobalScope *runtime.Scope
 	Line        int
+	Error       string
 }
 
 func NewSnapshot(globalScope *runtime.Scope) *Snapshot {
@@ -46,9 +47,16 @@ func (sn *Snapshot) Apply(event events.Event, step int) error {
 		return sn.applyFunctionReturn(e)
 	case events.LineChanged:
 		return sn.applyLineChanged(e)
+	case events.UndefinedBehavior:
+		return sn.applyUndefinedBehavior(e, step)
 	default:
 		return runtimeerrors.NewErrUndefinedBehavior(fmt.Sprintf("unknown event type: %T", e))
 	}
+}
+
+func (sn *Snapshot) applyUndefinedBehavior(e events.UndefinedBehavior, step int) error {
+	sn.Error = e.Message
+	return nil
 }
 
 func (sn *Snapshot) applyEnterScope() error {
@@ -75,37 +83,13 @@ func (sn *Snapshot) applyDeclareVar(e events.DeclareVar, step int) error {
 }
 
 func (sn *Snapshot) applyDeclareArray(e events.DeclareArray, step int) error {
-	if e.Value == nil {
-		arr := runtime.NewArray(e.Name, e.Size, nil, step, e.IsGlobal)
-		sn.CallStack.DeclareInCurrentFrame(arr)
-		return nil
-	}
-	elements := make([]runtime.ArrayElement, len(e.Value))
-	for i, v := range e.Value {
-		val := v
-		elements[i] = *runtime.NewArrayElement(&val, step, false)
-	}
-	arr := runtime.NewArray(e.Name, e.Size, elements, step, false)
+	arr := runtime.NewArray(e.Name, e.Size, e.Value, step, e.IsGlobal)
 	sn.CallStack.DeclareInCurrentFrame(arr)
 	return nil
 }
 
 func (sn *Snapshot) applyDeclareArray2D(e events.DeclareArray2D, step int) error {
-	if e.Value == nil {
-		arr := runtime.NewArray2D(e.Name, e.Size1, e.Size2, nil, step, e.IsGlobal)
-		sn.CallStack.DeclareInCurrentFrame(arr)
-		return nil
-	}
-	elements := make([]runtime.Array, len(e.Value))
-	for i := range e.Value {
-		tmp := make([]runtime.ArrayElement, len(e.Value[i]))
-		for j, v := range e.Value[i] {
-			val := v
-			tmp[j] = *runtime.NewArrayElement(&val, step, false)
-		}
-		elements[i] = *runtime.NewArray("", e.Size2, tmp, step, false)
-	}
-	arr := runtime.NewArray2D(e.Name, e.Size1, e.Size2, elements, step, false)
+	arr := runtime.NewArray2D(e.Name, e.Size1, e.Size2, e.Value, step, e.IsGlobal)
 	sn.CallStack.DeclareInCurrentFrame(arr)
 	return nil
 }

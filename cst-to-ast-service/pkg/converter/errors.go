@@ -3,7 +3,7 @@ package converter
 import (
 	"fmt"
 
-	"github.com/Oleja123/code-vizualization/cst-to-ast-service/internal/domain/structs"
+	"github.com/Oleja123/code-vizualization/cst-to-ast-service/internal/domain/interfaces"
 	sitter "github.com/smacker/go-tree-sitter"
 )
 
@@ -31,7 +31,7 @@ type ConverterError struct {
 	NodeType string `json:"nodeType,omitempty"`
 
 	// Loc - позиция в исходном коде (если известна)
-	Loc structs.Location `json:"location,omitempty"`
+	Loc interfaces.Location `json:"location,omitempty"`
 
 	// Cause - оригинальная ошибка (внутреннее использование)
 	Cause error `json:"-"`
@@ -51,7 +51,7 @@ func (e *ConverterError) Unwrap() error {
 }
 
 // GetLocation возвращает позицию ошибки в коде
-func (e *ConverterError) GetLocation() structs.Location {
+func (e *ConverterError) GetLocation() interfaces.Location {
 	return e.Loc
 }
 
@@ -71,10 +71,10 @@ func (e *ConverterError) GetNodeType() string {
 }
 
 func newConverterError(code ErrorCode, message string, node *sitter.Node, cause error) *ConverterError {
-	var loc structs.Location
+	var loc interfaces.Location
 	var nodeType string
 	if node != nil {
-		loc = structs.Location{
+		loc = interfaces.Location{
 			Line:      node.StartPoint().Row + 1,
 			Column:    node.StartPoint().Column,
 			EndLine:   node.EndPoint().Row + 1,

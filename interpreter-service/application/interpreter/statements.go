@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/Oleja123/code-vizualization/cst-to-ast-service/pkg/converter"
+	"github.com/Oleja123/code-vizualization/interpreter-service/domain/events"
 	"github.com/Oleja123/code-vizualization/interpreter-service/domain/runtime"
 	runtimeerrors "github.com/Oleja123/code-vizualization/interpreter-service/domain/runtime/errors"
 )
@@ -31,9 +32,9 @@ func (i *Interpreter) executeStatement(stmt converter.Stmt) (ExecResult, error) 
 	case *converter.ExprStmt:
 		return i.executeExprStmt(t)
 	case *converter.BreakStmt:
-		return i.executeBreakStmt()
+		return i.executeBreakStmt(t)
 	case *converter.ContinueStmt:
-		return i.executeContinueStmt()
+		return i.executeContinueStmt(t)
 
 	default:
 		return ExecResult{}, runtimeerrors.NewErrUnexpectedInternalError(fmt.Sprintf("unknown statement type %T", stmt))
@@ -41,6 +42,9 @@ func (i *Interpreter) executeStatement(stmt converter.Stmt) (ExecResult, error) 
 }
 
 func (i *Interpreter) executeNonFunctionDecl(v *VariableDecl) (ExecResult, error) {
+	i.addEvents(events.LineChanged{Line: int(v.Loc.Line)})
+	i.addStep()
+
 	switch len(v.VarType.ArraySizes) {
 	case 0:
 		return i.executeVariableDecl(*v)
@@ -67,11 +71,13 @@ func (i *Interpreter) executeVariableDecl(v VariableDecl) (ExecResult, error) {
 		value = &v
 	}
 
-	variable := runtime.NewVariable(v.Name, value, 0, v.IsGlobal) // step=0 пока
+	variable := runtime.NewVariable(v.Name, value, i.currentStepNumber, v.IsGlobal) // step=0 пока
 
 	frame := i.CallStack.GetCurrentFrame()
 	currentScope := frame.GetCurrentScope()
 	currentScope.Declare(variable)
+
+	i.addEvents(events.DeclareVar{Name: v.Name, Value: value, IsGlobal: v.IsGlobal})
 
 	return NormalResult(), nil
 }
@@ -90,11 +96,13 @@ func (i *Interpreter) executeArrayDecl(v VariableDecl) (ExecResult, error) {
 		value = v
 	}
 
-	variable := runtime.NewArray(v.Name, v.VarType.ArraySizes[0], value, 0, v.IsGlobal) // step=0 пока
+	variable := runtime.NewArray(v.Name, v.VarType.ArraySizes[0], value, i.currentStepNumber, v.IsGlobal) // step=0 пока
 
 	frame := i.CallStack.GetCurrentFrame()
 	currentScope := frame.GetCurrentScope()
 	currentScope.Declare(variable)
+
+	i.addEvents(events.DeclareArray{Name: v.Name, Value: value, IsGlobal: v.IsGlobal})
 
 	return NormalResult(), nil
 }
@@ -113,11 +121,13 @@ func (i *Interpreter) executeArray2DDecl(v VariableDecl) (ExecResult, error) {
 		value = v
 	}
 
-	variable := runtime.NewArray2D(v.Name, v.VarType.ArraySizes[0], v.VarType.ArraySizes[1], value, 0, v.IsGlobal) // step=0 пока
+	variable := runtime.NewArray2D(v.Name, v.VarType.ArraySizes[0], v.VarType.ArraySizes[1], value, i.currentStepNumber, v.IsGlobal) // step=0 пока
 
 	frame := i.CallStack.GetCurrentFrame()
 	currentScope := frame.GetCurrentScope()
 	currentScope.Declare(variable)
+
+	i.addEvents(events.DeclareArray2D{Name: v.Name, Value: value, IsGlobal: v.IsGlobal})
 
 	return NormalResult(), nil
 }
@@ -125,7 +135,11 @@ func (i *Interpreter) executeArray2DDecl(v VariableDecl) (ExecResult, error) {
 func (i *Interpreter) executeBlockStmt(b *converter.BlockStmt) (ExecResult, error) {
 	frame := i.CallStack.GetCurrentFrame()
 	frame.EnterScope()
-	defer frame.ExitScope()
+	i.addEvents(events.EnterScope{})
+	defer func() {
+		frame.ExitScope()
+		i.addEvents(events.ExitScope{})
+	}()
 
 	for _, stmt := range b.Statements {
 		res, err := i.executeStatement(stmt)
@@ -141,6 +155,9 @@ func (i *Interpreter) executeBlockStmt(b *converter.BlockStmt) (ExecResult, erro
 }
 
 func (i *Interpreter) executeIfStmt(ifStmt *converter.IfStmt) (ExecResult, error) {
+	i.addEvents(events.LineChanged{Line: int(ifStmt.Loc.Line)})
+	i.addStep()
+
 	cond, err := i.executeExpression(ifStmt.Condition)
 	if err != nil {
 		return NormalResult(), err
@@ -161,6 +178,9 @@ func (i *Interpreter) executeIfStmt(ifStmt *converter.IfStmt) (ExecResult, error
 }
 
 func (i *Interpreter) executeReturnStmt(r *converter.ReturnStmt) (ExecResult, error) {
+	i.addEvents(events.LineChanged{Line: int(r.Loc.Line)})
+	i.addStep()
+
 	var val *int
 	if r.Value != nil {
 		v, err := i.executeExpression(r.Value)
@@ -177,6 +197,9 @@ func (i *Interpreter) executeReturnStmt(r *converter.ReturnStmt) (ExecResult, er
 }
 
 func (i *Interpreter) executeExprStmt(e *converter.ExprStmt) (ExecResult, error) {
+	i.addEvents(events.LineChanged{Line: int(e.Loc.Line)})
+	i.addStep()
+
 	if e.Expression == nil {
 		return NormalResult(), nil
 	}
@@ -191,6 +214,9 @@ func (i *Interpreter) executeExprStmt(e *converter.ExprStmt) (ExecResult, error)
 
 func (i *Interpreter) executeWhileStmt(loop *converter.WhileStmt) (ExecResult, error) {
 	for {
+		i.addEvents(events.LineChanged{Line: int(loop.Loc.Line)})
+		i.addStep()
+
 		condVal, err := i.executeExpression(loop.Condition)
 		if err != nil {
 			return NormalResult(), err
@@ -239,6 +265,9 @@ func (i *Interpreter) executeDoWhileStmt(loop *converter.DoWhileStmt) (ExecResul
 			return res, nil
 		}
 
+		i.addEvents(events.LineChanged{Line: int(loop.Condition.GetLocation().Line)})
+		i.addStep()
+
 		condVal, err := i.executeExpression(loop.Condition)
 		if err != nil {
 			return NormalResult(), err
@@ -258,10 +287,17 @@ func (i *Interpreter) executeDoWhileStmt(loop *converter.DoWhileStmt) (ExecResul
 }
 
 func (i *Interpreter) executeForStmt(loop *converter.ForStmt) (ExecResult, error) {
+	i.addEvents(events.LineChanged{Line: int(loop.Loc.Line)})
+	i.addStep()
+
 	frame := i.CallStack.GetCurrentFrame()
 
 	frame.EnterScope()
-	defer frame.ExitScope()
+	i.addEvents(events.EnterScope{})
+	defer func() {
+		frame.ExitScope()
+		i.addEvents(events.ExitScope{})
+	}()
 
 	if loop.Init != nil {
 		_, err := i.executeStatement(loop.Init)
@@ -311,11 +347,15 @@ func (i *Interpreter) executeForStmt(loop *converter.ForStmt) (ExecResult, error
 	return NormalResult(), nil
 }
 
-func (i *Interpreter) executeBreakStmt() (ExecResult, error) {
+func (i *Interpreter) executeBreakStmt(b *converter.BreakStmt) (ExecResult, error) {
+	i.addEvents(events.LineChanged{Line: int(b.Loc.Line)})
+	i.addStep()
 	return BreakResult(), nil
 }
 
-func (i *Interpreter) executeContinueStmt() (ExecResult, error) {
+func (i *Interpreter) executeContinueStmt(c *converter.ContinueStmt) (ExecResult, error) {
+	i.addEvents(events.LineChanged{Line: int(c.Loc.Line)})
+	i.addStep()
 	return ContinueResult(), nil
 }
 
