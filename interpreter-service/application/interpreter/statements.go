@@ -77,7 +77,7 @@ func (i *Interpreter) executeVariableDecl(v VariableDecl) (ExecResult, error) {
 	currentScope := frame.GetCurrentScope()
 	currentScope.Declare(variable)
 
-	i.addEvents(events.DeclareVar{Name: v.Name, Value: value, IsGlobal: v.IsGlobal})
+	i.addEvents(events.DeclareVar{Name: v.Name, Value: cloneValue(value), IsGlobal: v.IsGlobal})
 
 	return NormalResult(), nil
 }
@@ -96,13 +96,13 @@ func (i *Interpreter) executeArrayDecl(v VariableDecl) (ExecResult, error) {
 		value = v
 	}
 
-	variable := runtime.NewArray(v.Name, v.VarType.ArraySizes[0], value, i.currentStepNumber, v.IsGlobal) // step=0 пока
+	variable := runtime.NewArray(v.Name, v.VarType.ArraySizes[0], value, i.currentStepNumber, v.IsGlobal)
 
 	frame := i.CallStack.GetCurrentFrame()
 	currentScope := frame.GetCurrentScope()
 	currentScope.Declare(variable)
 
-	i.addEvents(events.DeclareArray{Name: v.Name, Value: value, IsGlobal: v.IsGlobal})
+	i.addEvents(events.DeclareArray{Name: v.Name, Value: cloneArrayElements(value), Size: v.VarType.ArraySizes[0], IsGlobal: v.IsGlobal})
 
 	return NormalResult(), nil
 }
@@ -121,13 +121,13 @@ func (i *Interpreter) executeArray2DDecl(v VariableDecl) (ExecResult, error) {
 		value = v
 	}
 
-	variable := runtime.NewArray2D(v.Name, v.VarType.ArraySizes[0], v.VarType.ArraySizes[1], value, i.currentStepNumber, v.IsGlobal) // step=0 пока
+	variable := runtime.NewArray2D(v.Name, v.VarType.ArraySizes[0], v.VarType.ArraySizes[1], value, i.currentStepNumber, v.IsGlobal)
 
 	frame := i.CallStack.GetCurrentFrame()
 	currentScope := frame.GetCurrentScope()
 	currentScope.Declare(variable)
 
-	i.addEvents(events.DeclareArray2D{Name: v.Name, Value: value, IsGlobal: v.IsGlobal})
+	i.addEvents(events.DeclareArray2D{Name: v.Name, Value: cloneArrayRows(value), Size1: v.VarType.ArraySizes[0], Size2: v.VarType.ArraySizes[1], IsGlobal: v.IsGlobal})
 
 	return NormalResult(), nil
 }
@@ -366,4 +366,45 @@ func (i *Interpreter) executeFunctionDecl(f *converter.FunctionDecl) (ExecResult
 
 	i.Functions[f.Name] = f
 	return NormalResult(), nil
+}
+
+// cloneArrayElements создает deep-copy массива элементов для сохранения снимка значений
+func cloneArrayElements(src []runtime.ArrayElement) []runtime.ArrayElement {
+	if src == nil {
+		return nil
+	}
+	dst := make([]runtime.ArrayElement, len(src))
+	for i := range src {
+		dst[i].StepChanged = src[i].StepChanged
+		if src[i].Value != nil {
+			val := *src[i].Value
+			dst[i].Value = &val
+		}
+	}
+	return dst
+}
+
+// cloneArrayRows создает deep-copy 2D массива для сохранения снимка значений
+func cloneArrayRows(src []runtime.Array) []runtime.Array {
+	if src == nil {
+		return nil
+	}
+	dst := make([]runtime.Array, len(src))
+	for i := range src {
+		dst[i] = runtime.Array{
+			Name:   src[i].Name,
+			Size:   src[i].Size,
+			Values: cloneArrayElements(src[i].Values),
+		}
+	}
+	return dst
+}
+
+// cloneValue создает копию значения указателя для сохранения снимка
+func cloneValue(src *int) *int {
+	if src == nil {
+		return nil
+	}
+	val := *src
+	return &val
 }

@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/Oleja123/code-vizualization/cst-to-ast-service/pkg/converter"
+	"github.com/Oleja123/code-vizualization/interpreter-service/domain/events"
 	"github.com/Oleja123/code-vizualization/interpreter-service/domain/runtime"
 	runtimeerrors "github.com/Oleja123/code-vizualization/interpreter-service/domain/runtime/errors"
 	runtimeinterfaces "github.com/Oleja123/code-vizualization/interpreter-service/domain/runtime/interfaces"
@@ -260,27 +261,32 @@ func (i *Interpreter) executeAssignmentExpr(expr *converter.AssignmentExpr) (int
 		return nil, runtimeerrors.NewErrUnexpectedInternalError("right expression is not int")
 	}
 
+	var newValue int
 	switch expr.Operator {
 	case "=":
-		leftVal.ChangeValue(rightVal, 0)
+		newValue = rightVal
+		leftVal.ChangeValue(newValue, i.currentStepNumber)
 	case "+=":
 		curVal, err := leftVal.GetValue()
 		if err != nil {
 			return nil, err
 		}
-		leftVal.ChangeValue(curVal+rightVal, 0)
+		newValue = curVal + rightVal
+		leftVal.ChangeValue(newValue, i.currentStepNumber)
 	case "-=":
 		curVal, err := leftVal.GetValue()
 		if err != nil {
 			return nil, err
 		}
-		leftVal.ChangeValue(curVal-rightVal, 0)
+		newValue = curVal - rightVal
+		leftVal.ChangeValue(newValue, i.currentStepNumber)
 	case "*=":
 		curVal, err := leftVal.GetValue()
 		if err != nil {
 			return nil, err
 		}
-		leftVal.ChangeValue(curVal*rightVal, 0)
+		newValue = curVal * rightVal
+		leftVal.ChangeValue(newValue, i.currentStepNumber)
 	case "/=":
 		curVal, err := leftVal.GetValue()
 		if err != nil {
@@ -289,7 +295,8 @@ func (i *Interpreter) executeAssignmentExpr(expr *converter.AssignmentExpr) (int
 		if rightVal == 0 {
 			return nil, runtimeerrors.NewErrRuntime("division by zero")
 		}
-		leftVal.ChangeValue(curVal/rightVal, 0)
+		newValue = curVal / rightVal
+		leftVal.ChangeValue(newValue, i.currentStepNumber)
 	case "%=":
 		curVal, err := leftVal.GetValue()
 		if err != nil {
@@ -298,9 +305,45 @@ func (i *Interpreter) executeAssignmentExpr(expr *converter.AssignmentExpr) (int
 		if rightVal == 0 {
 			return nil, runtimeerrors.NewErrRuntime("division by zero")
 		}
-		leftVal.ChangeValue(curVal%rightVal, 0)
+		newValue = curVal % rightVal
+		leftVal.ChangeValue(newValue, i.currentStepNumber)
 	default:
 		return nil, runtimeerrors.NewErrUnexpectedInternalError(fmt.Sprintf("unknown assignment operator: %s", expr.Operator))
+	}
+
+	switch lhs := expr.Left.(type) {
+	case *converter.VariableExpr:
+		i.addEvents(events.VarChanged{Name: lhs.Name, Value: newValue})
+	case *converter.ArrayAccessExpr:
+
+		indices := []int{}
+		current := lhs
+
+		for {
+			indexVal, err := i.executeExpression(current.Index)
+			if err != nil {
+				break
+			}
+			if idx, ok := indexVal.(int); ok {
+				indices = append([]int{idx}, indices...)
+			}
+
+			switch arr := current.Array.(type) {
+			case *converter.ArrayAccessExpr:
+				current = arr
+			default:
+				goto addEvent
+			}
+		}
+
+	addEvent:
+		arrayName := getArrayName(lhs.Array)
+		switch len(indices) {
+		case 1:
+			i.addEvents(events.ArrayElementChanged{Name: arrayName, Ind: indices[0], Value: newValue})
+		case 2:
+			i.addEvents(events.Array2DElementChanged{Name: arrayName, Ind1: indices[0], Ind2: indices[1], Value: newValue})
+		}
 	}
 
 	return nil, nil
@@ -403,18 +446,22 @@ func (i *Interpreter) executeUnaryExpr(expr *converter.UnaryExpr) (int, error) {
 
 		switch expr.Operator {
 		case "++":
-			operandVal.ChangeValue(old+1, 0)
+			newValue := old + 1
+			operandVal.ChangeValue(newValue, i.currentStepNumber)
+			i.addUnaryOpChangeEvent(expr.Operand, newValue)
 			if expr.IsPostfix {
 				return old, nil
 			} else {
-				return old + 1, nil
+				return newValue, nil
 			}
 		case "--":
-			operandVal.ChangeValue(old-1, 0)
+			newValue := old - 1
+			operandVal.ChangeValue(newValue, i.currentStepNumber)
+			i.addUnaryOpChangeEvent(expr.Operand, newValue)
 			if expr.IsPostfix {
 				return old, nil
 			} else {
-				return old - 1, nil
+				return newValue, nil
 			}
 		default:
 			return 0, runtimeerrors.NewErrUnexpectedInternalError(fmt.Sprintf("unknown unary operator: %s", expr.Operator))
@@ -433,7 +480,6 @@ func (i *Interpreter) executeCallExpr(expr *converter.CallExpr) (interface{}, er
 		return nil, runtimeerrors.NewErrUnexpectedInternalError(fmt.Sprintf("function %s expects %d arguments, got %d", expr.FunctionName, len(declNode.Parameters), len(expr.Arguments)))
 	}
 
-	// Evaluate arguments in the CALLER's context BEFORE pushing new frame
 	argumentValues := make([]int, len(expr.Arguments))
 	for ind, val := range expr.Arguments {
 		val, err := i.executeExpression(val)
@@ -448,22 +494,25 @@ func (i *Interpreter) executeCallExpr(expr *converter.CallExpr) (interface{}, er
 		argumentValues[ind] = value
 	}
 
-	// NOW push the new frame and initialize parameters with evaluated values
-	defer i.CallStack.PopFrame()
+	i.addEvents(events.FunctionCall{Name: expr.FunctionName})
+	var returnValue *int
+	defer func() {
+		i.addEvents(events.FunctionReturn{Name: expr.FunctionName, ReturnValue: returnValue})
+		i.CallStack.PopFrame()
+	}()
 	i.CallStack.PushFrame(runtime.NewStackFrame(expr.FunctionName, i.GlobalScope))
 	i.CallStack.GetCurrentFrame().EnterScope()
 
 	parameters := make([]*runtime.Variable, len(declNode.Parameters))
 
 	for ind, val := range declNode.Parameters {
-		variable := runtime.NewVariable(val.Name, nil, 0, false)
+		variable := runtime.NewVariable(val.Name, nil, i.currentStepNumber, false)
 		parameters[ind] = variable
 
 		frame := i.CallStack.GetCurrentFrame()
 		frame.GetCurrentScope().Declare(variable)
 
-		// Initialize with the pre-evaluated argument value
-		parameters[ind].ChangeValue(argumentValues[ind], 0)
+		parameters[ind].ChangeValue(argumentValues[ind], i.currentStepNumber)
 	}
 
 	res, err := i.executeStatement(declNode.Body)
@@ -475,6 +524,7 @@ func (i *Interpreter) executeCallExpr(expr *converter.CallExpr) (interface{}, er
 		if res.Value == nil {
 			return nil, nil
 		}
+		returnValue = res.Value
 		return *res.Value, nil
 	}
 
@@ -500,5 +550,52 @@ func (i *Interpreter) convertToRvalue(expr converter.Expr) (converter.Expr, erro
 		return &ArrayAccessExpr{*e, false}, nil
 	default:
 		return e, nil
+	}
+}
+
+func getArrayName(expr converter.Expr) string {
+	switch e := expr.(type) {
+	case *converter.VariableExpr:
+		return e.Name
+	case *converter.ArrayAccessExpr:
+		return getArrayName(e.Array)
+	default:
+		return ""
+	}
+}
+
+func (i *Interpreter) addUnaryOpChangeEvent(expr converter.Expr, newValue int) {
+	switch e := expr.(type) {
+	case *converter.VariableExpr:
+		i.addEvents(events.VarChanged{Name: e.Name, Value: newValue})
+	case *converter.ArrayAccessExpr:
+		indices := []int{}
+		current := e
+
+		for {
+			indexVal, err := i.executeExpression(current.Index)
+			if err != nil {
+				break
+			}
+			if idx, ok := indexVal.(int); ok {
+				indices = append([]int{idx}, indices...)
+			}
+
+			switch arr := current.Array.(type) {
+			case *converter.ArrayAccessExpr:
+				current = arr
+			default:
+				goto addEvent
+			}
+		}
+
+	addEvent:
+		arrayName := getArrayName(e.Array)
+		switch len(indices) {
+		case 1:
+			i.addEvents(events.ArrayElementChanged{Name: arrayName, Ind: indices[0], Value: newValue})
+		case 2:
+			i.addEvents(events.Array2DElementChanged{Name: arrayName, Ind1: indices[0], Ind2: indices[1], Value: newValue})
+		}
 	}
 }

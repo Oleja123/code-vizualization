@@ -34,7 +34,7 @@ int main() {
 	}
 
 	runner := interpreter.NewInterpreter()
-	result, err := runner.ExecuteProgram(program)
+	result, steps, currentStep, err := runner.ExecuteProgram(program)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "runtime error: %v\n", err)
 		os.Exit(1)
@@ -46,4 +46,5 @@ int main() {
 	}
 
 	fmt.Printf("program returned: %d\n", *result)
+	fmt.Printf("total steps: %d, current step: %d\n", len(steps), currentStep)
 }

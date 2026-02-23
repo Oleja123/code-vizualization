@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	"github.com/Oleja123/code-vizualization/cst-to-ast-service/pkg/converter"
-	"github.com/Oleja123/code-vizualization/interpreter-service/domain/eventdispatcher"
+	"github.com/Oleja123/code-vizualization/interpreter-service/application/eventdispatcher"
 	"github.com/Oleja123/code-vizualization/interpreter-service/domain/events"
 	runtimeerrors "github.com/Oleja123/code-vizualization/interpreter-service/domain/runtime/errors"
 )

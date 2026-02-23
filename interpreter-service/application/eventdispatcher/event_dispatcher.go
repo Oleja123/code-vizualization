@@ -17,60 +17,16 @@ type EventDispatcher struct {
 	Snapshot         *snapshot.Snapshot
 	Steps            []Step
 	currentStepIndex int
-	pendingEvents    []events.Event
-	stepInProgress   bool
+	stepBegin        int
 }
 
-func NewEventDispatcher(globalScope *runtime.Scope) *EventDispatcher {
+func NewEventDispatcher(globalScope *runtime.Scope, stepBegin int) *EventDispatcher {
 	return &EventDispatcher{
 		Snapshot:         snapshot.NewSnapshot(globalScope),
 		Steps:            make([]Step, 0),
 		currentStepIndex: -1,
-		pendingEvents:    make([]events.Event, 0),
-		stepInProgress:   false,
+		stepBegin:        stepBegin,
 	}
-}
-
-func (ed *EventDispatcher) BeginStep() {
-	if ed.stepInProgress {
-		return
-	}
-	ed.pendingEvents = make([]events.Event, 0)
-	ed.stepInProgress = true
-}
-
-func (ed *EventDispatcher) Emit(event events.Event) error {
-	if !ed.stepInProgress {
-		return fmt.Errorf("no step in progress, call BeginStep() first")
-	}
-	ed.pendingEvents = append(ed.pendingEvents, event)
-	return nil
-}
-
-func (ed *EventDispatcher) EndStep() (Step, error) {
-	if !ed.stepInProgress {
-		return Step{}, fmt.Errorf("no step in progress")
-	}
-
-	stepNumber := len(ed.Steps)
-
-	for _, event := range ed.pendingEvents {
-		if err := ed.Snapshot.Apply(event, stepNumber); err != nil {
-			return Step{}, err
-		}
-	}
-
-	step := Step{
-		Events:     ed.pendingEvents,
-		StepNumber: stepNumber,
-	}
-	ed.Steps = append(ed.Steps, step)
-	ed.currentStepIndex = stepNumber
-
-	ed.pendingEvents = make([]events.Event, 0)
-	ed.stepInProgress = false
-
-	return step, nil
 }
 
 func (ed *EventDispatcher) ApplyStep(stepIndex int) error {
@@ -80,7 +36,7 @@ func (ed *EventDispatcher) ApplyStep(stepIndex int) error {
 
 	if stepIndex < ed.currentStepIndex {
 		ed.Snapshot.Reset()
-		ed.currentStepIndex = -1
+		ed.currentStepIndex = ed.stepBegin
 	}
 
 	startIndex := ed.currentStepIndex + 1
@@ -113,12 +69,4 @@ func (ed *EventDispatcher) GetStep(index int) (Step, error) {
 		return Step{}, fmt.Errorf("invalid step index: %d", index)
 	}
 	return ed.Steps[index], nil
-}
-
-func (ed *EventDispatcher) IsStepInProgress() bool {
-	return ed.stepInProgress
-}
-
-func (ed *EventDispatcher) GetPendingEventsCount() int {
-	return len(ed.pendingEvents)
 }
