@@ -30,13 +30,15 @@ func NewEventDispatcher(globalScope *runtime.Scope, stepBegin int) *EventDispatc
 }
 
 func (ed *EventDispatcher) ApplyStep(stepIndex int) error {
+	stepIndex += ed.stepBegin
+
 	if stepIndex < 0 || stepIndex >= len(ed.Steps) {
 		return fmt.Errorf("invalid step index: %d (total steps: %d)", stepIndex, len(ed.Steps))
 	}
 
 	if stepIndex < ed.currentStepIndex {
 		ed.Snapshot.Reset()
-		ed.currentStepIndex = ed.stepBegin
+		ed.currentStepIndex = ed.stepBegin - 1
 	}
 
 	startIndex := ed.currentStepIndex + 1
