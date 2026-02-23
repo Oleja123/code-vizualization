@@ -34,6 +34,7 @@ public class SVGRenderer {
     private double lastBodyBlockX = Double.NaN;
 
     private List<Object[]> deferredDoWhileContinueCols;
+    private List<double[]> doWhileBreakExits;
 
     public String render(FlowchartNode start) {
         svg      = new StringBuilder();
@@ -49,6 +50,7 @@ public class SVGRenderer {
         currentLoopReturnRightX = Double.MAX_VALUE;
         lastBodyBlockX = Double.NaN;
         deferredDoWhileContinueCols = new ArrayList<>();
+        doWhileBreakExits = new ArrayList<>();
 
         renderNode(start, 700, 100, null);
 
@@ -263,7 +265,9 @@ public class SVGRenderer {
         drawDiamond(x, y, w, h);
         text(node.getLabel(), x, y + halfH);
 
-        double rightX  = x + HORIZONTAL_SPACING;
+        // Тело цикла сдвигается правее на PW/2 + BAM/2, чтобы ДА-ветка
+        // обычного IF внутри тела не налезала на НЕТ-линию while.
+        double rightX  = x + HORIZONTAL_SPACING + PROCESS_WIDTH / 2 + BACK_ARROW_MARGIN / 2;
         double branchY = y + h + VERTICAL_SPACING;
 
         line(x + halfW, y + halfH, rightX, y + halfH);
@@ -272,18 +276,13 @@ public class SVGRenderer {
 
         currentLoopReturnRightX = Double.MAX_VALUE;
 
-        // Render full body (including tail blocks via renderBreakTailChain)
         List<FlowchartNode> bodyChain = collectBodyChain(node.getLoopBody(), node);
         double bodyEndY = renderLoopBodyChain(bodyChain, rightX, branchY, node);
         if (bodyEndY < 0) bodyEndY = -bodyEndY;
 
-        // Compute returnRightX using only this loop's body X-extent,
-        // NOT global maxX (which may include sibling columns of an outer if).
-        double bodyMaxX = rightX + PROCESS_WIDTH / 2;
-        for (double[] g : breakGeometry.values()) {
-            bodyMaxX = Math.max(bodyMaxX, g[1] + PROCESS_WIDTH / 2); // netColX right edge
-        }
-        double returnRightX = bodyMaxX + BACK_ARROW_MARGIN;
+        // returnRightX вычисляем от глобального maxX — он уже включает все
+        // ветки IF, break/continue колонки и т.д., отрисованные в теле цикла.
+        double returnRightX = maxX + BACK_ARROW_MARGIN;
         currentLoopReturnRightX = returnRightX;
 
         double diamondBottom = y + h;
@@ -291,14 +290,16 @@ public class SVGRenderer {
 
         double maxCornerY = bodyEndY + VERTICAL_SPACING / 2;
         for (double[] g : breakGeometry.values()) {
-            double netColEndY = g[3];
-            double daColEndY  = g[2];
             boolean isContinueDec = (g.length > 4 && g[4] == 1.0);
+            if (isContinueDec) continue;
+            double netColEndY = g[3];
             maxCornerY = Math.max(maxCornerY, netColEndY + VERTICAL_SPACING / 2);
-            if (isContinueDec) maxCornerY = Math.max(maxCornerY, daColEndY + VERTICAL_SPACING / 2);
         }
 
         double exitY = maxCornerY + VERTICAL_SPACING / 2;
+
+        // contTargetY — уровень, на котором стрелки continue возвращаются к while-ромбу
+        double contTargetY = y - VERTICAL_SPACING / 2;
 
         for (double[] g : breakGeometry.values()) {
             double daColX     = g[0];
@@ -309,65 +310,144 @@ public class SVGRenderer {
             double tipY      = (g.length > 5) ? g[5] : 0;
             double colStartY = (g.length > 6) ? g[6] : tipY + DECISION_HEIGHT / 2 + VERTICAL_SPACING;
 
+            double routingNetColEndY = (g.length > 8) ? g[8] : netColEndY;
+
             boolean daBare  = (daColEndY  <= colStartY + 1);
-            boolean netBare = (netColEndY <= colStartY + 1);
-
-            // Pre-draw bare DA arrow only for break decisions where DA bare but NET has blocks
-            if (daBare && !netBare && !isContinueDec) {
-                arrow(daColX, tipY, daColX, colStartY);
-            }
-
-            double daLineStartY  = daBare  ? tipY    : daColEndY;
-            double netLineStartY = netBare ? colStartY : netColEndY;
+            boolean netBare = (routingNetColEndY <= colStartY + 1);
 
             if (isContinueDec) {
                 // ── CONTINUE DECISION routing ──────────────────────────────
-                // daColX=LEFT(continue branch), netColX=RIGHT(normal/bare)
-                double contTargetY = y - VERTICAL_SPACING / 2;
+                //
+                // NET column (НЕТ/normal): has blocks or tail blocks
+                //   Exit: right-side mid of last block (netBlockRightX, netMidRightY)
+                //   Route: right to returnRightX → up to contTargetY → arrow left to loop diamond
+                //
+                // DA column (ДА/continue): has blocks
+                //   Exit: bottom-center of last block (daColX, daColEndY)
+                //   Route: down to loopDownY → right to joinX → arrow up to joinY
+                //   joinX / joinY = midpoint of NET horizontal line (if NET has blocks)
+                //                 = midpoint of NET tipY horizontal (if NET bare)
+                //
+                // DA column bare: left detour from tipY down, then right to joinX, arrow up
 
-                if (!daBare) {
-                    // DA has blocks: right side of last block → horizontal to netColX → up to tipY
-                    double blockRightX = daColX + PROCESS_WIDTH / 2;
-                    double blockBottomY = daColEndY; // bottom of last block
-                    // horizontal from right edge of last block to netColX, at block bottom level
-                    line(blockRightX, blockBottomY, netColX, blockBottomY);
-                    // netColX vertical: from blockBottomY up to tipY
-                    line(netColX, blockBottomY, netColX, tipY);
-                    trackX(daColX - 5);
+                double tailBottom    = netColEndY; // g[3]: actual bottom incl. tail blocks
+                boolean hasTailInNet = tailBottom > colStartY + 1;
+                boolean netHasBlocks = !netBare || hasTailInNet;
+                boolean daHasBlocks  = !daBare;
+
+                // NET exit point: right-side middle of last NET block
+                double netBlockRightX, netMidRightY;
+                if (!netBare) {
+                    netBlockRightX = netColX + PROCESS_WIDTH / 2;
+                    netMidRightY   = routingNetColEndY - PROCESS_HEIGHT / 2;
+                } else if (hasTailInNet) {
+                    netBlockRightX = netColX + PROCESS_WIDTH / 2;
+                    netMidRightY   = tailBottom - PROCESS_HEIGHT / 2;
                 } else {
-                    // DA bare: horizontal at tipY already at netColX level
-                    line(daColX, tipY, netColX, tipY);
-                    trackX(daColX - 5);
+                    // NET truly bare — horizontal at tipY
+                    netBlockRightX = netColX;
+                    netMidRightY   = tipY;
                 }
 
-                // NET (normal, RIGHT) bare: horizontal at tipY → right to returnRightX
-                // (netColX is already connected to tipY from DA path above)
-                line(netColX, tipY, returnRightX, tipY);
-                // returnRightX → up → arrow to while start
-                line(returnRightX, tipY, returnRightX, contTargetY);
-                arrow(returnRightX, contTargetY, x + 5, contTargetY);
-                trackX(netColX + 5);
-                trackX(returnRightX + 5);
+                // ── Draw NET path ──────────────────────────────────────────
+                if (netHasBlocks) {
+                    // From right-side mid of last block → right → up → arrow left to loop diamond
+                    line(netBlockRightX, netMidRightY, returnRightX, netMidRightY);
+                    line(returnRightX, netMidRightY, returnRightX, contTargetY);
+                    arrow(returnRightX, contTargetY, x + 5, contTargetY);
+                    trackX(returnRightX + 5);
+                } else {
+                    // NET bare: horizontal at tipY → right → up → arrow left
+                    line(netColX, tipY, returnRightX, tipY);
+                    line(returnRightX, tipY, returnRightX, contTargetY);
+                    arrow(returnRightX, contTargetY, x + 5, contTargetY);
+                    trackX(netColX + 5);
+                    trackX(returnRightX + 5);
+                }
+
+                // ── Draw DA path ───────────────────────────────────────────
+                // Join point on NET horizontal line:
+                //   if NET has blocks: midpoint between netBlockRightX and returnRightX, at netMidRightY
+                //   if NET bare:       midpoint between netColX and returnRightX, at tipY
+                double joinX = netHasBlocks
+                        ? (netBlockRightX + returnRightX) / 2
+                        : (netColX + returnRightX) / 2;
+                double joinY = netHasBlocks ? netMidRightY : tipY;
+
+                if (daHasBlocks) {
+                    // DA bottom → down to loopDownY → right to joinX → arrow up to joinY
+                    // FIX: добавляем дополнительный отступ VERTICAL_SPACING, чтобы DA-маршрут
+                    // уходил заметно ниже NET-блоков и не проходил вплотную к ним
+                    double loopDownY = Math.max(daColEndY, joinY) + VERTICAL_SPACING;
+                    line(daColX, daColEndY, daColX, loopDownY);
+                    line(daColX, loopDownY, joinX, loopDownY);
+                    arrow(joinX, loopDownY, joinX, joinY + 1);
+                    trackX(daColX - 5);
+                    updateMaxY(loopDownY);
+                } else {
+                    // DA bare: left detour from tipY → down to loopDownY → right to joinX → arrow up to joinY
+                    double daLeftX   = daColX - BACK_ARROW_MARGIN;
+                    double loopDownY = Math.max(tipY + DECISION_HEIGHT / 2 + VERTICAL_SPACING,
+                            joinY + VERTICAL_SPACING / 2);
+                    line(daColX, tipY, daLeftX, tipY);
+                    line(daLeftX, tipY, daLeftX, loopDownY);
+                    line(daLeftX, loopDownY, joinX, loopDownY);
+                    arrow(joinX, loopDownY, joinX, joinY + 1);
+                    trackX(daLeftX - 5);
+                    updateMaxY(loopDownY);
+                }
+
+                // Ensure exitY is below all drawn continue-routing geometry
+                {
+                    double tailBottom2 = netColEndY;
+                    boolean hasTail2 = tailBottom2 > colStartY + 1;
+                    // FIX: учитываем увеличенный loopDownY для daHasBlocks случая
+                    double contLoopDownY = daHasBlocks
+                            ? Math.max(daColEndY, joinY) + VERTICAL_SPACING
+                            : Math.max(
+                            tipY + DECISION_HEIGHT / 2 + VERTICAL_SPACING,
+                            Math.max(daBare ? 0 : daColEndY + VERTICAL_SPACING / 2,
+                                    netBare
+                                            ? (hasTail2
+                                            ? Math.max(daColEndY, tailBottom2) + VERTICAL_SPACING / 2
+                                            : 0)
+                                            : routingNetColEndY + VERTICAL_SPACING / 2)
+                    );
+                    if (contLoopDownY + VERTICAL_SPACING / 2 > exitY) exitY = contLoopDownY + VERTICAL_SPACING / 2;
+                }
 
             } else {
                 // ── BREAK DECISION routing ─────────────────────────────────
-                double breakTargetY = y - VERTICAL_SPACING / 2;
+                double tailEndY    = netColEndY;
+                boolean hasTailInNet = tailEndY > colStartY + 1;
+                double backTargetY = y - VERTICAL_SPACING / 2;
 
-                if (netBare) {
-                    line(netColX, tipY, returnRightX, tipY);
-                    line(returnRightX, tipY, returnRightX, breakTargetY);
-                    arrow(returnRightX, breakTargetY, x + 5, breakTargetY);
+                double netCornerY;
+                if (hasTailInNet) {
+                    // FIX: маршрут возврата начинается от середины правого бока последнего
+                    // NET-блока, а не от его нижнего края — так стрелка выглядит аккуратнее
+                    // и не «падает» лишний отрезок вниз перед поворотом вправо.
+                    double netMidRightX = netColX + PROCESS_WIDTH / 2;
+                    double netMidRightY = tailEndY - PROCESS_HEIGHT / 2;
+                    line(netMidRightX, netMidRightY, returnRightX, netMidRightY);
+                    line(returnRightX, netMidRightY, returnRightX, backTargetY);
+                    arrow(returnRightX, backTargetY, x + 5, backTargetY);
                     trackX(returnRightX + 5);
+                    // netCornerY используется ниже только для расчёта exitY
+                    netCornerY = netMidRightY;
+                    if (netCornerY + VERTICAL_SPACING / 2 > exitY) {
+                        exitY = netCornerY + VERTICAL_SPACING / 2;
+                    }
                 } else {
-                    double netCornerY = netLineStartY + VERTICAL_SPACING / 2;
-                    line(netColX, netLineStartY, netColX, netCornerY);
-                    line(netColX, netCornerY, returnRightX, netCornerY);
-                    line(returnRightX, netCornerY, returnRightX, breakTargetY);
-                    arrow(returnRightX, breakTargetY, x + 5, breakTargetY);
+                    netCornerY = tipY;
+                    line(netColX, tipY, returnRightX, tipY);
+                    line(returnRightX, netCornerY, returnRightX, backTargetY);
+                    arrow(returnRightX, backTargetY, x + 5, backTargetY);
                     trackX(returnRightX + 5);
                 }
 
                 double breakJoinY = exitY - VERTICAL_SPACING / 2;
+
                 if (daBare) {
                     line(daColX, tipY, daColX, breakJoinY);
                 } else {
@@ -486,6 +566,9 @@ public class SVGRenderer {
                 rendered.add(node);
                 node.setPosition(x, currentY);
 
+                List<FlowchartNode> tail = (i + 1 < chain.size()) ? chain.subList(i + 1, chain.size()) : List.of();
+                rendered.addAll(tail);
+
                 double mergeY = renderDecisionInBody(decisionNode, x, currentY, nextNode, loop, bodyStartX, bodyStartY, null, null);
 
                 if (mergeY < 0) {
@@ -494,21 +577,26 @@ public class SVGRenderer {
                     if (nextNode != null) {
                         double[] g = breakGeometry.get(decisionNode);
                         if (g != null) {
-                            double tailColX      = g[1];
-                            double colStartY     = g[6];
-                            boolean columnWasBare = (g[3] <= colStartY + 1);
-                            double tailStartY    = columnWasBare ? colStartY : g[3];
+                            double tailColX   = g[1];
+                            double colStartY  = g[6];
+                            double origNetEnd = g[3];
+                            boolean columnWasBare = (origNetEnd <= colStartY + 1);
+
+                            double[] extended = Arrays.copyOf(g, 9);
+                            extended[8] = origNetEnd;
+                            breakGeometry.put(decisionNode, extended);
+                            g = extended;
 
                             if (columnWasBare) {
-                                double netTipY = g[5];
-                                arrow(tailColX, netTipY, tailColX, colStartY);
+                                arrow(tailColX, g[5], tailColX, colStartY);
+                                double tailEndY = renderTailBlocks(tail, tailColX, colStartY, false);
+                                g[3] = tailEndY;
+                                blockBottom = Math.max(-mergeY, tailEndY);
+                            } else {
+                                double tailEndY = renderTailBlocks(tail, tailColX, origNetEnd, true);
+                                g[3] = tailEndY;
+                                blockBottom = Math.max(-mergeY, tailEndY);
                             }
-
-                            List<FlowchartNode> tail = chain.subList(i + 1, chain.size());
-                            rendered.addAll(tail);
-                            double tailEndY = renderBreakTailChain(tail, tailColX, tailStartY, columnWasBare);
-                            g[3] = tailEndY;
-                            blockBottom = Math.max(-mergeY, tailEndY);
                         }
                     }
                     return -blockBottom;
@@ -602,7 +690,7 @@ public class SVGRenderer {
                     leftColEndY = colStartY;
                 } else {
                     arrow(leftColX, tipY, leftColX, colStartY);
-                    leftColEndY = renderBreakColumnChain(contBranch, leftColX, colStartY);
+                    leftColEndY = renderBreakColumnChain(contBranch, leftColX, colStartY, loop);
                 }
 
                 // ── НЕТ (normal) column ──────────────────────────────────────
@@ -612,18 +700,53 @@ public class SVGRenderer {
                 double rightColEndY;
                 if (normalBranch != null && !isContinue(normalBranch) && !isBreak(normalBranch)) {
                     arrow(rightColX, tipY, rightColX, colStartY);
-                    rightColEndY = renderBreakColumnChain(normalBranch, rightColX, colStartY);
+                    rightColEndY = renderBreakColumnChain(normalBranch, rightColX, colStartY, loop);
                 } else {
                     rightColEndY = colStartY;
                 }
 
                 breakGeometry.put(node, new double[]{leftColX, rightColX, leftColEndY, rightColEndY, 1.0, tipY, colStartY});
 
-                double blockBottom = Math.max(leftColEndY, rightColEndY) + VERTICAL_SPACING;
+                boolean bothBare = (leftColEndY <= colStartY + 1) && (rightColEndY <= colStartY + 1);
+                double blockBottom = bothBare
+                        ? (y + h)
+                        : (Math.max(leftColEndY, rightColEndY) + VERTICAL_SPACING);
                 node.setSize(w, blockBottom - y);
                 updateMaxY(blockBottom);
                 return -blockBottom;
             }
+        }
+
+        // ── BREAK DECISION inside DO-WHILE ───────────────────────────────────
+        if (isBreakDecision && insideDoWhile) {
+            FlowchartNode breakBranch  = trueEndsWithBreak ? node.getTrueBranch()  : node.getFalseBranch();
+            FlowchartNode normalBranch = trueEndsWithBreak ? node.getFalseBranch() : node.getTrueBranch();
+            String breakLabel  = trueEndsWithBreak ? "ДА"  : "НЕТ";
+            String normalLabel = trueEndsWithBreak ? "НЕТ" : "ДА";
+
+            // Break-ветка: выход вправо из ромба, откладываем до рисования while-ромба.
+            double rightTipX = x + halfW;
+            double rightTipY = y + halfH;
+            double bottomTipX = x;
+            double bottomTipY = y + h;
+
+            labelText(breakLabel, rightTipX + 10, rightTipY - 10);
+            // Откладываем break-колонку — записываем rightTip как точку выхода.
+            // Флаг 2.0 означает тип "break" (отличаем от continue=1.0).
+            doWhileBreakExits.add(new double[]{rightTipX, rightTipY, 2.0});
+
+            labelText(normalLabel, bottomTipX + 8, bottomTipY + 15);
+
+            double normalEndY;
+            if (normalBranch != null) {
+                normalEndY = renderInlineChain(normalBranch, doWhileLoop, bottomTipX, bottomTipY + VERTICAL_SPACING, continueExits, bottomTipY);
+            } else {
+                normalEndY = bottomTipY;
+            }
+
+            node.setSize(w, normalEndY - y);
+            updateMaxY(normalEndY);
+            return normalEndY;
         }
 
         // ── BREAK DECISION ────────────────────────────────────────────────────
@@ -642,7 +765,6 @@ public class SVGRenderer {
             double tipY      = y + halfH;
             double colStartY = y + h + VERTICAL_SPACING;
 
-            // ── ДА (break) column ────────────────────────────────────────────
             labelText(breakLabel, x - halfW - 30, tipY - 10);
             line(x - halfW, tipY, daColX, tipY);
 
@@ -651,10 +773,9 @@ public class SVGRenderer {
                 daColEndY = colStartY;
             } else {
                 arrow(daColX, tipY, daColX, colStartY);
-                daColEndY = renderBreakColumnChain(breakBranch, daColX, colStartY);
+                daColEndY = renderBreakColumnChain(breakBranch, daColX, colStartY, loop);
             }
 
-            // ── НЕТ (continue-in-loop) column ───────────────────────────────
             labelText(continueLabel, x + halfW + 10, tipY - 10);
             line(x + halfW, tipY, netColX, tipY);
 
@@ -662,7 +783,7 @@ public class SVGRenderer {
             boolean netIsBare = (continueBranch == null || isContinue(continueBranch) || isBreak(continueBranch));
             if (!netIsBare) {
                 arrow(netColX, tipY, netColX, colStartY);
-                netColEndY = renderBreakColumnChain(continueBranch, netColX, colStartY);
+                netColEndY = renderBreakColumnChain(continueBranch, netColX, colStartY, loop);
             } else {
                 netColEndY = colStartY;
             }
@@ -730,6 +851,10 @@ public class SVGRenderer {
     }
 
     private double renderBreakColumnChain(FlowchartNode start, double x, double startY) {
+        return renderBreakColumnChain(start, x, startY, null);
+    }
+
+    private double renderBreakColumnChain(FlowchartNode start, double x, double startY, LoopStartNode loop) {
         double currentY = startY;
         FlowchartNode cur = start;
 
@@ -737,8 +862,11 @@ public class SVGRenderer {
             if (cur instanceof ConnectorNode) break;
             if (cur instanceof LoopEndNode)   break;
             if (cur instanceof TerminalNode)  break;
+            if (loop != null && cur == loop.getExitNode()) break;
 
             if (cur instanceof ProcessNode) {
+                // Skip nodes already rendered (e.g. tail nodes pre-added to rendered set)
+                if (rendered.contains(cur)) break;
                 rendered.add(cur);
                 cur.setPosition(x, currentY);
                 renderProcess(cur, x, currentY);
@@ -747,15 +875,20 @@ public class SVGRenderer {
 
                 double nodeBottom = currentY + PROCESS_HEIGHT;
 
+                // Ищем следующий процессный узел.
+                // Останавливаемся на терминальных и на exitNode родительского цикла,
+                // чтобы не уйти за границу колонки в блок, принадлежащий циклу.
                 FlowchartNode next = null;
                 for (FlowchartNode n : cur.getNext()) {
-                    if (n instanceof ConnectorNode) break;
-                    if (n instanceof LoopEndNode)   break;
+                    if (n instanceof ConnectorNode)              break;
+                    if (n instanceof LoopEndNode)                break;
+                    if (n instanceof TerminalNode)               break;
+                    if (loop != null && n == loop.getExitNode()) break;
                     next = n;
                     break;
                 }
 
-                if (next != null) {
+                if (next != null && !rendered.contains(next)) {
                     double nextY = nodeBottom + VERTICAL_SPACING;
                     arrow(x, nodeBottom, x, nextY - 5);
                     currentY = nextY;
@@ -771,43 +904,34 @@ public class SVGRenderer {
         return currentY;
     }
 
-    private double renderBreakTailChain(List<FlowchartNode> tail, double x, double startY, boolean columnWasBare) {
-        double currentY = startY;
+    private double renderTailBlocks(List<FlowchartNode> tail, double x, double topY, boolean firstHasArrow) {
+        double currentY = topY;
+        boolean first = true;
 
-        for (int i = 0; i < tail.size(); i++) {
-            FlowchartNode node = tail.get(i);
+        for (FlowchartNode node : tail) {
+            if (!(node instanceof ProcessNode)) break;
+            rendered.add(node);
 
-            if (node instanceof ProcessNode) {
-                rendered.add(node);
-
-                double blockY;
-                if (i == 0 && columnWasBare) {
-                    blockY = currentY;
-                } else {
-                    blockY = currentY + VERTICAL_SPACING;
-                    arrow(x, currentY, x, blockY - 5);
-                }
+            if (!first) {
+                double nextY = currentY + VERTICAL_SPACING;
+                arrow(x, currentY, x, nextY - 5);
+                currentY = nextY;
+            } else if (firstHasArrow) {
+                double blockY = currentY + VERTICAL_SPACING;
+                arrow(x, currentY, x, blockY - 5);
                 currentY = blockY;
-
-                node.setPosition(x, currentY);
-                renderProcess(node, x, currentY);
-                trackX(x + PROCESS_WIDTH / 2);
-                updateMaxY(currentY + PROCESS_HEIGHT);
-
-                double nodeBottom = currentY + PROCESS_HEIGHT;
-                if (i + 1 < tail.size()) {
-                    double nextY = nodeBottom + VERTICAL_SPACING;
-                    arrow(x, nodeBottom, x, nextY - 5);
-                    currentY = nextY;
-                } else {
-                    lastBodyBlockX = x;
-                    return nodeBottom;
-                }
-            } else {
-                break;
             }
+
+            node.setPosition(x, currentY);
+            renderProcess(node, x, currentY);
+            trackX(x + PROCESS_WIDTH / 2);
+            updateMaxY(currentY + PROCESS_HEIGHT);
+
+            currentY = currentY + PROCESS_HEIGHT;
+            first = false;
         }
 
+        lastBodyBlockX = x;
         return currentY;
     }
 
@@ -852,6 +976,13 @@ public class SVGRenderer {
                         double rightEdgeX = x + PROCESS_WIDTH / 2;
                         double midBlockY  = currentY + PROCESS_HEIGHT / 2;
                         continueExits.add(new double[]{rightEdgeX, midBlockY});
+                        rendered.add(next);
+                        return -nodeBottom;
+                    }
+                    if (next instanceof ConnectorNode conn && "break".equals(conn.getLabel())) {
+                        double rightEdgeX = x + PROCESS_WIDTH / 2;
+                        double midBlockY  = currentY + PROCESS_HEIGHT / 2;
+                        doWhileBreakExits.add(new double[]{rightEdgeX, midBlockY});
                         rendered.add(next);
                         return -nodeBottom;
                     }
@@ -998,6 +1129,36 @@ public class SVGRenderer {
         double dBottom = dY + dH;
         labelText("НЕТ", x + 8, dBottom + 15);
 
+        // ── BREAK exits: маршрут к середине НЕТ-стрелки while ──────────────
+        // НЕТ-стрелка: от dBottom до dBottom+VERTICAL_SPACING.
+        // Середина: dBottom + VERTICAL_SPACING/2.
+        if (!doWhileBreakExits.isEmpty()) {
+            double breakJoinY = dBottom + VERTICAL_SPACING / 2;
+            // Правая колонка для break-маршрута — правее continue-колонки
+            double breakColX = maxX + BACK_ARROW_MARGIN;
+            trackX(breakColX + 5);
+
+            for (double[] exit : doWhileBreakExits) {
+                double exitX = exit[0];
+                double exitY2 = exit[1];
+                boolean isTipExit = (exit.length >= 3 && exit[2] == 2.0);
+                if (isTipExit) {
+                    // Выход прямо из правого кончика ромба-условия
+                    line(exitX, exitY2, breakColX, exitY2);
+                } else {
+                    // Выход из середины правого бока блока
+                    line(exitX, exitY2, breakColX, exitY2);
+                }
+            }
+
+            // Вертикаль вниз до breakJoinY, затем стрелка влево к x
+            double topExitY = doWhileBreakExits.stream().mapToDouble(e -> e[1]).min().orElse(breakJoinY);
+            line(breakColX, topExitY, breakColX, breakJoinY);
+            arrow(breakColX, breakJoinY, x + 1, breakJoinY);
+
+            doWhileBreakExits.clear();
+        }
+
         if (node.getExitNode() != null) {
             FlowchartNode exitNode = node.getExitNode();
             if (exitNode instanceof TerminalNode t && !t.isStart()) {
@@ -1054,6 +1215,11 @@ public class SVGRenderer {
                 rendered.add(cur);
                 return -currentY;
             }
+            if (cur instanceof ConnectorNode conn && "break".equals(conn.getLabel())) {
+                doWhileBreakExits.add(new double[]{x + PROCESS_WIDTH / 2, currentY});
+                rendered.add(cur);
+                return -currentY;
+            }
 
             rendered.add(cur);
             cur.setPosition(x, currentY);
@@ -1092,7 +1258,10 @@ public class SVGRenderer {
             } else if (cur instanceof DecisionNode decNode) {
                 boolean trueIsContinue  = chainEndsWithContinue(decNode.getTrueBranch());
                 boolean falseIsContinue = chainEndsWithContinue(decNode.getFalseBranch());
+                boolean trueIsBreak     = chainEndsWithBreak(decNode.getTrueBranch());
+                boolean falseIsBreak    = chainEndsWithBreak(decNode.getFalseBranch());
                 boolean hasContinueBranch = trueIsContinue || falseIsContinue;
+                boolean hasBreakBranch    = trueIsBreak    || falseIsBreak;
 
                 FlowchartNode afterIf = null;
                 for (FlowchartNode n : decNode.getNext()) {
@@ -1106,7 +1275,7 @@ public class SVGRenderer {
                 }
 
                 double decBottom;
-                if (hasContinueBranch) {
+                if (hasContinueBranch || hasBreakBranch) {
                     double mergeY = renderDecisionInBody(decNode, x, currentY, afterIf, null,
                             x, currentY, loop, continueExits);
                     decBottom = mergeY;
