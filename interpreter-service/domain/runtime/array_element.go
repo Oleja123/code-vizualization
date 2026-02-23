@@ -12,7 +12,8 @@ type ArrayElement struct {
 func NewArrayElement(value *int, step int, isGlobal bool) *ArrayElement {
 	var v *int
 	if value != nil {
-		v = value
+		cv := *value
+		v = &cv
 	} else if isGlobal {
 		val := 0
 		v = &val

@@ -15,7 +15,8 @@ type Variable struct {
 func NewVariable(name string, value *int, step int, isGlobal bool) *Variable {
 	var v *int
 	if value != nil {
-		v = value
+		cv := *value
+		v = &cv
 	} else if isGlobal {
 		val := 0
 		v = &val

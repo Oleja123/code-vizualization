@@ -495,6 +495,7 @@ func (i *Interpreter) executeCallExpr(expr *converter.CallExpr) (interface{}, er
 	}
 
 	i.addEvents(events.FunctionCall{Name: expr.FunctionName})
+	i.addEvents(events.EnterScope{})
 	var returnValue *int
 	defer func() {
 		i.addEvents(events.FunctionReturn{Name: expr.FunctionName, ReturnValue: returnValue})
@@ -508,11 +509,13 @@ func (i *Interpreter) executeCallExpr(expr *converter.CallExpr) (interface{}, er
 	for ind, val := range declNode.Parameters {
 		variable := runtime.NewVariable(val.Name, nil, i.currentStepNumber, false)
 		parameters[ind] = variable
+		i.addEvents(events.DeclareVar{Name: val.Name, IsGlobal: false})
 
 		frame := i.CallStack.GetCurrentFrame()
 		frame.GetCurrentScope().Declare(variable)
 
 		parameters[ind].ChangeValue(argumentValues[ind], i.currentStepNumber)
+		i.addEvents(events.VarChanged{Name: val.Name, Value: argumentValues[ind]})
 	}
 
 	res, err := i.executeStatement(declNode.Body)

@@ -112,6 +112,7 @@ func TestInterpreterSteps_MainLifecycleEvents(t *testing.T) {
 		{Events: []string{
 			"FunctionCall(name=main)",
 			"EnterScope",
+			"EnterScope",
 			"LineChanged(line=2)",
 		}},
 		{Events: []string{
@@ -140,6 +141,7 @@ func TestInterpreterSteps_AssignmentEmitsVarChanged(t *testing.T) {
 	expectedSteps := []normalizedStep{
 		{Events: []string{
 			"FunctionCall(name=main)",
+			"EnterScope",
 			"EnterScope",
 			"LineChanged(line=2)",
 		}},
@@ -180,6 +182,7 @@ func TestInterpreterSteps_ArraysAndElementChangesWithCondition(t *testing.T) {
 	expectedSteps := []normalizedStep{
 		{Events: []string{
 			"FunctionCall(name=main)",
+			"EnterScope",
 			"EnterScope",
 			"LineChanged(line=2)",
 		}},
@@ -230,7 +233,7 @@ func TestInterpreterSteps_WhileLoopWithIfAndVarChanges(t *testing.T) {
 	require.Len(t, steps, 19)
 
 	expectedSteps := []normalizedStep{
-		{Events: []string{"FunctionCall(name=main)", "EnterScope", "LineChanged(line=2)"}},
+		{Events: []string{"FunctionCall(name=main)", "EnterScope", "EnterScope", "LineChanged(line=2)"}},
 		{Events: []string{"DeclareVar(name=i,global=false)", "LineChanged(line=3)"}},
 		{Events: []string{"DeclareVar(name=sum,global=false)", "LineChanged(line=4)"}},
 		{Events: []string{"EnterScope", "LineChanged(line=5)"}},
@@ -272,10 +275,12 @@ int main() {
 		{Events: []string{
 			"FunctionCall(name=main)",
 			"EnterScope",
+			"EnterScope",
 			"LineChanged(line=5)",
 		}},
 		{Events: []string{
 			"FunctionCall(name=foo)",
+			"EnterScope",
 			"EnterScope",
 			"LineChanged(line=2)",
 		}},
@@ -307,7 +312,7 @@ func TestInterpreterSteps_ForLoopWithVarChanges(t *testing.T) {
 	require.Len(t, steps, 11)
 
 	expectedSteps := []normalizedStep{
-		{Events: []string{"FunctionCall(name=main)", "EnterScope", "LineChanged(line=2)"}},
+		{Events: []string{"FunctionCall(name=main)", "EnterScope", "EnterScope", "LineChanged(line=2)"}},
 		{Events: []string{"DeclareVar(name=sum,global=false)", "LineChanged(line=3)"}},
 		{Events: []string{"EnterScope", "LineChanged(line=3)"}},
 		{Events: []string{"DeclareVar(name=i,global=false)", "EnterScope", "LineChanged(line=4)"}},
@@ -339,7 +344,7 @@ func TestInterpreterSteps_DoWhileLoopWithCondition(t *testing.T) {
 	require.Len(t, steps, 9)
 
 	expectedSteps := []normalizedStep{
-		{Events: []string{"FunctionCall(name=main)", "EnterScope", "LineChanged(line=2)"}},
+		{Events: []string{"FunctionCall(name=main)", "EnterScope", "EnterScope", "LineChanged(line=2)"}},
 		{Events: []string{"DeclareVar(name=i,global=false)", "EnterScope", "LineChanged(line=4)"}},
 		{Events: []string{"VarChanged(name=i,value=1)", "ExitScope", "LineChanged(line=5)"}},
 		{Events: []string{"EnterScope", "LineChanged(line=4)"}},
@@ -367,7 +372,7 @@ func TestInterpreterSteps_MultiVarDeclarationSingleLine(t *testing.T) {
 	require.Len(t, steps, 6)
 
 	expectedSteps := []normalizedStep{
-		{Events: []string{"FunctionCall(name=main)", "EnterScope", "LineChanged(line=2)"}},
+		{Events: []string{"FunctionCall(name=main)", "EnterScope", "EnterScope", "LineChanged(line=2)"}},
 		{Events: []string{"DeclareVar(name=a,global=false)", "LineChanged(line=2)"}},
 		{Events: []string{"DeclareVar(name=b,global=false)", "LineChanged(line=2)"}},
 		{Events: []string{"DeclareVar(name=c,global=false)", "LineChanged(line=3)"}},
@@ -399,7 +404,7 @@ func TestInterpreterSteps_ContinueInWhileLoop(t *testing.T) {
 	require.Len(t, steps, 25)
 
 	expectedSteps := []normalizedStep{
-		{Events: []string{"FunctionCall(name=main)", "EnterScope", "LineChanged(line=2)"}},
+		{Events: []string{"FunctionCall(name=main)", "EnterScope", "EnterScope", "LineChanged(line=2)"}},
 		{Events: []string{"DeclareVar(name=i,global=false)", "LineChanged(line=3)"}},
 		{Events: []string{"DeclareVar(name=sum,global=false)", "LineChanged(line=4)"}},
 		{Events: []string{"EnterScope", "LineChanged(line=5)"}},
@@ -450,7 +455,7 @@ func TestInterpreterSteps_BreakInWhileLoop(t *testing.T) {
 	require.Len(t, steps, 24)
 
 	expectedSteps := []normalizedStep{
-		{Events: []string{"FunctionCall(name=main)", "EnterScope", "LineChanged(line=2)"}},
+		{Events: []string{"FunctionCall(name=main)", "EnterScope", "EnterScope", "LineChanged(line=2)"}},
 		{Events: []string{"DeclareVar(name=i,global=false)", "LineChanged(line=3)"}},
 		{Events: []string{"DeclareVar(name=sum,global=false)", "LineChanged(line=4)"}},
 		{Events: []string{"EnterScope", "LineChanged(line=5)"}},
@@ -501,7 +506,7 @@ func TestInterpreterSteps_ForLoopWithContinueAndBreak(t *testing.T) {
 	require.Len(t, steps, 27)
 
 	expectedSteps := []normalizedStep{
-		{Events: []string{"FunctionCall(name=main)", "EnterScope", "LineChanged(line=2)"}},
+		{Events: []string{"FunctionCall(name=main)", "EnterScope", "EnterScope", "LineChanged(line=2)"}},
 		{Events: []string{"DeclareVar(name=sum,global=false)", "LineChanged(line=3)"}},
 		{Events: []string{"EnterScope", "LineChanged(line=3)"}},
 		{Events: []string{"DeclareVar(name=i,global=false)", "EnterScope", "LineChanged(line=4)"}},
@@ -548,7 +553,7 @@ func TestInterpreterSteps_Array2DDeclarationAndElementChanges(t *testing.T) {
 	require.Len(t, steps, 5)
 
 	expectedSteps := []normalizedStep{
-		{Events: []string{"FunctionCall(name=main)", "EnterScope", "LineChanged(line=2)"}},
+		{Events: []string{"FunctionCall(name=main)", "EnterScope", "EnterScope", "LineChanged(line=2)"}},
 		{Events: []string{"DeclareArray2D(name=m,size1=2,size2=2,global=false)", "LineChanged(line=3)"}},
 		{Events: []string{"Array2DElementChanged(name=m,ind1=1,ind2=0,value=7)", "LineChanged(line=4)"}},
 		{Events: []string{"Array2DElementChanged(name=m,ind1=0,ind2=1,value=8)", "LineChanged(line=5)"}},
@@ -588,7 +593,7 @@ int main() {
 
 	expectedSteps := []normalizedStep{
 		{Events: []string{"LineChanged(line=1)"}},
-		{Events: []string{"DeclareVar(name=g,global=true)", "FunctionCall(name=main)", "EnterScope", "LineChanged(line=3)"}},
+		{Events: []string{"DeclareVar(name=g,global=true)", "FunctionCall(name=main)", "EnterScope", "EnterScope", "LineChanged(line=3)"}},
 		{Events: []string{"ExitScope", "FunctionReturn(name=main,value=5)", "LineChanged(line=-1)"}},
 	}
 
@@ -613,7 +618,7 @@ func TestInterpreterSteps_IfElseFalseBranchEvents(t *testing.T) {
 	require.Len(t, steps, 5)
 
 	expectedSteps := []normalizedStep{
-		{Events: []string{"FunctionCall(name=main)", "EnterScope", "LineChanged(line=2)"}},
+		{Events: []string{"FunctionCall(name=main)", "EnterScope", "EnterScope", "LineChanged(line=2)"}},
 		{Events: []string{"DeclareVar(name=x,global=false)", "LineChanged(line=3)"}},
 		{Events: []string{"EnterScope", "LineChanged(line=6)"}},
 		{Events: []string{"VarChanged(name=x,value=2)", "ExitScope", "LineChanged(line=8)"}},
@@ -639,7 +644,7 @@ func TestInterpreterSteps_ForContinueRunsPostExpression(t *testing.T) {
 	require.Len(t, steps, 11)
 
 	expectedSteps := []normalizedStep{
-		{Events: []string{"FunctionCall(name=main)", "EnterScope", "LineChanged(line=2)"}},
+		{Events: []string{"FunctionCall(name=main)", "EnterScope", "EnterScope", "LineChanged(line=2)"}},
 		{Events: []string{"DeclareVar(name=i,global=false)", "LineChanged(line=3)"}},
 		{Events: []string{"EnterScope", "LineChanged(line=3)"}},
 		{Events: []string{"VarChanged(name=i,value=0)", "EnterScope", "LineChanged(line=4)"}},
@@ -671,7 +676,7 @@ func TestInterpreterSteps_ForBreakSkipsPostExpression(t *testing.T) {
 	require.Len(t, steps, 6)
 
 	expectedSteps := []normalizedStep{
-		{Events: []string{"FunctionCall(name=main)", "EnterScope", "LineChanged(line=2)"}},
+		{Events: []string{"FunctionCall(name=main)", "EnterScope", "EnterScope", "LineChanged(line=2)"}},
 		{Events: []string{"DeclareVar(name=i,global=false)", "LineChanged(line=3)"}},
 		{Events: []string{"EnterScope", "LineChanged(line=3)"}},
 		{Events: []string{"VarChanged(name=i,value=0)", "EnterScope", "LineChanged(line=4)"}},
@@ -695,4 +700,341 @@ func TestInterpreterSteps_RuntimeErrorDivisionByZero(t *testing.T) {
 	assert.Equal(t, 0, stepBegin)
 	require.Error(t, err)
 	assert.Equal(t, "runtime error: division by zero", err.Error())
+}
+
+func TestInterpreterSteps_RecursiveFactorial(t *testing.T) {
+	code := `int factorial(int n) {
+	if (n <= 1) {
+		return 1;
+	}
+	return n * factorial(n - 1);
+}
+
+int main() {
+	int result = factorial(3);
+	return result;
+}`
+
+	result, steps, _ := runCodeWithSteps(t, code)
+
+	require.NotNil(t, result)
+	assert.Equal(t, 6, *result)
+	require.Len(t, steps, 9)
+
+	expectedSteps := []normalizedStep{
+		{Events: []string{
+			"FunctionCall(name=main)",
+			"EnterScope",
+			"EnterScope",
+			"LineChanged(line=9)",
+		}},
+		{Events: []string{
+			"FunctionCall(name=factorial)",
+			"EnterScope",
+			"DeclareVar(name=n,global=false)",
+			"VarChanged(name=n,value=3)",
+			"EnterScope",
+			"LineChanged(line=2)",
+		}},
+		{Events: []string{
+			"LineChanged(line=5)",
+		}},
+		{Events: []string{
+			"FunctionCall(name=factorial)",
+			"EnterScope",
+			"DeclareVar(name=n,global=false)",
+			"VarChanged(name=n,value=2)",
+			"EnterScope",
+			"LineChanged(line=2)",
+		}},
+		{Events: []string{
+			"LineChanged(line=5)",
+		}},
+		{Events: []string{
+			"FunctionCall(name=factorial)",
+			"EnterScope",
+			"DeclareVar(name=n,global=false)",
+			"VarChanged(name=n,value=1)",
+			"EnterScope",
+			"LineChanged(line=2)",
+		}},
+		{Events: []string{
+			"EnterScope",
+			"LineChanged(line=3)",
+		}},
+		{Events: []string{
+			"ExitScope",
+			"ExitScope",
+			"FunctionReturn(name=factorial,value=1)",
+			"ExitScope",
+			"FunctionReturn(name=factorial,value=2)",
+			"ExitScope",
+			"FunctionReturn(name=factorial,value=6)",
+			"DeclareVar(name=result,global=false)",
+			"LineChanged(line=10)",
+		}},
+		{Events: []string{
+			"ExitScope",
+			"FunctionReturn(name=main,value=6)",
+			"LineChanged(line=-1)",
+		}},
+	}
+
+	assert.Equal(t, expectedSteps, normalizeSteps(steps))
+}
+
+func TestInterpreterSteps_FunctionWithParameters(t *testing.T) {
+	code := `int add(int a, int b) {
+	return a + b;
+}
+
+int main() {
+	int x = add(5, 3);
+	return x;
+}`
+
+	result, steps, _ := runCodeWithSteps(t, code)
+
+	require.NotNil(t, result)
+	assert.Equal(t, 8, *result)
+	require.Len(t, steps, 4)
+
+	expectedSteps := []normalizedStep{
+		{Events: []string{
+			"FunctionCall(name=main)",
+			"EnterScope",
+			"EnterScope",
+			"LineChanged(line=6)",
+		}},
+		{Events: []string{
+			"FunctionCall(name=add)",
+			"EnterScope",
+			"DeclareVar(name=a,global=false)",
+			"VarChanged(name=a,value=5)",
+			"DeclareVar(name=b,global=false)",
+			"VarChanged(name=b,value=3)",
+			"EnterScope",
+			"LineChanged(line=2)",
+		}},
+		{Events: []string{
+			"ExitScope",
+			"FunctionReturn(name=add,value=8)",
+			"DeclareVar(name=x,global=false)",
+			"LineChanged(line=7)",
+		}},
+		{Events: []string{
+			"ExitScope",
+			"FunctionReturn(name=main,value=8)",
+			"LineChanged(line=-1)",
+		}},
+	}
+
+	assert.Equal(t, expectedSteps, normalizeSteps(steps))
+}
+
+func TestInterpreterSteps_VoidFunction(t *testing.T) {
+	code := `void printValue(int x) {
+	x = x + 1;
+}
+
+int main() {
+	int num = 5;
+	printValue(num);
+	return num;
+}`
+
+	result, steps, _ := runCodeWithSteps(t, code)
+
+	require.NotNil(t, result)
+	assert.Equal(t, 5, *result)
+	require.Len(t, steps, 5)
+
+	expectedSteps := []normalizedStep{
+		{Events: []string{
+			"FunctionCall(name=main)",
+			"EnterScope",
+			"EnterScope",
+			"LineChanged(line=6)",
+		}},
+		{Events: []string{
+			"DeclareVar(name=num,global=false)",
+			"LineChanged(line=7)",
+		}},
+		{Events: []string{
+			"FunctionCall(name=printValue)",
+			"EnterScope",
+			"DeclareVar(name=x,global=false)",
+			"VarChanged(name=x,value=5)",
+			"EnterScope",
+			"LineChanged(line=2)",
+		}},
+		{Events: []string{
+			"VarChanged(name=x,value=6)",
+			"ExitScope",
+			"FunctionReturn(name=printValue,value=nil)",
+			"LineChanged(line=8)",
+		}},
+		{Events: []string{
+			"ExitScope",
+			"FunctionReturn(name=main,value=5)",
+			"LineChanged(line=-1)",
+		}},
+	}
+
+	assert.Equal(t, expectedSteps, normalizeSteps(steps))
+}
+
+func TestInterpreterSteps_VoidFunctionWithMultipleCalls(t *testing.T) {
+	code := `void increment(int x) {
+	x = x + 1;
+}
+
+int main() {
+	int a = 10;
+	increment(a);
+	increment(a);
+	return a;
+}`
+
+	result, steps, _ := runCodeWithSteps(t, code)
+
+	require.NotNil(t, result)
+	assert.Equal(t, 10, *result)
+	require.Len(t, steps, 7)
+
+	expectedSteps := []normalizedStep{
+		{Events: []string{
+			"FunctionCall(name=main)",
+			"EnterScope",
+			"EnterScope",
+			"LineChanged(line=6)",
+		}},
+		{Events: []string{
+			"DeclareVar(name=a,global=false)",
+			"LineChanged(line=7)",
+		}},
+		{Events: []string{
+			"FunctionCall(name=increment)",
+			"EnterScope",
+			"DeclareVar(name=x,global=false)",
+			"VarChanged(name=x,value=10)",
+			"EnterScope",
+			"LineChanged(line=2)",
+		}},
+		{Events: []string{
+			"VarChanged(name=x,value=11)",
+			"ExitScope",
+			"FunctionReturn(name=increment,value=nil)",
+			"LineChanged(line=8)",
+		}},
+		{Events: []string{
+			"FunctionCall(name=increment)",
+			"EnterScope",
+			"DeclareVar(name=x,global=false)",
+			"VarChanged(name=x,value=10)",
+			"EnterScope",
+			"LineChanged(line=2)",
+		}},
+		{Events: []string{
+			"VarChanged(name=x,value=11)",
+			"ExitScope",
+			"FunctionReturn(name=increment,value=nil)",
+			"LineChanged(line=9)",
+		}},
+		{Events: []string{
+			"ExitScope",
+			"FunctionReturn(name=main,value=10)",
+			"LineChanged(line=-1)",
+		}},
+	}
+
+	assert.Equal(t, expectedSteps, normalizeSteps(steps))
+}
+
+func TestInterpreterSteps_RecursiveFibonacci(t *testing.T) {
+	code := `int fib(int n) {
+	if (n <= 1) {
+		return n;
+	}
+	return fib(n - 1) + fib(n - 2);
+}
+
+int main() {
+	int result = fib(4);
+	return result;
+}`
+
+	result, steps, _ := runCodeWithSteps(t, code)
+
+	require.NotNil(t, result)
+	assert.Equal(t, 3, *result)
+	// Фибоначчи для 4 создает много вызовов: fib(4)->fib(3)+fib(2)->...
+	require.Greater(t, len(steps), 10)
+
+	// Проверяем, что есть множественные вызовы функции fib
+	fibCallCount := 0
+	for _, step := range steps {
+		for _, event := range step.Events {
+			if normalized := normalizeEvent(event); normalized == "FunctionCall(name=fib)" {
+				fibCallCount++
+			}
+		}
+	}
+	assert.Equal(t, 9, fibCallCount) // fib(4) вызывает fib рекурсивно 9 раз
+}
+
+func TestInterpreterSteps_FunctionWithMultipleParameters(t *testing.T) {
+	code := `int multiply(int a, int b, int c) {
+	int result = a * b * c;
+	return result;
+}
+
+int main() {
+	int value = multiply(2, 3, 4);
+	return value;
+}`
+
+	result, steps, _ := runCodeWithSteps(t, code)
+
+	require.NotNil(t, result)
+	assert.Equal(t, 24, *result)
+	require.Len(t, steps, 5)
+
+	expectedSteps := []normalizedStep{
+		{Events: []string{
+			"FunctionCall(name=main)",
+			"EnterScope",
+			"EnterScope",
+			"LineChanged(line=7)",
+		}},
+		{Events: []string{
+			"FunctionCall(name=multiply)",
+			"EnterScope",
+			"DeclareVar(name=a,global=false)",
+			"VarChanged(name=a,value=2)",
+			"DeclareVar(name=b,global=false)",
+			"VarChanged(name=b,value=3)",
+			"DeclareVar(name=c,global=false)",
+			"VarChanged(name=c,value=4)",
+			"EnterScope",
+			"LineChanged(line=2)",
+		}},
+		{Events: []string{
+			"DeclareVar(name=result,global=false)",
+			"LineChanged(line=3)",
+		}},
+		{Events: []string{
+			"ExitScope",
+			"FunctionReturn(name=multiply,value=24)",
+			"DeclareVar(name=value,global=false)",
+			"LineChanged(line=8)",
+		}},
+		{Events: []string{
+			"ExitScope",
+			"FunctionReturn(name=main,value=24)",
+			"LineChanged(line=-1)",
+		}},
+	}
+
+	assert.Equal(t, expectedSteps, normalizeSteps(steps))
 }

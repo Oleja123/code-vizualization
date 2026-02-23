@@ -15,7 +15,8 @@ type Snapshot struct {
 	Error       string
 }
 
-func NewSnapshot(globalScope *runtime.Scope) *Snapshot {
+func NewSnapshot() *Snapshot {
+	globalScope := runtime.NewScope(nil)
 	return &Snapshot{
 		CallStack:   runtime.NewCallStack(globalScope),
 		GlobalScope: globalScope,
@@ -146,8 +147,10 @@ func (sn *Snapshot) applyLineChanged(e events.LineChanged) error {
 }
 
 func (sn *Snapshot) Reset() {
+	sn.GlobalScope = runtime.NewScope(nil)
 	sn.CallStack = runtime.NewCallStack(sn.GlobalScope)
-	sn.Line = 0
+	sn.Line = -1
+	sn.Error = ""
 }
 
 // Методы для чтения текущего состояния

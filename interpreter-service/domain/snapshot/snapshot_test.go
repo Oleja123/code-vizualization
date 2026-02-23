@@ -35,19 +35,16 @@ func makeArray2D(values [][]int) []runtime.Array {
 }
 
 func TestNewSnapshot(t *testing.T) {
-	globalScope := runtime.NewScope(nil)
-	sn := NewSnapshot(globalScope)
+	sn := NewSnapshot()
 
 	assert.NotNil(t, sn.CallStack)
 	assert.NotNil(t, sn.GlobalScope)
-	assert.Equal(t, globalScope, sn.GlobalScope)
 	assert.Equal(t, 0, sn.Line)
 	assert.NotNil(t, sn.CallStack.GetCurrentFrame())
 }
 
 func TestSnapshotApplyDeclareVar(t *testing.T) {
-	globalScope := runtime.NewScope(nil)
-	sn := NewSnapshot(globalScope)
+	sn := NewSnapshot()
 
 	event := events.DeclareVar{
 		Name:  "x",
@@ -64,8 +61,7 @@ func TestSnapshotApplyDeclareVar(t *testing.T) {
 }
 
 func TestSnapshotApplyDeclareVarWithInitialValue(t *testing.T) {
-	globalScope := runtime.NewScope(nil)
-	sn := NewSnapshot(globalScope)
+	sn := NewSnapshot()
 
 	val := 42
 	event := events.DeclareVar{
@@ -84,8 +80,7 @@ func TestSnapshotApplyDeclareVarWithInitialValue(t *testing.T) {
 }
 
 func TestSnapshotApplyDeclareArray(t *testing.T) {
-	globalScope := runtime.NewScope(nil)
-	sn := NewSnapshot(globalScope)
+	sn := NewSnapshot()
 
 	event := events.DeclareArray{
 		Name:  "arr",
@@ -104,8 +99,7 @@ func TestSnapshotApplyDeclareArray(t *testing.T) {
 }
 
 func TestSnapshotApplyDeclareArray2D(t *testing.T) {
-	globalScope := runtime.NewScope(nil)
-	sn := NewSnapshot(globalScope)
+	sn := NewSnapshot()
 
 	event := events.DeclareArray2D{
 		Name:  "matrix",
@@ -126,8 +120,7 @@ func TestSnapshotApplyDeclareArray2D(t *testing.T) {
 }
 
 func TestSnapshotApplyEnterExitScope(t *testing.T) {
-	globalScope := runtime.NewScope(nil)
-	sn := NewSnapshot(globalScope)
+	sn := NewSnapshot()
 
 	// Declare variable in global scope
 	declareEvent := events.DeclareVar{
@@ -155,8 +148,7 @@ func TestSnapshotApplyEnterExitScope(t *testing.T) {
 }
 
 func TestSnapshotApplyVarChanged(t *testing.T) {
-	globalScope := runtime.NewScope(nil)
-	sn := NewSnapshot(globalScope)
+	sn := NewSnapshot()
 
 	// Declare variable
 	declareEvent := events.DeclareVar{
@@ -182,8 +174,7 @@ func TestSnapshotApplyVarChanged(t *testing.T) {
 }
 
 func TestSnapshotApplyVarChangedNotFound(t *testing.T) {
-	globalScope := runtime.NewScope(nil)
-	sn := NewSnapshot(globalScope)
+	sn := NewSnapshot()
 
 	changeEvent := events.VarChanged{
 		Name:  "nonexistent",
@@ -194,8 +185,7 @@ func TestSnapshotApplyVarChangedNotFound(t *testing.T) {
 }
 
 func TestSnapshotApplyArrayElementChanged(t *testing.T) {
-	globalScope := runtime.NewScope(nil)
-	sn := NewSnapshot(globalScope)
+	sn := NewSnapshot()
 
 	// Declare array
 	declareEvent := events.DeclareArray{
@@ -224,8 +214,7 @@ func TestSnapshotApplyArrayElementChanged(t *testing.T) {
 }
 
 func TestSnapshotApplyArray2DElementChanged(t *testing.T) {
-	globalScope := runtime.NewScope(nil)
-	sn := NewSnapshot(globalScope)
+	sn := NewSnapshot()
 
 	// Declare 2D array
 	declareEvent := events.DeclareArray2D{
@@ -255,8 +244,7 @@ func TestSnapshotApplyArray2DElementChanged(t *testing.T) {
 }
 
 func TestSnapshotApplyFunctionCallAndReturn(t *testing.T) {
-	globalScope := runtime.NewScope(nil)
-	sn := NewSnapshot(globalScope)
+	sn := NewSnapshot()
 
 	initialFramesCount := sn.GetFramesCount()
 	assert.Equal(t, 1, initialFramesCount)
@@ -286,8 +274,7 @@ func TestSnapshotApplyFunctionCallAndReturn(t *testing.T) {
 }
 
 func TestSnapshotApplyFunctionReturnVoid(t *testing.T) {
-	globalScope := runtime.NewScope(nil)
-	sn := NewSnapshot(globalScope)
+	sn := NewSnapshot()
 
 	callEvent := events.FunctionCall{
 		Name: "voidFunc",
@@ -307,8 +294,7 @@ func TestSnapshotApplyFunctionReturnVoid(t *testing.T) {
 }
 
 func TestSnapshotApplyLineChanged(t *testing.T) {
-	globalScope := runtime.NewScope(nil)
-	sn := NewSnapshot(globalScope)
+	sn := NewSnapshot()
 
 	assert.Equal(t, 0, sn.GetCurrentLine())
 
@@ -322,8 +308,7 @@ func TestSnapshotApplyLineChanged(t *testing.T) {
 }
 
 func TestSnapshotReset(t *testing.T) {
-	globalScope := runtime.NewScope(nil)
-	sn := NewSnapshot(globalScope)
+	sn := NewSnapshot()
 
 	// Add some state
 	declareEvent := events.DeclareVar{
@@ -345,16 +330,15 @@ func TestSnapshotReset(t *testing.T) {
 	// Reset
 	sn.Reset()
 
-	// After reset, CallStack should be fresh, Line and Step should be 0
-	assert.Equal(t, 0, sn.GetCurrentLine())
+	// After reset, CallStack should be fresh
+	assert.Equal(t, -1, sn.GetCurrentLine())
 	assert.Equal(t, 1, sn.GetFramesCount())
 	// Note: Global scope retains declarations (this is correct behavior)
 	// NewSnapshot should be created with a fresh scope for a clean slate
 }
 
 func TestSnapshotComplexScenario(t *testing.T) {
-	globalScope := runtime.NewScope(nil)
-	sn := NewSnapshot(globalScope)
+	sn := NewSnapshot()
 
 	// Declare global variables
 	events1 := events.DeclareVar{Name: "x", Value: nil}
@@ -416,8 +400,7 @@ func TestSnapshotComplexScenario(t *testing.T) {
 }
 
 func TestSnapshotGetArrayNotFound(t *testing.T) {
-	globalScope := runtime.NewScope(nil)
-	sn := NewSnapshot(globalScope)
+	sn := NewSnapshot()
 
 	arr, ok := sn.GetArray("nonexistent")
 	assert.False(t, ok)
@@ -425,8 +408,7 @@ func TestSnapshotGetArrayNotFound(t *testing.T) {
 }
 
 func TestSnapshotGetArray2DNotFound(t *testing.T) {
-	globalScope := runtime.NewScope(nil)
-	sn := NewSnapshot(globalScope)
+	sn := NewSnapshot()
 
 	arr2d, ok := sn.GetArray2D("nonexistent")
 	assert.False(t, ok)
@@ -434,8 +416,7 @@ func TestSnapshotGetArray2DNotFound(t *testing.T) {
 }
 
 func TestSnapshotGetVariableNotFound(t *testing.T) {
-	globalScope := runtime.NewScope(nil)
-	sn := NewSnapshot(globalScope)
+	sn := NewSnapshot()
 
 	variable, ok := sn.GetVariable("nonexistent")
 	assert.False(t, ok)
@@ -443,8 +424,7 @@ func TestSnapshotGetVariableNotFound(t *testing.T) {
 }
 
 func TestSnapshotMultipleFunctionCalls(t *testing.T) {
-	globalScope := runtime.NewScope(nil)
-	sn := NewSnapshot(globalScope)
+	sn := NewSnapshot()
 
 	// First function call
 	call1 := events.FunctionCall{Name: "func1"}
@@ -479,8 +459,7 @@ func TestSnapshotMultipleFunctionCalls(t *testing.T) {
 
 // Тест: Факториал (рекурсия)
 func TestScenarioFactorial(t *testing.T) {
-	globalScope := runtime.NewScope(nil)
-	sn := NewSnapshot(globalScope)
+	sn := NewSnapshot()
 
 	// Объявление глобальных переменных
 	sn.Apply(events.DeclareVar{Name: "n", Value: nil}, 0)
@@ -580,8 +559,7 @@ func TestScenarioFactorial(t *testing.T) {
 
 // Тест: Сортировка массива (bubble sort)
 func TestScenarioBubbleSort(t *testing.T) {
-	globalScope := runtime.NewScope(nil)
-	sn := NewSnapshot(globalScope)
+	sn := NewSnapshot()
 
 	// Объявление и инициализация массива
 	sn.Apply(events.DeclareArray{
@@ -654,8 +632,7 @@ func TestScenarioBubbleSort(t *testing.T) {
 
 // Тест: Поиск в матрице (2D массив)
 func TestScenarioMatrix2DSearch(t *testing.T) {
-	globalScope := runtime.NewScope(nil)
-	sn := NewSnapshot(globalScope)
+	sn := NewSnapshot()
 
 	// Объявление матрицы 3x3
 	sn.Apply(events.DeclareArray2D{
@@ -718,8 +695,7 @@ func TestScenarioMatrix2DSearch(t *testing.T) {
 
 // Тест: Вычисление суммы и среднего (с тремя вложенными функциями)
 func TestScenarioNotationCalculations(t *testing.T) {
-	globalScope := runtime.NewScope(nil)
-	sn := NewSnapshot(globalScope)
+	sn := NewSnapshot()
 
 	// Массив чисел
 	sn.Apply(events.DeclareArray{
@@ -797,8 +773,7 @@ func TestScenarioNotationCalculations(t *testing.T) {
 // ============= Тесты на обработку undefined behavior =============
 
 func TestUndefinedBehaviorVarNotFound(t *testing.T) {
-	globalScope := runtime.NewScope(nil)
-	sn := NewSnapshot(globalScope)
+	sn := NewSnapshot()
 
 	// Попытка изменить переменную, которая не была объявлена
 	changeEvent := events.VarChanged{
@@ -811,8 +786,7 @@ func TestUndefinedBehaviorVarNotFound(t *testing.T) {
 }
 
 func TestUndefinedBehaviorArrayNotFound(t *testing.T) {
-	globalScope := runtime.NewScope(nil)
-	sn := NewSnapshot(globalScope)
+	sn := NewSnapshot()
 
 	// Попытка изменить элемент масивов, который не был объявлен
 	changeEvent := events.ArrayElementChanged{
@@ -826,8 +800,7 @@ func TestUndefinedBehaviorArrayNotFound(t *testing.T) {
 }
 
 func TestUndefinedBehaviorArray2DNotFound(t *testing.T) {
-	globalScope := runtime.NewScope(nil)
-	sn := NewSnapshot(globalScope)
+	sn := NewSnapshot()
 
 	// Попытка изменить элемент 2D массива, который не был объявлен
 	changeEvent := events.Array2DElementChanged{
@@ -842,8 +815,7 @@ func TestUndefinedBehaviorArray2DNotFound(t *testing.T) {
 }
 
 func TestUndefinedBehaviorArrayOutOfBoundsPositive(t *testing.T) {
-	globalScope := runtime.NewScope(nil)
-	sn := NewSnapshot(globalScope)
+	sn := NewSnapshot()
 
 	// Объявляем массив размером 3
 	sn.Apply(events.DeclareArray{
@@ -864,8 +836,7 @@ func TestUndefinedBehaviorArrayOutOfBoundsPositive(t *testing.T) {
 }
 
 func TestUndefinedBehaviorArrayOutOfBoundsNegative(t *testing.T) {
-	globalScope := runtime.NewScope(nil)
-	sn := NewSnapshot(globalScope)
+	sn := NewSnapshot()
 
 	// Объявляем массив
 	sn.Apply(events.DeclareArray{
@@ -886,8 +857,7 @@ func TestUndefinedBehaviorArrayOutOfBoundsNegative(t *testing.T) {
 }
 
 func TestUndefinedBehaviorArray2DOutOfBoundsRow(t *testing.T) {
-	globalScope := runtime.NewScope(nil)
-	sn := NewSnapshot(globalScope)
+	sn := NewSnapshot()
 
 	// Объявляем 2D массив 2x2
 	sn.Apply(events.DeclareArray2D{
@@ -910,8 +880,7 @@ func TestUndefinedBehaviorArray2DOutOfBoundsRow(t *testing.T) {
 }
 
 func TestUndefinedBehaviorArray2DOutOfBoundsCol(t *testing.T) {
-	globalScope := runtime.NewScope(nil)
-	sn := NewSnapshot(globalScope)
+	sn := NewSnapshot()
 
 	// Объявляем 2D массив 2x2
 	sn.Apply(events.DeclareArray2D{
@@ -934,8 +903,7 @@ func TestUndefinedBehaviorArray2DOutOfBoundsCol(t *testing.T) {
 }
 
 func TestUndefinedBehaviorEventApply(t *testing.T) {
-	globalScope := runtime.NewScope(nil)
-	sn := NewSnapshot(globalScope)
+	sn := NewSnapshot()
 
 	// Применяем событие UndefinedBehavior
 	ubEvent := events.UndefinedBehavior{
@@ -949,8 +917,7 @@ func TestUndefinedBehaviorEventApply(t *testing.T) {
 }
 
 func TestUndefinedBehaviorEventApplyMultiple(t *testing.T) {
-	globalScope := runtime.NewScope(nil)
-	sn := NewSnapshot(globalScope)
+	sn := NewSnapshot()
 
 	// Применяем первое событие UndefinedBehavior
 	ubEvent1 := events.UndefinedBehavior{
@@ -974,8 +941,7 @@ func TestUndefinedBehaviorEventApplyMultiple(t *testing.T) {
 }
 
 func TestUndefinedBehaviorVarNotFoundAfterDeclaration(t *testing.T) {
-	globalScope := runtime.NewScope(nil)
-	sn := NewSnapshot(globalScope)
+	sn := NewSnapshot()
 
 	// Объявляем переменную x
 	sn.Apply(events.DeclareVar{Name: "x", Value: nil}, 0)
@@ -992,8 +958,7 @@ func TestUndefinedBehaviorVarNotFoundAfterDeclaration(t *testing.T) {
 }
 
 func TestUndefinedBehaviorExitScopeWithoutEnter(t *testing.T) {
-	globalScope := runtime.NewScope(nil)
-	sn := NewSnapshot(globalScope)
+	sn := NewSnapshot()
 
 	// Входим в область видимости
 	sn.Apply(events.EnterScope{}, 0)
@@ -1012,8 +977,7 @@ func TestUndefinedBehaviorExitScopeWithoutEnter(t *testing.T) {
 }
 
 func TestUndefinedBehaviorComplexErrorScenario(t *testing.T) {
-	globalScope := runtime.NewScope(nil)
-	sn := NewSnapshot(globalScope)
+	sn := NewSnapshot()
 
 	// Объявляем переменные и массив
 	sn.Apply(events.DeclareVar{Name: "count", Value: nil}, 0)
@@ -1047,8 +1011,7 @@ func TestUndefinedBehaviorComplexErrorScenario(t *testing.T) {
 }
 
 func TestUndefinedBehaviorGetNonexistentVariable(t *testing.T) {
-	globalScope := runtime.NewScope(nil)
-	sn := NewSnapshot(globalScope)
+	sn := NewSnapshot()
 
 	// Пытаемся получить несуществующую переменную
 	variable, ok := sn.GetVariable("nonexistent")
@@ -1057,8 +1020,7 @@ func TestUndefinedBehaviorGetNonexistentVariable(t *testing.T) {
 }
 
 func TestUndefinedBehaviorGetNonexistentArray(t *testing.T) {
-	globalScope := runtime.NewScope(nil)
-	sn := NewSnapshot(globalScope)
+	sn := NewSnapshot()
 
 	// Пытаемся получить несуществующий массив
 	arr, ok := sn.GetArray("nonexistent_array")
@@ -1067,12 +1029,10 @@ func TestUndefinedBehaviorGetNonexistentArray(t *testing.T) {
 }
 
 func TestUndefinedBehaviorGetNonexistentArray2D(t *testing.T) {
-	globalScope := runtime.NewScope(nil)
-	sn := NewSnapshot(globalScope)
+	sn := NewSnapshot()
 
 	// Пытаемся получить несуществующий 2D массив
 	arr2d, ok := sn.GetArray2D("nonexistent_matrix")
 	assert.False(t, ok)
 	assert.Nil(t, arr2d)
 }
-

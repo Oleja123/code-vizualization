@@ -17,7 +17,10 @@ func NewArray(name string, size int, value []ArrayElement, step int, isGlobal bo
 	ret.Name = name
 	ret.Size = size
 	if value != nil {
-		ret.Values = value
+		ret.Values = make([]ArrayElement, size)
+		for i := range ret.Values {
+			ret.Values[i] = *NewArrayElement(value[i].Value, step, isGlobal)
+		}
 	} else {
 		ret.Values = make([]ArrayElement, size)
 		for i := range ret.Values {

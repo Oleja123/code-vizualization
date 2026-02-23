@@ -9,6 +9,7 @@ import (
 	"github.com/Oleja123/code-vizualization/cst-to-ast-service/pkg/converter"
 	"github.com/Oleja123/code-vizualization/interpreter-service/application/eventdispatcher"
 	"github.com/Oleja123/code-vizualization/interpreter-service/application/interpreter"
+	"github.com/Oleja123/code-vizualization/interpreter-service/domain/events"
 )
 
 type expectedVariable struct {
@@ -116,7 +117,7 @@ func runDispatcherForCode(t *testing.T, code string) (*eventdispatcher.EventDisp
 		t.Fatalf("runtime error: %v", err)
 	}
 
-	ed := eventdispatcher.NewEventDispatcher(runner.GlobalScope, stepBegin)
+	ed := eventdispatcher.NewEventDispatcher(stepBegin)
 	ed.Steps = steps
 
 	return ed, stepBegin
@@ -140,7 +141,7 @@ func TestEventDispatcher_AssignmentProgramSnapshotByStep(t *testing.T) {
 			Expected: expectedSnapshotState{
 				FramesCount:       2,
 				CurrentLine:       2,
-				CurrentFrameScope: 2,
+				CurrentFrameScope: 3,
 				Variables: map[string]expectedVariable{
 					"x": {Exists: false},
 				},
@@ -151,7 +152,7 @@ func TestEventDispatcher_AssignmentProgramSnapshotByStep(t *testing.T) {
 			Expected: expectedSnapshotState{
 				FramesCount:       2,
 				CurrentLine:       3,
-				CurrentFrameScope: 2,
+				CurrentFrameScope: 3,
 				Variables: map[string]expectedVariable{
 					"x": {Exists: true, Value: 1},
 				},
@@ -162,7 +163,7 @@ func TestEventDispatcher_AssignmentProgramSnapshotByStep(t *testing.T) {
 			Expected: expectedSnapshotState{
 				FramesCount:       2,
 				CurrentLine:       4,
-				CurrentFrameScope: 2,
+				CurrentFrameScope: 3,
 				Variables: map[string]expectedVariable{
 					"x": {Exists: true, Value: 2},
 				},
@@ -206,7 +207,7 @@ func TestEventDispatcher_Array2DSnapshotByStep(t *testing.T) {
 			Expected: expectedSnapshotState{
 				FramesCount:       2,
 				CurrentLine:       2,
-				CurrentFrameScope: 2,
+				CurrentFrameScope: 3,
 				Arrays2D: map[string]expectedArray2D{
 					"m": {Exists: false},
 				},
@@ -217,7 +218,7 @@ func TestEventDispatcher_Array2DSnapshotByStep(t *testing.T) {
 			Expected: expectedSnapshotState{
 				FramesCount:       2,
 				CurrentLine:       3,
-				CurrentFrameScope: 2,
+				CurrentFrameScope: 3,
 				Arrays2D: map[string]expectedArray2D{
 					"m": {Exists: true, Values: [][]int{{1, 2}, {3, 4}}},
 				},
@@ -228,7 +229,7 @@ func TestEventDispatcher_Array2DSnapshotByStep(t *testing.T) {
 			Expected: expectedSnapshotState{
 				FramesCount:       2,
 				CurrentLine:       4,
-				CurrentFrameScope: 2,
+				CurrentFrameScope: 3,
 				Arrays2D: map[string]expectedArray2D{
 					"m": {Exists: true, Values: [][]int{{1, 2}, {7, 4}}},
 				},
@@ -239,7 +240,7 @@ func TestEventDispatcher_Array2DSnapshotByStep(t *testing.T) {
 			Expected: expectedSnapshotState{
 				FramesCount:       2,
 				CurrentLine:       5,
-				CurrentFrameScope: 2,
+				CurrentFrameScope: 3,
 				Arrays2D: map[string]expectedArray2D{
 					"m": {Exists: true, Values: [][]int{{1, 8}, {7, 4}}},
 				},
@@ -283,7 +284,7 @@ func TestEventDispatcher_VariableDeclareSnapshotImmutable(t *testing.T) {
 			Expected: expectedSnapshotState{
 				FramesCount:       2,
 				CurrentLine:       2,
-				CurrentFrameScope: 2,
+				CurrentFrameScope: 3,
 				Variables: map[string]expectedVariable{
 					"x": {Exists: false},
 				},
@@ -294,7 +295,7 @@ func TestEventDispatcher_VariableDeclareSnapshotImmutable(t *testing.T) {
 			Expected: expectedSnapshotState{
 				FramesCount:       2,
 				CurrentLine:       3,
-				CurrentFrameScope: 2,
+				CurrentFrameScope: 3,
 				Variables: map[string]expectedVariable{
 					"x": {Exists: true, Value: 10},
 				},
@@ -305,7 +306,7 @@ func TestEventDispatcher_VariableDeclareSnapshotImmutable(t *testing.T) {
 			Expected: expectedSnapshotState{
 				FramesCount:       2,
 				CurrentLine:       4,
-				CurrentFrameScope: 2,
+				CurrentFrameScope: 3,
 				Variables: map[string]expectedVariable{
 					"x": {Exists: true, Value: 20},
 					"y": {Exists: false},
@@ -317,7 +318,7 @@ func TestEventDispatcher_VariableDeclareSnapshotImmutable(t *testing.T) {
 			Expected: expectedSnapshotState{
 				FramesCount:       2,
 				CurrentLine:       5,
-				CurrentFrameScope: 2,
+				CurrentFrameScope: 3,
 				Variables: map[string]expectedVariable{
 					"x": {Exists: true, Value: 20},
 					"y": {Exists: true, Value: 5},
@@ -330,4 +331,658 @@ func TestEventDispatcher_VariableDeclareSnapshotImmutable(t *testing.T) {
 		require.NoError(t, ed.ApplyStep(check.Step), "step %d", check.Step)
 		assertSnapshotState(t, ed, check.Expected)
 	}
+}
+
+func TestEventDispatcher_GlobalVariablesSnapshotByStep(t *testing.T) {
+	code := `int g = 5;
+int h = 7;
+
+int main() {
+	int sum = g + h;
+	g = sum + 1;
+	return g;
+}`
+
+	ed, _ := runDispatcherForCode(t, code)
+
+	checks := []struct {
+		Step     int
+		Expected expectedSnapshotState
+	}{
+		{
+			Step: 0,
+			Expected: expectedSnapshotState{
+				FramesCount:       2,
+				CurrentLine:       5,
+				CurrentFrameScope: 3,
+				Variables: map[string]expectedVariable{
+					"g":   {Exists: true, Value: 5},
+					"h":   {Exists: true, Value: 7},
+					"sum": {Exists: false},
+				},
+			},
+		},
+		{
+			Step: 1,
+			Expected: expectedSnapshotState{
+				FramesCount:       2,
+				CurrentLine:       6,
+				CurrentFrameScope: 3,
+				Variables: map[string]expectedVariable{
+					"g":   {Exists: true, Value: 5},
+					"h":   {Exists: true, Value: 7},
+					"sum": {Exists: true, Value: 12},
+				},
+			},
+		},
+		{
+			Step: 2,
+			Expected: expectedSnapshotState{
+				FramesCount:       2,
+				CurrentLine:       7,
+				CurrentFrameScope: 3,
+				Variables: map[string]expectedVariable{
+					"g":   {Exists: true, Value: 13},
+					"h":   {Exists: true, Value: 7},
+					"sum": {Exists: true, Value: 12},
+				},
+			},
+		},
+		{
+			Step: 3,
+			Expected: expectedSnapshotState{
+				FramesCount:       1,
+				CurrentLine:       -1,
+				CurrentFrameScope: 1,
+				Variables: map[string]expectedVariable{
+					"g":   {Exists: true, Value: 13},
+					"h":   {Exists: true, Value: 7},
+					"sum": {Exists: false},
+				},
+			},
+		},
+	}
+
+	for _, check := range checks {
+		require.NoError(t, ed.ApplyStep(check.Step), "step %d", check.Step)
+		assertSnapshotState(t, ed, check.Expected)
+	}
+}
+
+func TestEventDispatcher_RecursiveFactorialSnapshot(t *testing.T) {
+	code := `int factorial(int n) {
+	if (n <= 1) {
+		return 1;
+	}
+	return n * factorial(n - 1);
+}
+
+int main() {
+	int result = factorial(3);
+	return result;
+}`
+
+	ed, _ := runDispatcherForCode(t, code)
+
+	checks := []struct {
+		Step        int
+		Expected    expectedSnapshotState
+		Description string
+	}{
+		{
+			Step:        0,
+			Description: "entering main, before factorial call",
+			Expected: expectedSnapshotState{
+				FramesCount:       2, // global + main
+				CurrentLine:       9,
+				CurrentFrameScope: 3,
+				Variables: map[string]expectedVariable{
+					"result": {Exists: false},
+				},
+			},
+		},
+		{
+			Step:        1,
+			Description: "entering factorial(3), checking condition",
+			Expected: expectedSnapshotState{
+				FramesCount:       3, // global + main + factorial(3)
+				CurrentLine:       2,
+				CurrentFrameScope: 3,
+				Variables: map[string]expectedVariable{
+					"n": {Exists: true, Value: 3},
+				},
+			},
+		},
+		{
+			Step:        2,
+			Description: "in factorial(3), at return statement",
+			Expected: expectedSnapshotState{
+				FramesCount:       3,
+				CurrentLine:       5,
+				CurrentFrameScope: 3,
+				Variables: map[string]expectedVariable{
+					"n": {Exists: true, Value: 3},
+				},
+			},
+		},
+		{
+			Step:        3,
+			Description: "entering factorial(2), checking condition",
+			Expected: expectedSnapshotState{
+				FramesCount:       4, // global + main + factorial(3) + factorial(2)
+				CurrentLine:       2,
+				CurrentFrameScope: 3,
+				Variables: map[string]expectedVariable{
+					"n": {Exists: true, Value: 2},
+				},
+			},
+		},
+		{
+			Step:        4,
+			Description: "in factorial(2), at return statement",
+			Expected: expectedSnapshotState{
+				FramesCount:       4,
+				CurrentLine:       5,
+				CurrentFrameScope: 3,
+				Variables: map[string]expectedVariable{
+					"n": {Exists: true, Value: 2},
+				},
+			},
+		},
+		{
+			Step:        5,
+			Description: "entering factorial(1), checking condition",
+			Expected: expectedSnapshotState{
+				FramesCount:       5, // global + main + factorial(3) + factorial(2) + factorial(1)
+				CurrentLine:       2,
+				CurrentFrameScope: 3,
+				Variables: map[string]expectedVariable{
+					"n": {Exists: true, Value: 1},
+				},
+			},
+		},
+		{
+			Step:        6,
+			Description: "in factorial(1), condition is true, returning 1",
+			Expected: expectedSnapshotState{
+				FramesCount:       5,
+				CurrentLine:       3,
+				CurrentFrameScope: 4, // if block creates additional scope
+				Variables: map[string]expectedVariable{
+					"n": {Exists: true, Value: 1},
+				},
+			},
+		},
+		{
+			Step:        7,
+			Description: "returned from all factorial calls to main, result assigned",
+			Expected: expectedSnapshotState{
+				FramesCount:       2, // all factorial frames popped
+				CurrentLine:       10,
+				CurrentFrameScope: 3,
+				Variables: map[string]expectedVariable{
+					"result": {Exists: true, Value: 6},
+				},
+			},
+		},
+		{
+			Step:        8,
+			Description: "program finished",
+			Expected: expectedSnapshotState{
+				FramesCount:       1, // only global frame remains
+				CurrentLine:       -1,
+				CurrentFrameScope: 1,
+				Variables: map[string]expectedVariable{
+					"result": {Exists: false},
+				},
+			},
+		},
+	}
+
+	for _, check := range checks {
+		require.NoError(t, ed.ApplyStep(check.Step), "step %d: %s", check.Step, check.Description)
+		assertSnapshotState(t, ed, check.Expected)
+	}
+}
+
+func TestEventDispatcher_RollbackRecursiveFactorial(t *testing.T) {
+	code := `int factorial(int n) {
+	if (n <= 1) {
+		return 1;
+	}
+	return n * factorial(n - 1);
+}
+
+int main() {
+	int result = factorial(3);
+	return result;
+}`
+
+	ed, _ := runDispatcherForCode(t, code)
+
+	// Apply all steps forward to the end
+	require.NoError(t, ed.ApplyStep(8))
+	assertSnapshotState(t, ed, expectedSnapshotState{
+		FramesCount:       1,
+		CurrentLine:       -1,
+		CurrentFrameScope: 1,
+		Variables: map[string]expectedVariable{
+			"result": {Exists: false},
+		},
+	})
+
+	// Rollback to step 7 (in main, result = 6)
+	require.NoError(t, ed.ApplyStep(7))
+	assertSnapshotState(t, ed, expectedSnapshotState{
+		FramesCount:       2,
+		CurrentLine:       10,
+		CurrentFrameScope: 3,
+		Variables: map[string]expectedVariable{
+			"result": {Exists: true, Value: 6},
+		},
+	})
+
+	// Rollback to step 5 (in factorial(1))
+	require.NoError(t, ed.ApplyStep(5))
+	assertSnapshotState(t, ed, expectedSnapshotState{
+		FramesCount:       5, // global + main + factorial(3) + factorial(2) + factorial(1)
+		CurrentLine:       2,
+		CurrentFrameScope: 3,
+		Variables: map[string]expectedVariable{
+			"n": {Exists: true, Value: 1},
+		},
+	})
+
+	// Rollback to step 3 (in factorial(2))
+	require.NoError(t, ed.ApplyStep(3))
+	assertSnapshotState(t, ed, expectedSnapshotState{
+		FramesCount:       4, // global + main + factorial(3) + factorial(2)
+		CurrentLine:       2,
+		CurrentFrameScope: 3,
+		Variables: map[string]expectedVariable{
+			"n": {Exists: true, Value: 2},
+		},
+	})
+
+	// Rollback to step 1 (in factorial(3), first time)
+	require.NoError(t, ed.ApplyStep(1))
+	assertSnapshotState(t, ed, expectedSnapshotState{
+		FramesCount:       3,
+		CurrentLine:       2,
+		CurrentFrameScope: 3,
+		Variables: map[string]expectedVariable{
+			"n": {Exists: true, Value: 3},
+		},
+	})
+
+	// Move forward to step 6 (in factorial(1), returning 1)
+	require.NoError(t, ed.ApplyStep(6))
+	assertSnapshotState(t, ed, expectedSnapshotState{
+		FramesCount:       5,
+		CurrentLine:       3,
+		CurrentFrameScope: 4,
+		Variables: map[string]expectedVariable{
+			"n": {Exists: true, Value: 1},
+		},
+	})
+}
+
+func TestEventDispatcher_RollbackArrayModification(t *testing.T) {
+	code := `int main() {
+	int arr[3] = {1, 2, 3};
+	arr[0] = 10;
+	arr[1] = 20;
+	arr[2] = 30;
+	return arr[0];
+}`
+
+	ed, _ := runDispatcherForCode(t, code)
+
+	// Apply all steps forward to the end
+	require.NoError(t, ed.ApplyStep(5))
+	assertSnapshotState(t, ed, expectedSnapshotState{
+		FramesCount:       1,
+		CurrentLine:       -1,
+		CurrentFrameScope: 1,
+		Arrays: map[string]expectedArray{
+			"arr": {Exists: false},
+		},
+	})
+
+	// Rollback to step 4 (arr[2] = 30)
+	require.NoError(t, ed.ApplyStep(4))
+	assertSnapshotState(t, ed, expectedSnapshotState{
+		FramesCount:       2,
+		CurrentLine:       6,
+		CurrentFrameScope: 3,
+		Arrays: map[string]expectedArray{
+			"arr": {Exists: true, Values: []int{10, 20, 30}},
+		},
+	})
+
+	// Rollback to step 3 (arr[1] = 20)
+	require.NoError(t, ed.ApplyStep(3))
+	assertSnapshotState(t, ed, expectedSnapshotState{
+		FramesCount:       2,
+		CurrentLine:       5,
+		CurrentFrameScope: 3,
+		Arrays: map[string]expectedArray{
+			"arr": {Exists: true, Values: []int{10, 20, 3}},
+		},
+	})
+
+	// Rollback to step 2 (arr[0] = 10)
+	require.NoError(t, ed.ApplyStep(2))
+	assertSnapshotState(t, ed, expectedSnapshotState{
+		FramesCount:       2,
+		CurrentLine:       4,
+		CurrentFrameScope: 3,
+		Arrays: map[string]expectedArray{
+			"arr": {Exists: true, Values: []int{10, 2, 3}},
+		},
+	})
+
+	// Rollback to step 1 (arr declared with initial values)
+	require.NoError(t, ed.ApplyStep(1))
+	assertSnapshotState(t, ed, expectedSnapshotState{
+		FramesCount:       2,
+		CurrentLine:       3,
+		CurrentFrameScope: 3,
+		Arrays: map[string]expectedArray{
+			"arr": {Exists: true, Values: []int{1, 2, 3}},
+		},
+	})
+
+	// Move forward again to step 4
+	require.NoError(t, ed.ApplyStep(4))
+	assertSnapshotState(t, ed, expectedSnapshotState{
+		FramesCount:       2,
+		CurrentLine:       6,
+		CurrentFrameScope: 3,
+		Arrays: map[string]expectedArray{
+			"arr": {Exists: true, Values: []int{10, 20, 30}},
+		},
+	})
+}
+
+func TestEventDispatcher_RollbackArray2D(t *testing.T) {
+	code := `int main() {
+	int m[2][2] = {{1, 2}, {3, 4}};
+	m[0][0] = 10;
+	m[1][1] = 40;
+	return m[0][0];
+}`
+
+	ed, _ := runDispatcherForCode(t, code)
+
+	// Apply all steps forward
+	require.NoError(t, ed.ApplyStep(4))
+	assertSnapshotState(t, ed, expectedSnapshotState{
+		FramesCount:       1,
+		CurrentLine:       -1,
+		CurrentFrameScope: 1,
+		Arrays2D: map[string]expectedArray2D{
+			"m": {Exists: false},
+		},
+	})
+
+	// Rollback to step 3 (m[1][1] = 40)
+	require.NoError(t, ed.ApplyStep(3))
+	assertSnapshotState(t, ed, expectedSnapshotState{
+		FramesCount:       2,
+		CurrentLine:       5,
+		CurrentFrameScope: 3,
+		Arrays2D: map[string]expectedArray2D{
+			"m": {Exists: true, Values: [][]int{{10, 2}, {3, 40}}},
+		},
+	})
+
+	// Rollback to step 2 (m[0][0] = 10)
+	require.NoError(t, ed.ApplyStep(2))
+	assertSnapshotState(t, ed, expectedSnapshotState{
+		FramesCount:       2,
+		CurrentLine:       4,
+		CurrentFrameScope: 3,
+		Arrays2D: map[string]expectedArray2D{
+			"m": {Exists: true, Values: [][]int{{10, 2}, {3, 4}}},
+		},
+	})
+
+	// Rollback to step 1 (initial values)
+	require.NoError(t, ed.ApplyStep(1))
+	assertSnapshotState(t, ed, expectedSnapshotState{
+		FramesCount:       2,
+		CurrentLine:       3,
+		CurrentFrameScope: 3,
+		Arrays2D: map[string]expectedArray2D{
+			"m": {Exists: true, Values: [][]int{{1, 2}, {3, 4}}},
+		},
+	})
+
+	// Move forward to step 3 again
+	require.NoError(t, ed.ApplyStep(3))
+	assertSnapshotState(t, ed, expectedSnapshotState{
+		FramesCount:       2,
+		CurrentLine:       5,
+		CurrentFrameScope: 3,
+		Arrays2D: map[string]expectedArray2D{
+			"m": {Exists: true, Values: [][]int{{10, 2}, {3, 40}}},
+		},
+	})
+}
+
+func TestEventDispatcher_ApplyStepOutOfRange(t *testing.T) {
+	ed := eventdispatcher.NewEventDispatcher(0)
+	ed.Steps = []eventdispatcher.Step{}
+
+	err := ed.ApplyStep(0)
+	assert.Error(t, err)
+	assert.Equal(t, -1, ed.GetCurrentStep())
+
+	err = ed.ApplyStep(-1)
+	assert.Error(t, err)
+	assert.Equal(t, -1, ed.GetCurrentStep())
+}
+
+func TestEventDispatcher_ApplyStepRollback(t *testing.T) {
+	code := `int main() {
+	int x = 1;
+	x = 2;
+	return x;
+}`
+
+	ed, _ := runDispatcherForCode(t, code)
+
+	require.NoError(t, ed.ApplyStep(2))
+	assertSnapshotState(t, ed, expectedSnapshotState{
+		FramesCount:       2,
+		CurrentLine:       4,
+		CurrentFrameScope: 3,
+		Variables: map[string]expectedVariable{
+			"x": {Exists: true, Value: 2},
+		},
+	})
+
+	require.NoError(t, ed.ApplyStep(0))
+	assertSnapshotState(t, ed, expectedSnapshotState{
+		FramesCount:       2,
+		CurrentLine:       2,
+		CurrentFrameScope: 3,
+		Variables: map[string]expectedVariable{
+			"x": {Exists: false},
+		},
+	})
+}
+
+func TestEventDispatcher_StepBeginOffset(t *testing.T) {
+	code := `int main() {
+	int x = 1;
+	return x;
+}`
+
+	ed, stepBegin := runDispatcherForCode(t, code)
+
+	require.NoError(t, ed.ApplyStep(0))
+	assert.Equal(t, stepBegin, ed.GetCurrentStep())
+	assertSnapshotState(t, ed, expectedSnapshotState{
+		FramesCount:       2,
+		CurrentLine:       2,
+		CurrentFrameScope: 3,
+		Variables: map[string]expectedVariable{
+			"x": {Exists: false},
+		},
+	})
+
+	require.NoError(t, ed.ApplyStep(1))
+	assert.Equal(t, stepBegin+1, ed.GetCurrentStep())
+	assertSnapshotState(t, ed, expectedSnapshotState{
+		FramesCount:       2,
+		CurrentLine:       3,
+		CurrentFrameScope: 3,
+		Variables: map[string]expectedVariable{
+			"x": {Exists: true, Value: 1},
+		},
+	})
+}
+
+func TestEventDispatcher_StepWithMultipleEvents(t *testing.T) {
+	code := `int main() {
+	int x = 10;
+	return x;
+}`
+
+	ed, stepBegin := runDispatcherForCode(t, code)
+
+	require.Greater(t, len(ed.Steps[stepBegin].Events), 1)
+	require.NoError(t, ed.ApplyStep(0))
+	assertSnapshotState(t, ed, expectedSnapshotState{
+		FramesCount:       2,
+		CurrentLine:       2,
+		CurrentFrameScope: 3,
+		Variables: map[string]expectedVariable{
+			"x": {Exists: false},
+		},
+	})
+	assert.Equal(t, stepBegin, ed.GetCurrentStep())
+}
+
+func TestEventDispatcher_ApplyStepStopsOnError(t *testing.T) {
+	code := `int main() {
+	int x = 1;
+	return x;
+}`
+
+	ed, stepBegin := runDispatcherForCode(t, code)
+
+	require.NoError(t, ed.ApplyStep(1))
+	assertSnapshotState(t, ed, expectedSnapshotState{
+		FramesCount:       2,
+		CurrentLine:       3,
+		CurrentFrameScope: 3,
+		Variables: map[string]expectedVariable{
+			"x": {Exists: true, Value: 1},
+		},
+	})
+
+	baseStepsCount := len(ed.Steps)
+	badStepIndex := baseStepsCount - stepBegin
+	ed.Steps = append(ed.Steps, eventdispatcher.Step{Events: []events.Event{
+		events.VarChanged{Name: "missing", Value: 1},
+	}})
+
+	err := ed.ApplyStep(badStepIndex)
+	assert.Error(t, err)
+	assert.Equal(t, baseStepsCount-1, ed.GetCurrentStep())
+	assertSnapshotState(t, ed, expectedSnapshotState{
+		FramesCount:       1,
+		CurrentLine:       -1,
+		CurrentFrameScope: 1,
+		Variables: map[string]expectedVariable{
+			"x":       {Exists: false},
+			"missing": {Exists: false},
+		},
+	})
+}
+
+func TestEventDispatcher_RollbackZigzag(t *testing.T) {
+	code := `int main() {
+	int x = 1;
+	x = 2;
+	x = 3;
+	return x;
+}`
+
+	ed, _ := runDispatcherForCode(t, code)
+
+	require.NoError(t, ed.ApplyStep(3))
+	assertSnapshotState(t, ed, expectedSnapshotState{
+		FramesCount:       2,
+		CurrentLine:       5,
+		CurrentFrameScope: 3,
+		Variables: map[string]expectedVariable{
+			"x": {Exists: true, Value: 3},
+		},
+	})
+
+	require.NoError(t, ed.ApplyStep(1))
+	assertSnapshotState(t, ed, expectedSnapshotState{
+		FramesCount:       2,
+		CurrentLine:       3,
+		CurrentFrameScope: 3,
+		Variables: map[string]expectedVariable{
+			"x": {Exists: true, Value: 1},
+		},
+	})
+
+	require.NoError(t, ed.ApplyStep(2))
+	assertSnapshotState(t, ed, expectedSnapshotState{
+		FramesCount:       2,
+		CurrentLine:       4,
+		CurrentFrameScope: 3,
+		Variables: map[string]expectedVariable{
+			"x": {Exists: true, Value: 2},
+		},
+	})
+
+	require.NoError(t, ed.ApplyStep(3))
+	assertSnapshotState(t, ed, expectedSnapshotState{
+		FramesCount:       2,
+		CurrentLine:       5,
+		CurrentFrameScope: 3,
+		Variables: map[string]expectedVariable{
+			"x": {Exists: true, Value: 3},
+		},
+	})
+}
+
+func TestEventDispatcher_StepBeginRollback(t *testing.T) {
+	code := `int main() {
+	int x = 1;
+	x = 2;
+	return x;
+}`
+
+	ed, stepBegin := runDispatcherForCode(t, code)
+
+	require.NoError(t, ed.ApplyStep(1))
+	assert.Equal(t, stepBegin+1, ed.GetCurrentStep())
+	assertSnapshotState(t, ed, expectedSnapshotState{
+		FramesCount:       2,
+		CurrentLine:       3,
+		CurrentFrameScope: 3,
+		Variables: map[string]expectedVariable{
+			"x": {Exists: true, Value: 1},
+		},
+	})
+
+	require.NoError(t, ed.ApplyStep(0))
+	assert.Equal(t, stepBegin, ed.GetCurrentStep())
+	assertSnapshotState(t, ed, expectedSnapshotState{
+		FramesCount:       2,
+		CurrentLine:       2,
+		CurrentFrameScope: 3,
+		Variables: map[string]expectedVariable{
+			"x": {Exists: false},
+		},
+	})
 }

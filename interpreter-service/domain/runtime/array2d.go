@@ -16,7 +16,14 @@ type Array2D struct {
 func NewArray2D(name string, size1, size2 int, value []Array, step int, isGlobal bool) *Array2D {
 	ret := &Array2D{Name: name, Size1: size1, Size2: size2}
 	if value != nil {
-		ret.Values = value
+		ret.Values = make([]Array, size1)
+		for i := 0; i < size1; i++ {
+			tmpArr := make([]ArrayElement, size2)
+			for j := 0; j < size2; j++ {
+				tmpArr[j] = *NewArrayElement(value[i].Values[j].Value, step, isGlobal)
+			}
+			ret.Values[i] = *NewArray("", size2, tmpArr, step, isGlobal)
+		}
 		return ret
 	}
 

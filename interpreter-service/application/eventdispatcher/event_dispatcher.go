@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"github.com/Oleja123/code-vizualization/interpreter-service/domain/events"
-	"github.com/Oleja123/code-vizualization/interpreter-service/domain/runtime"
 	"github.com/Oleja123/code-vizualization/interpreter-service/domain/snapshot"
 )
 
@@ -20,9 +19,9 @@ type EventDispatcher struct {
 	stepBegin        int
 }
 
-func NewEventDispatcher(globalScope *runtime.Scope, stepBegin int) *EventDispatcher {
+func NewEventDispatcher(stepBegin int) *EventDispatcher {
 	return &EventDispatcher{
-		Snapshot:         snapshot.NewSnapshot(globalScope),
+		Snapshot:         snapshot.NewSnapshot(),
 		Steps:            make([]Step, 0),
 		currentStepIndex: -1,
 		stepBegin:        stepBegin,
