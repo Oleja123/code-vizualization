@@ -12,7 +12,7 @@ import (
 )
 
 func TestNewSnapshotHandler_MethodNotAllowed(t *testing.T) {
-	h := NewSnapshotHandler()
+	h := NewSnapshotHandler("")
 
 	req := httptest.NewRequest(http.MethodGet, "/snapshot", nil)
 	rr := httptest.NewRecorder()
@@ -28,7 +28,7 @@ func TestNewSnapshotHandler_MethodNotAllowed(t *testing.T) {
 }
 
 func TestNewSnapshotHandler_InvalidBody(t *testing.T) {
-	h := NewSnapshotHandler()
+	h := NewSnapshotHandler("")
 
 	req := httptest.NewRequest(http.MethodPost, "/snapshot", bytes.NewBufferString("{"))
 	rr := httptest.NewRecorder()
@@ -44,7 +44,7 @@ func TestNewSnapshotHandler_InvalidBody(t *testing.T) {
 }
 
 func TestNewSnapshotHandler_InvalidStep(t *testing.T) {
-	h := NewSnapshotHandler()
+	h := NewSnapshotHandler("")
 
 	body := SnapshotRequest{Code: "int main(){ return 0; }", Step: -1}
 	payload, err := json.Marshal(body)
@@ -64,7 +64,7 @@ func TestNewSnapshotHandler_InvalidStep(t *testing.T) {
 }
 
 func TestNewSnapshotHandler_Success(t *testing.T) {
-	h := NewSnapshotHandler()
+	h := NewSnapshotHandler("")
 
 	body := SnapshotRequest{
 		Code: `int main() {
@@ -94,7 +94,7 @@ func TestNewSnapshotHandler_Success(t *testing.T) {
 }
 
 func TestNewSnapshotHandler_StepOutOfRange(t *testing.T) {
-	h := NewSnapshotHandler()
+	h := NewSnapshotHandler("")
 
 	body := SnapshotRequest{Code: "int main(){ return 0; }", Step: 100}
 	payload, err := json.Marshal(body)

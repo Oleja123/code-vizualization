@@ -11,9 +11,10 @@ import (
 
 func main() {
 	port := flag.Int("port", 8080, "Port to listen on")
+	oneCompilerConfigPath := flag.String("onecompiler-config", "", "Path to OneCompiler YAML config (optional)")
 	flag.Parse()
 
-	http.Handle("/snapshot", handler.NewSnapshotHandler())
+	http.Handle("/snapshot", handler.NewSnapshotHandler(*oneCompilerConfigPath))
 
 	address := fmt.Sprintf(":%d", *port)
 	log.Printf("interpreter-service listening on %s", address)

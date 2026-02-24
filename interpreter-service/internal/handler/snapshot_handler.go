@@ -2,14 +2,19 @@ package handler
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
 	"net/http"
+	"os"
 	"strings"
 
 	"github.com/Oleja123/code-vizualization/cst-to-ast-service/pkg/converter"
 	"github.com/Oleja123/code-vizualization/interpreter-service/internal/application/eventdispatcher"
 	"github.com/Oleja123/code-vizualization/interpreter-service/internal/application/interpreter"
 	"github.com/Oleja123/code-vizualization/interpreter-service/internal/domain/snapshot"
+	"github.com/Oleja123/code-vizualization/semantic-analyzer-service/pkg/onecompiler"
 	"github.com/Oleja123/code-vizualization/semantic-analyzer-service/pkg/validator"
+	"gopkg.in/yaml.v3"
 )
 
 type SnapshotRequest struct {
@@ -27,10 +32,18 @@ type SnapshotResponse struct {
 	Snapshot    *snapshot.Snapshot `json:"snapshot,omitempty"`
 }
 
-func NewSnapshotHandler() http.HandlerFunc {
+type oneCompilerConfigFile struct {
+	OneCompiler struct {
+		APIURL         string `yaml:"api_url"`
+		APIKey         string `yaml:"api_key"`
+		Enabled        bool   `yaml:"enabled"`
+		TimeoutSeconds int    `yaml:"timeout_seconds"`
+	} `yaml:"onecompiler"`
+}
+
+func NewSnapshotHandler(oneCompilerConfigPath string) http.HandlerFunc {
 	conv := converter.New()
-	val := validator.New()
-	runner := interpreter.NewInterpreter()
+	val := buildValidator(oneCompilerConfigPath)
 
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
@@ -62,11 +75,18 @@ func NewSnapshotHandler() http.HandlerFunc {
 			return
 		}
 
-		if err := val.ValidateProgram(program); err != nil {
+		if err := val.ValidateProgram(program, req.Code); err != nil {
+			var unavailableErr validator.CompileUnavailableError
+			if errors.As(err, &unavailableErr) {
+				writeJSON(w, http.StatusServiceUnavailable, SnapshotResponse{Success: false, Error: err.Error()})
+				return
+			}
+
 			writeJSON(w, http.StatusBadRequest, SnapshotResponse{Success: false, Error: "semantic error: " + err.Error()})
 			return
 		}
 
+		runner := interpreter.NewInterpreter()
 		result, steps, stepBegin, execErr := runner.ExecuteProgram(program)
 		if execErr != nil {
 			writeJSON(w, http.StatusBadRequest, SnapshotResponse{Success: false, Error: "error: " + execErr.Error()})
@@ -99,6 +119,44 @@ func NewSnapshotHandler() http.HandlerFunc {
 			Snapshot:    ed.GetSnapshot(),
 		})
 	}
+}
+
+func buildValidator(oneCompilerConfigPath string) *validator.SemanticValidator {
+	if strings.TrimSpace(oneCompilerConfigPath) == "" {
+		return validator.New()
+	}
+
+	cfg, err := loadOneCompilerConfig(oneCompilerConfigPath)
+	if err != nil || !cfg.OneCompiler.Enabled {
+		return validator.New()
+	}
+
+	timeout := cfg.OneCompiler.TimeoutSeconds
+	if timeout == 0 {
+		timeout = 10
+	}
+
+	client := onecompiler.NewClient(
+		cfg.OneCompiler.APIURL,
+		cfg.OneCompiler.APIKey,
+		timeout,
+	)
+
+	return validator.NewWithOneCompilerClient(client)
+}
+
+func loadOneCompilerConfig(path string) (*oneCompilerConfigFile, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read onecompiler config: %w", err)
+	}
+
+	var cfg oneCompilerConfigFile
+	if err := yaml.Unmarshal(data, &cfg); err != nil {
+		return nil, fmt.Errorf("failed to parse onecompiler config: %w", err)
+	}
+
+	return &cfg, nil
 }
 
 func writeJSON(w http.ResponseWriter, status int, body SnapshotResponse) {

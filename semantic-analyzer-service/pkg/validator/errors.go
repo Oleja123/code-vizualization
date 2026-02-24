@@ -65,3 +65,27 @@ func NewSemanticError(code ErrorCode, message string, location converter.Locatio
 		Details:  details,
 	}
 }
+
+type CompilationError struct {
+	message string
+}
+
+func NewCompilationError(message string) error {
+	return CompilationError{message: message}
+}
+
+func (e CompilationError) Error() string {
+	return fmt.Sprintf("compilation error: %s", e.message)
+}
+
+type CompileUnavailableError struct {
+	reason string
+}
+
+func NewCompileUnavailableError(reason string) error {
+	return CompileUnavailableError{reason: reason}
+}
+
+func (e CompileUnavailableError) Error() string {
+	return fmt.Sprintf("compilation check unavailable: %s", e.reason)
+}
