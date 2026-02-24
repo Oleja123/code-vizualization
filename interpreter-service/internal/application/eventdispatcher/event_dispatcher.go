@@ -43,7 +43,7 @@ func (ed *EventDispatcher) ApplyStep(stepIndex int) error {
 	startIndex := ed.currentStepIndex + 1
 	for i := startIndex; i <= stepIndex; i++ {
 		for _, event := range ed.Steps[i].Events {
-			if err := ed.Snapshot.Apply(event, i); err != nil {
+			if err := ed.Snapshot.Apply(event, i-ed.stepBegin); err != nil {
 				return err
 			}
 		}

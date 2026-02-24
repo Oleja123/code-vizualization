@@ -71,7 +71,7 @@ func (i *Interpreter) executeVariableDecl(v VariableDecl) (ExecResult, error) {
 		value = &v
 	}
 
-	variable := runtime.NewVariable(v.Name, value, i.currentStepNumber, v.IsGlobal) // step=0 пока
+	variable := runtime.NewVariable(v.Name, value, i.currentStepNumber, v.IsGlobal)
 
 	frame := i.CallStack.GetCurrentFrame()
 	currentScope := frame.GetCurrentScope()
