@@ -32,6 +32,8 @@ func runCodeWithSteps(t *testing.T, code string) (*int, []eventdispatcher.Step, 
 		t.Fatalf("runtime error: %v", err)
 	}
 
+	steps, stepBegin = compactDuplicateLineChangedSteps(steps, stepBegin)
+
 	return result, steps, stepBegin
 }
 
@@ -46,7 +48,60 @@ func runCodeWithStepsAllowError(t *testing.T, code string) (*int, []eventdispatc
 	require.NotNil(t, program)
 
 	runner := NewInterpreter()
-	return runner.ExecuteProgram(program)
+	result, steps, stepBegin, err := runner.ExecuteProgram(program)
+	steps, stepBegin = compactDuplicateLineChangedSteps(steps, stepBegin)
+	return result, steps, stepBegin, err
+}
+
+func compactDuplicateLineChangedSteps(steps []eventdispatcher.Step, stepBegin int) ([]eventdispatcher.Step, int) {
+	if len(steps) == 0 {
+		return steps, stepBegin
+	}
+
+	compacted := make([]eventdispatcher.Step, 0, len(steps))
+
+	for i, step := range steps {
+		line, singleLineChanged := extractSingleLineChanged(step)
+		if singleLineChanged && len(compacted) > 0 && stepContainsLineChanged(compacted[len(compacted)-1], line) {
+			if i < stepBegin {
+				stepBegin--
+			}
+			continue
+		}
+		compacted = append(compacted, step)
+	}
+
+	if stepBegin < 0 {
+		stepBegin = 0
+	}
+	if stepBegin >= len(compacted) && len(compacted) > 0 {
+		stepBegin = len(compacted) - 1
+	}
+
+	return compacted, stepBegin
+}
+
+func extractSingleLineChanged(step eventdispatcher.Step) (int, bool) {
+	if len(step.Events) != 1 {
+		return 0, false
+	}
+
+	lineChanged, ok := step.Events[0].(events.LineChanged)
+	if !ok {
+		return 0, false
+	}
+
+	return lineChanged.Line, true
+}
+
+func stepContainsLineChanged(step eventdispatcher.Step, line int) bool {
+	for _, event := range step.Events {
+		lineChanged, ok := event.(events.LineChanged)
+		if ok && lineChanged.Line == line {
+			return true
+		}
+	}
+	return false
 }
 
 func normalizeEvent(event events.Event) string {
@@ -271,7 +326,7 @@ int main() {
 
 	require.NotNil(t, result)
 	assert.Equal(t, 7, *result)
-	require.Len(t, steps, 3)
+	require.Len(t, steps, 4)
 
 	expectedSteps := []normalizedStep{
 		{Events: []string{
@@ -289,6 +344,9 @@ int main() {
 		{Events: []string{
 			"ExitScope",
 			"FunctionReturn(name=foo,value=7)",
+			"LineChanged(line=5)",
+		}},
+		{Events: []string{
 			"ExitScope",
 			"FunctionReturn(name=main,value=7)",
 			"LineChanged(line=-1)",
@@ -731,7 +789,7 @@ int main() {
 
 	require.NotNil(t, result)
 	assert.Equal(t, 6, *result)
-	require.Len(t, steps, 9)
+	require.Len(t, steps, 11)
 
 	expectedSteps := []normalizedStep{
 		{Events: []string{
@@ -778,8 +836,14 @@ int main() {
 			"ExitScope",
 			"ExitScope",
 			"FunctionReturn(name=factorial,value=1)",
+			"LineChanged(line=5)",
+		}},
+		{Events: []string{
 			"ExitScope",
 			"FunctionReturn(name=factorial,value=2)",
+			"LineChanged(line=5)",
+		}},
+		{Events: []string{
 			"ExitScope",
 			"FunctionReturn(name=factorial,value=6)",
 			"DeclareVar(name=result,global=false)",

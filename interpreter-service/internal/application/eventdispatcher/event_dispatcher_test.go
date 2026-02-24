@@ -125,10 +125,63 @@ func runDispatcherForCode(t *testing.T, code string) (*eventdispatcher.EventDisp
 		}
 	}
 
+	steps, stepBegin = compactDuplicateLineChangedSteps(steps, stepBegin)
+
 	ed := eventdispatcher.NewEventDispatcher(stepBegin)
 	ed.Steps = steps
 
 	return ed, stepBegin
+}
+
+func compactDuplicateLineChangedSteps(steps []eventdispatcher.Step, stepBegin int) ([]eventdispatcher.Step, int) {
+	if len(steps) == 0 {
+		return steps, stepBegin
+	}
+
+	compacted := make([]eventdispatcher.Step, 0, len(steps))
+
+	for i, step := range steps {
+		line, singleLineChanged := extractSingleLineChanged(step)
+		if singleLineChanged && len(compacted) > 0 && stepContainsLineChanged(compacted[len(compacted)-1], line) {
+			if i < stepBegin {
+				stepBegin--
+			}
+			continue
+		}
+		compacted = append(compacted, step)
+	}
+
+	if stepBegin < 0 {
+		stepBegin = 0
+	}
+	if stepBegin >= len(compacted) && len(compacted) > 0 {
+		stepBegin = len(compacted) - 1
+	}
+
+	return compacted, stepBegin
+}
+
+func extractSingleLineChanged(step eventdispatcher.Step) (int, bool) {
+	if len(step.Events) != 1 {
+		return 0, false
+	}
+
+	lineChanged, ok := step.Events[0].(events.LineChanged)
+	if !ok {
+		return 0, false
+	}
+
+	return lineChanged.Line, true
+}
+
+func stepContainsLineChanged(step eventdispatcher.Step, line int) bool {
+	for _, event := range step.Events {
+		lineChanged, ok := event.(events.LineChanged)
+		if ok && lineChanged.Line == line {
+			return true
+		}
+	}
+	return false
 }
 
 func TestEventDispatcher_AssignmentProgramSnapshotByStep(t *testing.T) {
@@ -523,6 +576,30 @@ int main() {
 		},
 		{
 			Step:        7,
+			Description: "returned from factorial(1) to factorial(2)",
+			Expected: expectedSnapshotState{
+				FramesCount:       4,
+				CurrentLine:       5,
+				CurrentFrameScope: 3,
+				Variables: map[string]expectedVariable{
+					"n": {Exists: true, Value: 2},
+				},
+			},
+		},
+		{
+			Step:        8,
+			Description: "returned from factorial(2) to factorial(3)",
+			Expected: expectedSnapshotState{
+				FramesCount:       3,
+				CurrentLine:       5,
+				CurrentFrameScope: 3,
+				Variables: map[string]expectedVariable{
+					"n": {Exists: true, Value: 3},
+				},
+			},
+		},
+		{
+			Step:        9,
 			Description: "returned from all factorial calls to main, result assigned",
 			Expected: expectedSnapshotState{
 				FramesCount:       2, // all factorial frames popped
@@ -534,7 +611,7 @@ int main() {
 			},
 		},
 		{
-			Step:        8,
+			Step:        10,
 			Description: "program finished",
 			Expected: expectedSnapshotState{
 				FramesCount:       1, // only global frame remains
@@ -569,7 +646,7 @@ int main() {
 	ed, _ := runDispatcherForCode(t, code)
 
 	// Apply all steps forward to the end
-	require.NoError(t, ed.ApplyStep(8))
+	require.NoError(t, ed.ApplyStep(10))
 	assertSnapshotState(t, ed, expectedSnapshotState{
 		FramesCount:       1,
 		CurrentLine:       -1,
@@ -579,8 +656,8 @@ int main() {
 		},
 	})
 
-	// Rollback to step 7 (in main, result = 6)
-	require.NoError(t, ed.ApplyStep(7))
+	// Rollback to step 9 (in main, result = 6)
+	require.NoError(t, ed.ApplyStep(9))
 	assertSnapshotState(t, ed, expectedSnapshotState{
 		FramesCount:       2,
 		CurrentLine:       10,
