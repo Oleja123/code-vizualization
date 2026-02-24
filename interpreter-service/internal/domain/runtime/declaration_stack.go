@@ -3,7 +3,7 @@ package runtime
 type Declared interface{}
 
 type DeclarationStack struct {
-	Declarations []Declared
+	Declarations []Declared `json:"declarations"`
 }
 
 func (ds *DeclarationStack) Declare(d Declared) {

@@ -3,7 +3,7 @@ package runtime
 import runtimeerrors "github.com/Oleja123/code-vizualization/interpreter-service/internal/domain/runtime/errors"
 
 type CallStack struct {
-	Frames []*StackFrame
+	Frames []*StackFrame `json:"frames"`
 }
 
 func NewCallStack(globalScope *Scope) *CallStack {

@@ -78,6 +78,8 @@ func normalizeEvent(event events.Event) string {
 		return fmt.Sprintf("LineChanged(line=%d)", e.Line)
 	case events.UndefinedBehavior:
 		return fmt.Sprintf("UndefinedBehavior(message=%s)", e.Message)
+	case events.RuntimeError:
+		return fmt.Sprintf("RuntimeError(message=%s)", e.Message)
 	default:
 		return fmt.Sprintf("UnknownEvent(%T)", event)
 	}
@@ -572,10 +574,15 @@ func TestInterpreterSteps_UndefinedBehaviorOnUninitializedVariableRead(t *testin
 	result, steps, stepBegin, err := runCodeWithStepsAllowError(t, code)
 
 	assert.Nil(t, result)
-	assert.Nil(t, steps)
-	assert.Equal(t, 0, stepBegin)
-	require.Error(t, err)
-	assert.Equal(t, "undefined behavior: getting an uninitialized variable x", err.Error())
+	require.NotNil(t, err)
+	require.NotNil(t, steps)
+	assert.GreaterOrEqual(t, stepBegin, 0)
+
+	normalized := normalizeSteps(steps)
+	require.NotEmpty(t, normalized)
+	lastEvents := normalized[len(normalized)-1].Events
+	require.NotEmpty(t, lastEvents)
+	assert.Contains(t, lastEvents, "UndefinedBehavior(message=undefined behavior: getting an uninitialized variable x)")
 }
 
 func TestInterpreterSteps_GlobalDeclarationAndStepBegin(t *testing.T) {
@@ -696,10 +703,15 @@ func TestInterpreterSteps_RuntimeErrorDivisionByZero(t *testing.T) {
 	result, steps, stepBegin, err := runCodeWithStepsAllowError(t, code)
 
 	assert.Nil(t, result)
-	assert.Nil(t, steps)
-	assert.Equal(t, 0, stepBegin)
-	require.Error(t, err)
-	assert.Equal(t, "runtime error: division by zero", err.Error())
+	require.NotNil(t, err)
+	require.NotNil(t, steps)
+	assert.GreaterOrEqual(t, stepBegin, 0)
+
+	normalized := normalizeSteps(steps)
+	require.NotEmpty(t, normalized)
+	lastEvents := normalized[len(normalized)-1].Events
+	require.NotEmpty(t, lastEvents)
+	assert.Contains(t, lastEvents, "RuntimeError(message=runtime error: division by zero)")
 }
 
 func TestInterpreterSteps_RecursiveFactorial(t *testing.T) {

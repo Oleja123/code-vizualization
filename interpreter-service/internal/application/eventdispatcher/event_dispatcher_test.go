@@ -1,6 +1,7 @@
 package eventdispatcher_test
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -10,6 +11,7 @@ import (
 	"github.com/Oleja123/code-vizualization/interpreter-service/internal/application/eventdispatcher"
 	"github.com/Oleja123/code-vizualization/interpreter-service/internal/application/interpreter"
 	"github.com/Oleja123/code-vizualization/interpreter-service/internal/domain/events"
+	runtimeerrors "github.com/Oleja123/code-vizualization/interpreter-service/internal/domain/runtime/errors"
 )
 
 type expectedVariable struct {
@@ -31,6 +33,7 @@ type expectedSnapshotState struct {
 	FramesCount       int
 	CurrentLine       int
 	CurrentFrameScope int
+	Error             string
 	Variables         map[string]expectedVariable
 	Arrays            map[string]expectedArray
 	Arrays2D          map[string]expectedArray2D
@@ -42,6 +45,7 @@ func assertSnapshotState(t *testing.T, ed *eventdispatcher.EventDispatcher, expe
 	sn := ed.GetSnapshot()
 	assert.Equal(t, expected.FramesCount, sn.GetFramesCount())
 	assert.Equal(t, expected.CurrentLine, sn.GetCurrentLine())
+	assert.Equal(t, expected.Error, sn.Error)
 
 	currentFrame := sn.GetCurrentFrame()
 	require.NotNil(t, currentFrame)
@@ -114,7 +118,11 @@ func runDispatcherForCode(t *testing.T, code string) (*eventdispatcher.EventDisp
 	runner := interpreter.NewInterpreter()
 	_, steps, stepBegin, err := runner.ExecuteProgram(program)
 	if err != nil {
-		t.Fatalf("runtime error: %v", err)
+		var ubErr runtimeerrors.ErrUndefinedBehavior
+		var rtErr runtimeerrors.ErrRuntime
+		if !(errors.As(err, &ubErr) || errors.As(err, &rtErr)) {
+			t.Fatalf("runtime error: %v", err)
+		}
 	}
 
 	ed := eventdispatcher.NewEventDispatcher(stepBegin)
@@ -1122,5 +1130,116 @@ func TestEventDispatcher_StepBeginNegativeExternalIndex(t *testing.T) {
 		FramesCount:       1,
 		CurrentLine:       11,
 		CurrentFrameScope: 1,
+	})
+}
+
+func TestEventDispatcher_UndefinedBehaviorByStep(t *testing.T) {
+	code := `int main() {
+	int x;
+	return x;
+}`
+
+	ed, stepBegin := runDispatcherForCode(t, code)
+	lastExternalStep := ed.GetStepsCount() - stepBegin - 1
+	require.GreaterOrEqual(t, lastExternalStep, 0)
+
+	require.NoError(t, ed.ApplyStep(lastExternalStep))
+	assertSnapshotState(t, ed, expectedSnapshotState{
+		FramesCount:       1,
+		CurrentLine:       3,
+		CurrentFrameScope: 1,
+		Error:             "undefined behavior: getting an uninitialized variable x",
+	})
+}
+
+func TestEventDispatcher_RuntimeErrorByStep(t *testing.T) {
+	code := `int main() {
+	int x = 1;
+	return x / 0;
+}`
+
+	ed, stepBegin := runDispatcherForCode(t, code)
+	lastExternalStep := ed.GetStepsCount() - stepBegin - 1
+	require.GreaterOrEqual(t, lastExternalStep, 0)
+
+	require.NoError(t, ed.ApplyStep(lastExternalStep))
+	assertSnapshotState(t, ed, expectedSnapshotState{
+		FramesCount:       1,
+		CurrentLine:       3,
+		CurrentFrameScope: 1,
+		Error:             "runtime error: division by zero",
+	})
+}
+
+func TestEventDispatcher_RollbackUndefinedBehavior(t *testing.T) {
+	code := `int main() {
+	int x;
+	return x;
+}`
+
+	ed, stepBegin := runDispatcherForCode(t, code)
+	lastExternalStep := ed.GetStepsCount() - stepBegin - 1
+	require.GreaterOrEqual(t, lastExternalStep, 1)
+
+	require.NoError(t, ed.ApplyStep(lastExternalStep))
+	assertSnapshotState(t, ed, expectedSnapshotState{
+		FramesCount:       1,
+		CurrentLine:       3,
+		CurrentFrameScope: 1,
+		Error:             "undefined behavior: getting an uninitialized variable x",
+	})
+
+	require.NoError(t, ed.ApplyStep(lastExternalStep-1))
+	assertSnapshotState(t, ed, expectedSnapshotState{
+		FramesCount:       2,
+		CurrentLine:       3,
+		CurrentFrameScope: 3,
+		Error:             "",
+	})
+
+	require.NoError(t, ed.ApplyStep(lastExternalStep))
+	assertSnapshotState(t, ed, expectedSnapshotState{
+		FramesCount:       1,
+		CurrentLine:       3,
+		CurrentFrameScope: 1,
+		Error:             "undefined behavior: getting an uninitialized variable x",
+	})
+}
+
+func TestEventDispatcher_RollbackRuntimeError(t *testing.T) {
+	code := `int main() {
+	int x = 1;
+	return x / 0;
+}`
+
+	ed, stepBegin := runDispatcherForCode(t, code)
+	lastExternalStep := ed.GetStepsCount() - stepBegin - 1
+	require.GreaterOrEqual(t, lastExternalStep, 1)
+
+	require.NoError(t, ed.ApplyStep(lastExternalStep))
+	assertSnapshotState(t, ed, expectedSnapshotState{
+		FramesCount:       1,
+		CurrentLine:       3,
+		CurrentFrameScope: 1,
+		Error:             "runtime error: division by zero",
+	})
+
+	require.NoError(t, ed.ApplyStep(lastExternalStep-1))
+	assertSnapshotState(t, ed, expectedSnapshotState{
+		FramesCount:       2,
+		CurrentLine:       3,
+		CurrentFrameScope: 3,
+		Error:             "",
+		Variables: map[string]expectedVariable{
+			"x": {Exists: true, Value: 1},
+		},
+	})
+
+	require.NoError(t, ed.ApplyStep(lastExternalStep))
+	assertSnapshotState(t, ed, expectedSnapshotState{
+		FramesCount:       1,
+		CurrentLine:       3,
+		CurrentFrameScope: 1,
+		Error:             "runtime error: division by zero",
 	})
 }

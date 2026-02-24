@@ -9,10 +9,10 @@ import (
 )
 
 type Snapshot struct {
-	CallStack   *runtime.CallStack
-	GlobalScope *runtime.Scope
-	Line        int
-	Error       string
+	CallStack   *runtime.CallStack `json:"call_stack"`
+	GlobalScope *runtime.Scope     `json:"global_scope"`
+	Line        int                `json:"line"`
+	Error       string             `json:"error"`
 }
 
 func NewSnapshot() *Snapshot {
@@ -50,12 +50,19 @@ func (sn *Snapshot) Apply(event events.Event, step int) error {
 		return sn.applyLineChanged(e)
 	case events.UndefinedBehavior:
 		return sn.applyUndefinedBehavior(e, step)
+	case events.RuntimeError:
+		return sn.applyRuntimeError(e, step)
 	default:
 		return runtimeerrors.NewErrUndefinedBehavior(fmt.Sprintf("unknown event type: %T", e))
 	}
 }
 
 func (sn *Snapshot) applyUndefinedBehavior(e events.UndefinedBehavior, step int) error {
+	sn.Error = e.Message
+	return nil
+}
+
+func (sn *Snapshot) applyRuntimeError(e events.RuntimeError, step int) error {
 	sn.Error = e.Message
 	return nil
 }

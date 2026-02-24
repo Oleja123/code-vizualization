@@ -7,9 +7,9 @@ import (
 )
 
 type Variable struct {
-	Name        string
-	Value       *int
-	StepChanged int //для подстветки на фронте
+	Name        string `json:"name"`
+	Value       *int   `json:"value,omitempty"`
+	StepChanged int    `json:"step_changed"` //для подстветки на фронте
 }
 
 func NewVariable(name string, value *int, step int, isGlobal bool) *Variable {

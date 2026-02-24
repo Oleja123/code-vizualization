@@ -7,9 +7,9 @@ import (
 )
 
 type Array struct {
-	Name   string
-	Size   int
-	Values []ArrayElement
+	Name   string         `json:"name"`
+	Size   int            `json:"size"`
+	Values []ArrayElement `json:"values"`
 }
 
 func NewArray(name string, size int, value []ArrayElement, step int, isGlobal bool) *Array {

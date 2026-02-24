@@ -939,6 +939,17 @@ func TestUndefinedBehaviorEventApplyMultiple(t *testing.T) {
 	assert.Equal(t, "array index out of bounds", sn.Error)
 }
 
+func TestRuntimeErrorEventApply(t *testing.T) {
+	sn := NewSnapshot()
+
+	runtimeEvent := events.RuntimeError{
+		Message: "runtime error: division by zero",
+	}
+	err := sn.Apply(runtimeEvent, 0)
+	assert.NoError(t, err)
+	assert.Equal(t, "runtime error: division by zero", sn.Error)
+}
+
 func TestUndefinedBehaviorVarNotFoundAfterDeclaration(t *testing.T) {
 	sn := NewSnapshot()
 

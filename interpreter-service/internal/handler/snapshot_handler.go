@@ -9,6 +9,7 @@ import (
 	"github.com/Oleja123/code-vizualization/interpreter-service/internal/application/eventdispatcher"
 	"github.com/Oleja123/code-vizualization/interpreter-service/internal/application/interpreter"
 	"github.com/Oleja123/code-vizualization/interpreter-service/internal/domain/snapshot"
+	"github.com/Oleja123/code-vizualization/semantic-analyzer-service/pkg/validator"
 )
 
 type SnapshotRequest struct {
@@ -21,7 +22,6 @@ type SnapshotResponse struct {
 	Error       string             `json:"error,omitempty"`
 	Step        int                `json:"step,omitempty"`
 	CurrentStep int                `json:"current_step,omitempty"`
-	StepBegin   int                `json:"step_begin,omitempty"`
 	StepsCount  int                `json:"steps_count,omitempty"`
 	Result      *int               `json:"result,omitempty"`
 	Snapshot    *snapshot.Snapshot `json:"snapshot,omitempty"`
@@ -29,6 +29,7 @@ type SnapshotResponse struct {
 
 func NewSnapshotHandler() http.HandlerFunc {
 	conv := converter.New()
+	val := validator.New()
 	runner := interpreter.NewInterpreter()
 
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -61,9 +62,14 @@ func NewSnapshotHandler() http.HandlerFunc {
 			return
 		}
 
+		if err := val.ValidateProgram(program); err != nil {
+			writeJSON(w, http.StatusBadRequest, SnapshotResponse{Success: false, Error: "semantic error: " + err.Error()})
+			return
+		}
+
 		result, steps, stepBegin, execErr := runner.ExecuteProgram(program)
 		if execErr != nil {
-			writeJSON(w, http.StatusBadRequest, SnapshotResponse{Success: false, Error: "runtime error: " + execErr.Error()})
+			writeJSON(w, http.StatusBadRequest, SnapshotResponse{Success: false, Error: "error: " + execErr.Error()})
 			return
 		}
 
@@ -74,12 +80,21 @@ func NewSnapshotHandler() http.HandlerFunc {
 			return
 		}
 
+		stepsCount := len(steps) - stepBegin
+		if stepsCount < 0 {
+			stepsCount = 0
+		}
+
+		currentStep := ed.GetCurrentStep() - stepBegin
+		if currentStep < 0 {
+			currentStep = 0
+		}
+
 		writeJSON(w, http.StatusOK, SnapshotResponse{
 			Success:     true,
 			Step:        req.Step,
-			CurrentStep: ed.GetCurrentStep(),
-			StepBegin:   stepBegin,
-			StepsCount:  len(steps),
+			CurrentStep: currentStep,
+			StepsCount:  stepsCount,
 			Result:      result,
 			Snapshot:    ed.GetSnapshot(),
 		})

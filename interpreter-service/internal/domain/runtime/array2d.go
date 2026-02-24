@@ -7,10 +7,10 @@ import (
 )
 
 type Array2D struct {
-	Name   string
-	Size1  int
-	Size2  int
-	Values []Array
+	Name   string  `json:"name"`
+	Size1  int     `json:"size1"`
+	Size2  int     `json:"size2"`
+	Values []Array `json:"values"`
 }
 
 func NewArray2D(name string, size1, size2 int, value []Array, step int, isGlobal bool) *Array2D {

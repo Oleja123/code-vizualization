@@ -42,12 +42,17 @@ func (i *Interpreter) ExecuteProgram(program *converter.Program) (*int, []eventd
 	value, err := i.executeCallExpr(mainCall)
 
 	if err != nil {
-		var unfErr *runtimeerrors.ErrUndefinedBehavior
+		var unfErr runtimeerrors.ErrUndefinedBehavior
+		var runErr runtimeerrors.ErrRuntime
 
 		if errors.As(err, &unfErr) {
 			i.addEvents(events.UndefinedBehavior{Message: err.Error()})
 			i.addStep()
-			return nil, i.Steps, stepBegin, nil
+			return nil, i.Steps, stepBegin, err
+		} else if errors.As(err, &runErr) {
+			i.addEvents(events.RuntimeError{Message: err.Error()})
+			i.addStep()
+			return nil, i.Steps, stepBegin, err
 		} else {
 			return nil, nil, 0, err
 		}

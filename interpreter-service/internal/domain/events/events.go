@@ -64,3 +64,7 @@ type LineChanged struct {
 type UndefinedBehavior struct {
 	Message string
 }
+
+type RuntimeError struct {
+	Message string
+}

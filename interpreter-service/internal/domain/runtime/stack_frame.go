@@ -3,9 +3,9 @@ package runtime
 import runtimeerrors "github.com/Oleja123/code-vizualization/interpreter-service/internal/domain/runtime/errors"
 
 type StackFrame struct {
-	FuncName    string
-	Scopes      []*Scope
-	ReturnValue *int
+	FuncName    string   `json:"func_name"`
+	Scopes      []*Scope `json:"scopes"`
+	ReturnValue *int     `json:"return_value,omitempty"`
 }
 
 func NewStackFrame(funcName string, globalScope *Scope) *StackFrame {

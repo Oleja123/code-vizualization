@@ -87,7 +87,7 @@ func TestNewSnapshotHandler_Success(t *testing.T) {
 	require.NoError(t, json.NewDecoder(rr.Body).Decode(&resp))
 	require.True(t, resp.Success)
 	assert.Equal(t, 1, resp.Step)
-	assert.GreaterOrEqual(t, resp.CurrentStep, resp.Step)
+	assert.Equal(t, resp.Step, resp.CurrentStep)
 	assert.Greater(t, resp.StepsCount, 0)
 	require.NotNil(t, resp.Snapshot)
 	assert.GreaterOrEqual(t, resp.Snapshot.GetFramesCount(), 1)
