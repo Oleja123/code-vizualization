@@ -1,7 +1,7 @@
 package runtime
 
 type Scope struct {
-	Parent       *Scope           `json:"parent,omitempty"`
+	Parent       *Scope           `json:"-"`
 	Declarations DeclarationStack `json:"declarations"`
 }
 

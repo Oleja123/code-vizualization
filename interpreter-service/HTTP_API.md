@@ -116,6 +116,7 @@ go run ./cmd/main.go -port 8080 -onecompiler-config ./config.yaml
 - `call_stack.frames[]`
   - `func_name` (string)
   - `scopes[]`
+    - `parent` **не сериализуется** и отсутствует в JSON-ответе.
     - `declarations.declarations[]` — массив деклараций в текущем scope.
       - Возможные элементы:
         1. Variable:
@@ -220,4 +221,5 @@ curl -X POST http://localhost:8080/snapshot \
 - API использует **внешнюю нумерацию шагов** (`step`, `current_step`, `steps_count`) с учётом внутреннего `step_begin`.
 - `result` может быть `null`, если вычисление завершилось ошибкой до возврата из `main`.
 - Поле `error` внутри `snapshot` используется для отображения runtime/undefined behavior ошибок на шаге.
+- Поле `scope.parent` намеренно скрыто из JSON (`json:"-"`), чтобы не отдавать внутренние ссылки между scope.
 - Не храните реальные секреты (например, API-ключи) в репозитории; используйте переменные окружения/секрет-хранилище.
