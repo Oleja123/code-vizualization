@@ -88,7 +88,7 @@ func NewSnapshotHandler(oneCompilerConfigPath string) http.HandlerFunc {
 
 		runner := interpreter.NewInterpreter()
 		result, steps, stepBegin, execErr := runner.ExecuteProgram(program)
-		if execErr != nil {
+		if execErr != nil && result == nil {
 			writeJSON(w, http.StatusBadRequest, SnapshotResponse{Success: false, Error: "error: " + execErr.Error()})
 			return
 		}
