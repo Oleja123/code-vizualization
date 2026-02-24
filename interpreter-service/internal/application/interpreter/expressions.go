@@ -4,10 +4,10 @@ import (
 	"fmt"
 
 	"github.com/Oleja123/code-vizualization/cst-to-ast-service/pkg/converter"
-	"github.com/Oleja123/code-vizualization/interpreter-service/domain/events"
-	"github.com/Oleja123/code-vizualization/interpreter-service/domain/runtime"
-	runtimeerrors "github.com/Oleja123/code-vizualization/interpreter-service/domain/runtime/errors"
-	runtimeinterfaces "github.com/Oleja123/code-vizualization/interpreter-service/domain/runtime/interfaces"
+	"github.com/Oleja123/code-vizualization/interpreter-service/internal/domain/events"
+	"github.com/Oleja123/code-vizualization/interpreter-service/internal/domain/runtime"
+	runtimeerrors "github.com/Oleja123/code-vizualization/interpreter-service/internal/domain/runtime/errors"
+	runtimeinterfaces "github.com/Oleja123/code-vizualization/interpreter-service/internal/domain/runtime/interfaces"
 )
 
 func (i *Interpreter) executeExpression(expr converter.Expr) (interface{}, error) {

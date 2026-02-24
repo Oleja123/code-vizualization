@@ -1,12 +1,10 @@
 package runtime
 
-import (
-	runtimeerrors "github.com/Oleja123/code-vizualization/interpreter-service/domain/runtime/errors"
-)
+import runtimeerrors "github.com/Oleja123/code-vizualization/interpreter-service/internal/domain/runtime/errors"
 
 type StackFrame struct {
-	FuncName string
-	Scopes   []*Scope
+	FuncName    string
+	Scopes      []*Scope
 	ReturnValue *int
 }
 

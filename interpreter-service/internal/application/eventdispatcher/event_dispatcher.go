@@ -3,8 +3,8 @@ package eventdispatcher
 import (
 	"fmt"
 
-	"github.com/Oleja123/code-vizualization/interpreter-service/domain/events"
-	"github.com/Oleja123/code-vizualization/interpreter-service/domain/snapshot"
+	"github.com/Oleja123/code-vizualization/interpreter-service/internal/domain/events"
+	"github.com/Oleja123/code-vizualization/interpreter-service/internal/domain/snapshot"
 )
 
 type Step struct {

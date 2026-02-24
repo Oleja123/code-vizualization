@@ -3,9 +3,9 @@ package snapshot
 import (
 	"fmt"
 
-	"github.com/Oleja123/code-vizualization/interpreter-service/domain/events"
-	"github.com/Oleja123/code-vizualization/interpreter-service/domain/runtime"
-	runtimeerrors "github.com/Oleja123/code-vizualization/interpreter-service/domain/runtime/errors"
+	"github.com/Oleja123/code-vizualization/interpreter-service/internal/domain/events"
+	"github.com/Oleja123/code-vizualization/interpreter-service/internal/domain/runtime"
+	runtimeerrors "github.com/Oleja123/code-vizualization/interpreter-service/internal/domain/runtime/errors"
 )
 
 type Snapshot struct {

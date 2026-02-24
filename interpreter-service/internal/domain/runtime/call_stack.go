@@ -1,8 +1,6 @@
 package runtime
 
-import (
-	runtimeerrors "github.com/Oleja123/code-vizualization/interpreter-service/domain/runtime/errors"
-)
+import runtimeerrors "github.com/Oleja123/code-vizualization/interpreter-service/internal/domain/runtime/errors"
 
 type CallStack struct {
 	Frames []*StackFrame

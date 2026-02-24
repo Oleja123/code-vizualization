@@ -3,7 +3,7 @@ package runtime
 import (
 	"fmt"
 
-	runtimeerrors "github.com/Oleja123/code-vizualization/interpreter-service/domain/runtime/errors"
+	runtimeerrors "github.com/Oleja123/code-vizualization/interpreter-service/internal/domain/runtime/errors"
 )
 
 type Array2D struct {

@@ -7,9 +7,9 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/Oleja123/code-vizualization/cst-to-ast-service/pkg/converter"
-	"github.com/Oleja123/code-vizualization/interpreter-service/application/eventdispatcher"
-	"github.com/Oleja123/code-vizualization/interpreter-service/application/interpreter"
-	"github.com/Oleja123/code-vizualization/interpreter-service/domain/events"
+	"github.com/Oleja123/code-vizualization/interpreter-service/internal/application/eventdispatcher"
+	"github.com/Oleja123/code-vizualization/interpreter-service/internal/application/interpreter"
+	"github.com/Oleja123/code-vizualization/interpreter-service/internal/domain/events"
 )
 
 type expectedVariable struct {
@@ -984,5 +984,143 @@ func TestEventDispatcher_StepBeginRollback(t *testing.T) {
 		Variables: map[string]expectedVariable{
 			"x": {Exists: false},
 		},
+	})
+}
+
+func TestEventDispatcher_GetStep(t *testing.T) {
+	ed := eventdispatcher.NewEventDispatcher(0)
+	ed.Steps = []eventdispatcher.Step{
+		{StepNumber: 10, Events: []events.Event{events.LineChanged{Line: 1}}},
+	}
+
+	step, err := ed.GetStep(0)
+	require.NoError(t, err)
+	assert.Equal(t, 10, step.StepNumber)
+	require.Len(t, step.Events, 1)
+
+	_, err = ed.GetStep(-1)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid step index")
+
+	_, err = ed.GetStep(1)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid step index")
+}
+
+func TestEventDispatcher_ApplyStepIdempotent(t *testing.T) {
+	value := 10
+	ed := eventdispatcher.NewEventDispatcher(0)
+	ed.Steps = []eventdispatcher.Step{
+		{Events: []events.Event{events.LineChanged{Line: 1}}},
+		{Events: []events.Event{events.DeclareVar{Name: "x", Value: &value}, events.LineChanged{Line: 2}}},
+	}
+
+	require.NoError(t, ed.ApplyStep(1))
+	assertSnapshotState(t, ed, expectedSnapshotState{
+		FramesCount:       1,
+		CurrentLine:       2,
+		CurrentFrameScope: 1,
+		Variables: map[string]expectedVariable{
+			"x": {Exists: true, Value: 10},
+		},
+	})
+	assert.Equal(t, 1, ed.GetCurrentStep())
+
+	require.NoError(t, ed.ApplyStep(1))
+	assertSnapshotState(t, ed, expectedSnapshotState{
+		FramesCount:       1,
+		CurrentLine:       2,
+		CurrentFrameScope: 1,
+		Variables: map[string]expectedVariable{
+			"x": {Exists: true, Value: 10},
+		},
+	})
+	assert.Equal(t, 1, ed.GetCurrentStep())
+}
+
+func TestEventDispatcher_ApplyStepEmptyStepAdvancesIndex(t *testing.T) {
+	ed := eventdispatcher.NewEventDispatcher(0)
+	ed.Steps = []eventdispatcher.Step{
+		{Events: []events.Event{events.LineChanged{Line: 7}}},
+		{Events: nil},
+	}
+
+	require.NoError(t, ed.ApplyStep(0))
+	assertSnapshotState(t, ed, expectedSnapshotState{
+		FramesCount:       1,
+		CurrentLine:       7,
+		CurrentFrameScope: 1,
+	})
+	assert.Equal(t, 0, ed.GetCurrentStep())
+
+	require.NoError(t, ed.ApplyStep(1))
+	assertSnapshotState(t, ed, expectedSnapshotState{
+		FramesCount:       1,
+		CurrentLine:       7,
+		CurrentFrameScope: 1,
+	})
+	assert.Equal(t, 1, ed.GetCurrentStep())
+}
+
+func TestEventDispatcher_ApplyStepPartialFailureAndRollbackRecovery(t *testing.T) {
+	initial := 1
+	ed := eventdispatcher.NewEventDispatcher(0)
+	ed.Steps = []eventdispatcher.Step{
+		{Events: []events.Event{events.DeclareVar{Name: "x", Value: &initial}, events.LineChanged{Line: 1}}},
+		{Events: []events.Event{events.LineChanged{Line: 2}}},
+		{Events: []events.Event{events.VarChanged{Name: "x", Value: 5}, events.VarChanged{Name: "missing", Value: 1}}},
+	}
+
+	require.NoError(t, ed.ApplyStep(1))
+	assertSnapshotState(t, ed, expectedSnapshotState{
+		FramesCount:       1,
+		CurrentLine:       2,
+		CurrentFrameScope: 1,
+		Variables: map[string]expectedVariable{
+			"x":       {Exists: true, Value: 1},
+			"missing": {Exists: false},
+		},
+	})
+	assert.Equal(t, 1, ed.GetCurrentStep())
+
+	err := ed.ApplyStep(2)
+	assert.Error(t, err)
+	assert.Equal(t, 1, ed.GetCurrentStep())
+	assertSnapshotState(t, ed, expectedSnapshotState{
+		FramesCount:       1,
+		CurrentLine:       2,
+		CurrentFrameScope: 1,
+		Variables: map[string]expectedVariable{
+			"x":       {Exists: true, Value: 5},
+			"missing": {Exists: false},
+		},
+	})
+
+	require.NoError(t, ed.ApplyStep(0))
+	assert.Equal(t, 0, ed.GetCurrentStep())
+	assertSnapshotState(t, ed, expectedSnapshotState{
+		FramesCount:       1,
+		CurrentLine:       1,
+		CurrentFrameScope: 1,
+		Variables: map[string]expectedVariable{
+			"x": {Exists: true, Value: 1},
+		},
+	})
+}
+
+func TestEventDispatcher_StepBeginNegativeExternalIndex(t *testing.T) {
+	ed := eventdispatcher.NewEventDispatcher(2)
+	ed.Steps = []eventdispatcher.Step{
+		{Events: []events.Event{events.LineChanged{Line: 10}}},
+		{Events: []events.Event{events.LineChanged{Line: 11}}},
+		{Events: []events.Event{events.LineChanged{Line: 12}}},
+	}
+
+	require.NoError(t, ed.ApplyStep(-1))
+	assert.Equal(t, 1, ed.GetCurrentStep())
+	assertSnapshotState(t, ed, expectedSnapshotState{
+		FramesCount:       1,
+		CurrentLine:       11,
+		CurrentFrameScope: 1,
 	})
 }

@@ -3,11 +3,10 @@ package snapshot
 import (
 	"testing"
 
+	"github.com/Oleja123/code-vizualization/interpreter-service/internal/domain/events"
+	"github.com/Oleja123/code-vizualization/interpreter-service/internal/domain/runtime"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	"github.com/Oleja123/code-vizualization/interpreter-service/domain/events"
-	"github.com/Oleja123/code-vizualization/interpreter-service/domain/runtime"
 )
 
 // Helper function to convert []int to []runtime.ArrayElement

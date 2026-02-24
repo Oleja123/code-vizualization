@@ -8,8 +8,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/Oleja123/code-vizualization/cst-to-ast-service/pkg/converter"
-	"github.com/Oleja123/code-vizualization/interpreter-service/application/eventdispatcher"
-	"github.com/Oleja123/code-vizualization/interpreter-service/domain/events"
+	"github.com/Oleja123/code-vizualization/interpreter-service/internal/application/eventdispatcher"
+	"github.com/Oleja123/code-vizualization/interpreter-service/internal/domain/events"
 )
 
 type normalizedStep struct {

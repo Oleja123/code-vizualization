@@ -4,10 +4,10 @@ import (
 	"fmt"
 
 	"github.com/Oleja123/code-vizualization/cst-to-ast-service/pkg/converter"
-	"github.com/Oleja123/code-vizualization/interpreter-service/application/eventdispatcher"
-	"github.com/Oleja123/code-vizualization/interpreter-service/domain/events"
-	"github.com/Oleja123/code-vizualization/interpreter-service/domain/runtime"
-	runtimeerrors "github.com/Oleja123/code-vizualization/interpreter-service/domain/runtime/errors"
+	"github.com/Oleja123/code-vizualization/interpreter-service/internal/application/eventdispatcher"
+	"github.com/Oleja123/code-vizualization/interpreter-service/internal/domain/events"
+	"github.com/Oleja123/code-vizualization/interpreter-service/internal/domain/runtime"
+	runtimeerrors "github.com/Oleja123/code-vizualization/interpreter-service/internal/domain/runtime/errors"
 )
 
 type Interpreter struct {

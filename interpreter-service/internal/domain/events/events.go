@@ -1,6 +1,6 @@
 package events
 
-import "github.com/Oleja123/code-vizualization/interpreter-service/domain/runtime"
+import "github.com/Oleja123/code-vizualization/interpreter-service/internal/domain/runtime"
 
 type Event interface{}
 
