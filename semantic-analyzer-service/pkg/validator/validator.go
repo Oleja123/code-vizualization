@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/Oleja123/code-vizualization/cst-to-ast-service/pkg/converter"
+	"github.com/Oleja123/code-vizualization/semantic-analyzer-service/pkg/onecompiler"
 )
 
 // SemanticValidator выполняет семантическую валидацию AST
@@ -15,6 +16,8 @@ type SemanticValidator struct {
 	allowedBinaryOps   map[string]bool
 	allowedReturnTypes map[string]bool
 	allowedTypes       map[string]bool
+	oneCompilerClient  *onecompiler.Client
+	oneCompilerEnabled bool
 }
 
 var arrayMaximumDimension = 2
@@ -60,7 +63,15 @@ func New() *SemanticValidator {
 		allowedTypes: map[string]bool{
 			"int": true,
 		},
+		oneCompilerEnabled: false,
 	}
+}
+
+func NewWithOneCompilerClient(client *onecompiler.Client) *SemanticValidator {
+	v := New()
+	v.oneCompilerClient = client
+	v.oneCompilerEnabled = client != nil
+	return v
 }
 
 func (v *SemanticValidator) getAllowed(allowed map[string]bool) string {
@@ -78,8 +89,14 @@ func (v *SemanticValidator) getAllowed(allowed map[string]bool) string {
 	return sb.String()
 }
 
-// ValidateProgram выполняет валидацию всей программы
-func (v *SemanticValidator) ValidateProgram(program *converter.Program) error {
+// ValidateProgram выполняет валидацию всей программы.
+// Если валидатор создан с OneCompiler клиентом, то sourceCode обязателен для compile-check.
+func (v *SemanticValidator) ValidateProgram(program *converter.Program, sourceCode ...string) error {
+	var code string
+	if len(sourceCode) > 0 {
+		code = sourceCode[0]
+	}
+
 	// Проверяем все объявления
 	for _, decl := range program.Declarations {
 		if funcDecl, ok := decl.(*converter.FunctionDecl); ok {
@@ -90,6 +107,30 @@ func (v *SemanticValidator) ValidateProgram(program *converter.Program) error {
 			if err := v.validateVariableDecl(varDecl); err != nil {
 				return err
 			}
+		}
+	}
+
+	if v.oneCompilerEnabled {
+		if strings.TrimSpace(code) == "" {
+			return NewCompileUnavailableError("source code is required for OneCompiler validation")
+		}
+
+		result, err := v.oneCompilerClient.CompileC(code)
+		if err != nil {
+			if result != nil {
+				if result.Stderr != "" {
+					return NewCompilationError(result.Stderr)
+				}
+				if result.Exception != "" {
+					return NewCompilationError(result.Exception)
+				}
+				return NewCompilationError(err.Error())
+			}
+			return NewCompileUnavailableError(err.Error())
+		}
+
+		if result != nil && strings.TrimSpace(result.Stderr) != "" {
+			return NewCompilationError(result.Stderr)
 		}
 	}
 

@@ -1,18 +1,17 @@
 package runtime
 
-import (
-	runtimeerrors "github.com/Oleja123/code-vizualization/interpreter-service/domain/runtime/errors"
-)
+import runtimeerrors "github.com/Oleja123/code-vizualization/interpreter-service/internal/domain/runtime/errors"
 
 type ArrayElement struct {
-	Value       *int
-	StepChanged int //для подстветки на фронте
+	Value       *int `json:"value,omitempty"`
+	StepChanged int  `json:"step_changed"` //для подстветки на фронте
 }
 
 func NewArrayElement(value *int, step int, isGlobal bool) *ArrayElement {
 	var v *int
 	if value != nil {
-		v = value
+		cv := *value
+		v = &cv
 	} else if isGlobal {
 		val := 0
 		v = &val

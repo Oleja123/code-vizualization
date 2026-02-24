@@ -3,18 +3,20 @@ package snapshot
 import (
 	"fmt"
 
-	"github.com/Oleja123/code-vizualization/interpreter-service/domain/events"
-	"github.com/Oleja123/code-vizualization/interpreter-service/domain/runtime"
-	runtimeerrors "github.com/Oleja123/code-vizualization/interpreter-service/domain/runtime/errors"
+	"github.com/Oleja123/code-vizualization/interpreter-service/internal/domain/events"
+	"github.com/Oleja123/code-vizualization/interpreter-service/internal/domain/runtime"
+	runtimeerrors "github.com/Oleja123/code-vizualization/interpreter-service/internal/domain/runtime/errors"
 )
 
 type Snapshot struct {
-	CallStack   *runtime.CallStack
-	GlobalScope *runtime.Scope
-	Line        int
+	CallStack   *runtime.CallStack `json:"call_stack"`
+	GlobalScope *runtime.Scope     `json:"global_scope"`
+	Line        int                `json:"line"`
+	Error       string             `json:"error"`
 }
 
-func NewSnapshot(globalScope *runtime.Scope) *Snapshot {
+func NewSnapshot() *Snapshot {
+	globalScope := runtime.NewScope(nil)
 	return &Snapshot{
 		CallStack:   runtime.NewCallStack(globalScope),
 		GlobalScope: globalScope,
@@ -46,9 +48,23 @@ func (sn *Snapshot) Apply(event events.Event, step int) error {
 		return sn.applyFunctionReturn(e)
 	case events.LineChanged:
 		return sn.applyLineChanged(e)
+	case events.UndefinedBehavior:
+		return sn.applyUndefinedBehavior(e, step)
+	case events.RuntimeError:
+		return sn.applyRuntimeError(e, step)
 	default:
 		return runtimeerrors.NewErrUndefinedBehavior(fmt.Sprintf("unknown event type: %T", e))
 	}
+}
+
+func (sn *Snapshot) applyUndefinedBehavior(e events.UndefinedBehavior, step int) error {
+	sn.Error = e.Message
+	return nil
+}
+
+func (sn *Snapshot) applyRuntimeError(e events.RuntimeError, step int) error {
+	sn.Error = e.Message
+	return nil
 }
 
 func (sn *Snapshot) applyEnterScope() error {
@@ -69,32 +85,19 @@ func (sn *Snapshot) applyExitScope() error {
 }
 
 func (sn *Snapshot) applyDeclareVar(e events.DeclareVar, step int) error {
-	variable := runtime.NewVariable(e.Name, e.Value, step, false)
+	variable := runtime.NewVariable(e.Name, e.Value, step, e.IsGlobal)
 	sn.CallStack.DeclareInCurrentFrame(variable)
 	return nil
 }
 
 func (sn *Snapshot) applyDeclareArray(e events.DeclareArray, step int) error {
-	elements := make([]runtime.ArrayElement, len(e.Value))
-	for i, v := range e.Value {
-		val := v
-		elements[i] = *runtime.NewArrayElement(&val, step, false)
-	}
-	arr := runtime.NewArray(e.Name, e.Size, elements, step, false)
+	arr := runtime.NewArray(e.Name, e.Size, e.Value, step, e.IsGlobal)
 	sn.CallStack.DeclareInCurrentFrame(arr)
 	return nil
 }
 
 func (sn *Snapshot) applyDeclareArray2D(e events.DeclareArray2D, step int) error {
-	elements := make([][]runtime.ArrayElement, len(e.Value))
-	for i := range e.Value {
-		elements[i] = make([]runtime.ArrayElement, len(e.Value[i]))
-		for j, v := range e.Value[i] {
-			val := v
-			elements[i][j] = *runtime.NewArrayElement(&val, step, false)
-		}
-	}
-	arr := runtime.NewArray2D(e.Name, e.Size1, e.Size2, elements, step, false)
+	arr := runtime.NewArray2D(e.Name, e.Size1, e.Size2, e.Value, step, e.IsGlobal)
 	sn.CallStack.DeclareInCurrentFrame(arr)
 	return nil
 }
@@ -151,8 +154,10 @@ func (sn *Snapshot) applyLineChanged(e events.LineChanged) error {
 }
 
 func (sn *Snapshot) Reset() {
+	sn.GlobalScope = runtime.NewScope(nil)
 	sn.CallStack = runtime.NewCallStack(sn.GlobalScope)
-	sn.Line = 0
+	sn.Line = -1
+	sn.Error = ""
 }
 
 // Методы для чтения текущего состояния

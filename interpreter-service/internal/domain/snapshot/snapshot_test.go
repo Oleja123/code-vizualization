@@ -3,27 +3,47 @@ package snapshot
 import (
 	"testing"
 
+	"github.com/Oleja123/code-vizualization/interpreter-service/internal/domain/events"
+	"github.com/Oleja123/code-vizualization/interpreter-service/internal/domain/runtime"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	"github.com/Oleja123/code-vizualization/interpreter-service/domain/events"
-	"github.com/Oleja123/code-vizualization/interpreter-service/domain/runtime"
 )
 
+// Helper function to convert []int to []runtime.ArrayElement
+func makeArrayElements(values []int) []runtime.ArrayElement {
+	result := make([]runtime.ArrayElement, len(values))
+	for i, v := range values {
+		val := v
+		result[i] = runtime.ArrayElement{Value: &val, StepChanged: 0}
+	}
+	return result
+}
+
+// Helper function to convert [][]int to []runtime.Array
+func makeArray2D(values [][]int) []runtime.Array {
+	result := make([]runtime.Array, len(values))
+	for i, row := range values {
+		elements := makeArrayElements(row)
+		result[i] = runtime.Array{
+			Name:   "",
+			Size:   len(row),
+			Values: elements,
+		}
+	}
+	return result
+}
+
 func TestNewSnapshot(t *testing.T) {
-	globalScope := runtime.NewScope(nil)
-	sn := NewSnapshot(globalScope)
+	sn := NewSnapshot()
 
 	assert.NotNil(t, sn.CallStack)
 	assert.NotNil(t, sn.GlobalScope)
-	assert.Equal(t, globalScope, sn.GlobalScope)
 	assert.Equal(t, 0, sn.Line)
 	assert.NotNil(t, sn.CallStack.GetCurrentFrame())
 }
 
 func TestSnapshotApplyDeclareVar(t *testing.T) {
-	globalScope := runtime.NewScope(nil)
-	sn := NewSnapshot(globalScope)
+	sn := NewSnapshot()
 
 	event := events.DeclareVar{
 		Name:  "x",
@@ -40,8 +60,7 @@ func TestSnapshotApplyDeclareVar(t *testing.T) {
 }
 
 func TestSnapshotApplyDeclareVarWithInitialValue(t *testing.T) {
-	globalScope := runtime.NewScope(nil)
-	sn := NewSnapshot(globalScope)
+	sn := NewSnapshot()
 
 	val := 42
 	event := events.DeclareVar{
@@ -60,12 +79,11 @@ func TestSnapshotApplyDeclareVarWithInitialValue(t *testing.T) {
 }
 
 func TestSnapshotApplyDeclareArray(t *testing.T) {
-	globalScope := runtime.NewScope(nil)
-	sn := NewSnapshot(globalScope)
+	sn := NewSnapshot()
 
 	event := events.DeclareArray{
 		Name:  "arr",
-		Value: []int{1, 2, 3},
+		Value: makeArrayElements([]int{1, 2, 3}),
 		Size:  3,
 	}
 
@@ -80,12 +98,11 @@ func TestSnapshotApplyDeclareArray(t *testing.T) {
 }
 
 func TestSnapshotApplyDeclareArray2D(t *testing.T) {
-	globalScope := runtime.NewScope(nil)
-	sn := NewSnapshot(globalScope)
+	sn := NewSnapshot()
 
 	event := events.DeclareArray2D{
 		Name:  "matrix",
-		Value: [][]int{{1, 2}, {3, 4}},
+		Value: makeArray2D([][]int{{1, 2}, {3, 4}}),
 		Size1: 2,
 		Size2: 2,
 	}
@@ -102,8 +119,7 @@ func TestSnapshotApplyDeclareArray2D(t *testing.T) {
 }
 
 func TestSnapshotApplyEnterExitScope(t *testing.T) {
-	globalScope := runtime.NewScope(nil)
-	sn := NewSnapshot(globalScope)
+	sn := NewSnapshot()
 
 	// Declare variable in global scope
 	declareEvent := events.DeclareVar{
@@ -131,8 +147,7 @@ func TestSnapshotApplyEnterExitScope(t *testing.T) {
 }
 
 func TestSnapshotApplyVarChanged(t *testing.T) {
-	globalScope := runtime.NewScope(nil)
-	sn := NewSnapshot(globalScope)
+	sn := NewSnapshot()
 
 	// Declare variable
 	declareEvent := events.DeclareVar{
@@ -158,8 +173,7 @@ func TestSnapshotApplyVarChanged(t *testing.T) {
 }
 
 func TestSnapshotApplyVarChangedNotFound(t *testing.T) {
-	globalScope := runtime.NewScope(nil)
-	sn := NewSnapshot(globalScope)
+	sn := NewSnapshot()
 
 	changeEvent := events.VarChanged{
 		Name:  "nonexistent",
@@ -170,13 +184,12 @@ func TestSnapshotApplyVarChangedNotFound(t *testing.T) {
 }
 
 func TestSnapshotApplyArrayElementChanged(t *testing.T) {
-	globalScope := runtime.NewScope(nil)
-	sn := NewSnapshot(globalScope)
+	sn := NewSnapshot()
 
 	// Declare array
 	declareEvent := events.DeclareArray{
 		Name:  "arr",
-		Value: []int{0, 0, 0},
+		Value: makeArrayElements([]int{0, 0, 0}),
 		Size:  3,
 	}
 	err := sn.Apply(declareEvent, 0)
@@ -195,17 +208,17 @@ func TestSnapshotApplyArrayElementChanged(t *testing.T) {
 	assert.True(t, ok)
 	value, err := arr.GetElement(1)
 	assert.NoError(t, err)
-	assert.Equal(t, 42, value)
+	valInt, err := value.GetValue()
+	assert.Equal(t, 42, valInt)
 }
 
 func TestSnapshotApplyArray2DElementChanged(t *testing.T) {
-	globalScope := runtime.NewScope(nil)
-	sn := NewSnapshot(globalScope)
+	sn := NewSnapshot()
 
 	// Declare 2D array
 	declareEvent := events.DeclareArray2D{
 		Name:  "matrix",
-		Value: [][]int{{0, 0}, {0, 0}},
+		Value: makeArray2D([][]int{{0, 0}, {0, 0}}),
 		Size1: 2,
 		Size2: 2,
 	}
@@ -230,8 +243,7 @@ func TestSnapshotApplyArray2DElementChanged(t *testing.T) {
 }
 
 func TestSnapshotApplyFunctionCallAndReturn(t *testing.T) {
-	globalScope := runtime.NewScope(nil)
-	sn := NewSnapshot(globalScope)
+	sn := NewSnapshot()
 
 	initialFramesCount := sn.GetFramesCount()
 	assert.Equal(t, 1, initialFramesCount)
@@ -261,8 +273,7 @@ func TestSnapshotApplyFunctionCallAndReturn(t *testing.T) {
 }
 
 func TestSnapshotApplyFunctionReturnVoid(t *testing.T) {
-	globalScope := runtime.NewScope(nil)
-	sn := NewSnapshot(globalScope)
+	sn := NewSnapshot()
 
 	callEvent := events.FunctionCall{
 		Name: "voidFunc",
@@ -282,8 +293,7 @@ func TestSnapshotApplyFunctionReturnVoid(t *testing.T) {
 }
 
 func TestSnapshotApplyLineChanged(t *testing.T) {
-	globalScope := runtime.NewScope(nil)
-	sn := NewSnapshot(globalScope)
+	sn := NewSnapshot()
 
 	assert.Equal(t, 0, sn.GetCurrentLine())
 
@@ -297,8 +307,7 @@ func TestSnapshotApplyLineChanged(t *testing.T) {
 }
 
 func TestSnapshotReset(t *testing.T) {
-	globalScope := runtime.NewScope(nil)
-	sn := NewSnapshot(globalScope)
+	sn := NewSnapshot()
 
 	// Add some state
 	declareEvent := events.DeclareVar{
@@ -320,16 +329,15 @@ func TestSnapshotReset(t *testing.T) {
 	// Reset
 	sn.Reset()
 
-	// After reset, CallStack should be fresh, Line and Step should be 0
-	assert.Equal(t, 0, sn.GetCurrentLine())
+	// After reset, CallStack should be fresh
+	assert.Equal(t, -1, sn.GetCurrentLine())
 	assert.Equal(t, 1, sn.GetFramesCount())
 	// Note: Global scope retains declarations (this is correct behavior)
 	// NewSnapshot should be created with a fresh scope for a clean slate
 }
 
 func TestSnapshotComplexScenario(t *testing.T) {
-	globalScope := runtime.NewScope(nil)
-	sn := NewSnapshot(globalScope)
+	sn := NewSnapshot()
 
 	// Declare global variables
 	events1 := events.DeclareVar{Name: "x", Value: nil}
@@ -337,7 +345,7 @@ func TestSnapshotComplexScenario(t *testing.T) {
 
 	declareArrayEvent := events.DeclareArray{
 		Name:  "arr",
-		Value: []int{10, 20, 30},
+		Value: makeArrayElements([]int{10, 20, 30}),
 		Size:  3,
 	}
 	assert.NoError(t, sn.Apply(declareArrayEvent, 0))
@@ -386,12 +394,12 @@ func TestSnapshotComplexScenario(t *testing.T) {
 	assert.True(t, ok)
 	elemVal, err := arr.GetElement(0)
 	assert.NoError(t, err)
-	assert.Equal(t, 100, elemVal)
+	elemValInt, err := elemVal.GetValue()
+	assert.Equal(t, 100, elemValInt)
 }
 
 func TestSnapshotGetArrayNotFound(t *testing.T) {
-	globalScope := runtime.NewScope(nil)
-	sn := NewSnapshot(globalScope)
+	sn := NewSnapshot()
 
 	arr, ok := sn.GetArray("nonexistent")
 	assert.False(t, ok)
@@ -399,8 +407,7 @@ func TestSnapshotGetArrayNotFound(t *testing.T) {
 }
 
 func TestSnapshotGetArray2DNotFound(t *testing.T) {
-	globalScope := runtime.NewScope(nil)
-	sn := NewSnapshot(globalScope)
+	sn := NewSnapshot()
 
 	arr2d, ok := sn.GetArray2D("nonexistent")
 	assert.False(t, ok)
@@ -408,8 +415,7 @@ func TestSnapshotGetArray2DNotFound(t *testing.T) {
 }
 
 func TestSnapshotGetVariableNotFound(t *testing.T) {
-	globalScope := runtime.NewScope(nil)
-	sn := NewSnapshot(globalScope)
+	sn := NewSnapshot()
 
 	variable, ok := sn.GetVariable("nonexistent")
 	assert.False(t, ok)
@@ -417,8 +423,7 @@ func TestSnapshotGetVariableNotFound(t *testing.T) {
 }
 
 func TestSnapshotMultipleFunctionCalls(t *testing.T) {
-	globalScope := runtime.NewScope(nil)
-	sn := NewSnapshot(globalScope)
+	sn := NewSnapshot()
 
 	// First function call
 	call1 := events.FunctionCall{Name: "func1"}
@@ -453,8 +458,7 @@ func TestSnapshotMultipleFunctionCalls(t *testing.T) {
 
 // Тест: Факториал (рекурсия)
 func TestScenarioFactorial(t *testing.T) {
-	globalScope := runtime.NewScope(nil)
-	sn := NewSnapshot(globalScope)
+	sn := NewSnapshot()
 
 	// Объявление глобальных переменных
 	sn.Apply(events.DeclareVar{Name: "n", Value: nil}, 0)
@@ -554,13 +558,12 @@ func TestScenarioFactorial(t *testing.T) {
 
 // Тест: Сортировка массива (bubble sort)
 func TestScenarioBubbleSort(t *testing.T) {
-	globalScope := runtime.NewScope(nil)
-	sn := NewSnapshot(globalScope)
+	sn := NewSnapshot()
 
 	// Объявление и инициализация массива
 	sn.Apply(events.DeclareArray{
 		Name:  "arr",
-		Value: []int{5, 2, 8, 1, 9},
+		Value: makeArrayElements([]int{5, 2, 8, 1, 9}),
 		Size:  5,
 	}, 0)
 	sn.Apply(events.LineChanged{Line: 1}, 0)
@@ -618,20 +621,22 @@ func TestScenarioBubbleSort(t *testing.T) {
 	val0, _ := arr.GetElement(0)
 	val1, _ := arr.GetElement(1)
 	val2, _ := arr.GetElement(2)
-	assert.Equal(t, 2, val0)
-	assert.Equal(t, 1, val1)
-	assert.Equal(t, 5, val2)
+	val0Int, _ := val0.GetValue()
+	val1Int, _ := val1.GetValue()
+	val2Int, _ := val2.GetValue()
+	assert.Equal(t, 2, val0Int)
+	assert.Equal(t, 1, val1Int)
+	assert.Equal(t, 5, val2Int)
 }
 
 // Тест: Поиск в матрице (2D массив)
 func TestScenarioMatrix2DSearch(t *testing.T) {
-	globalScope := runtime.NewScope(nil)
-	sn := NewSnapshot(globalScope)
+	sn := NewSnapshot()
 
 	// Объявление матрицы 3x3
 	sn.Apply(events.DeclareArray2D{
 		Name:  "matrix",
-		Value: [][]int{{1, 2, 3}, {4, 5, 6}, {7, 8, 9}},
+		Value: makeArray2D([][]int{{1, 2, 3}, {4, 5, 6}, {7, 8, 9}}),
 		Size1: 3,
 		Size2: 3,
 	}, 0)
@@ -689,13 +694,12 @@ func TestScenarioMatrix2DSearch(t *testing.T) {
 
 // Тест: Вычисление суммы и среднего (с тремя вложенными функциями)
 func TestScenarioNotationCalculations(t *testing.T) {
-	globalScope := runtime.NewScope(nil)
-	sn := NewSnapshot(globalScope)
+	sn := NewSnapshot()
 
 	// Массив чисел
 	sn.Apply(events.DeclareArray{
 		Name:  "numbers",
-		Value: []int{10, 20, 30, 40},
+		Value: makeArrayElements([]int{10, 20, 30, 40}),
 		Size:  4,
 	}, 0)
 	sn.Apply(events.LineChanged{Line: 1}, 0)
@@ -763,4 +767,282 @@ func TestScenarioNotationCalculations(t *testing.T) {
 	assert.Equal(t, 4, countVal)
 
 	assert.Equal(t, 1, sn.GetFramesCount()) // Вернулись в main
+}
+
+// ============= Тесты на обработку undefined behavior =============
+
+func TestUndefinedBehaviorVarNotFound(t *testing.T) {
+	sn := NewSnapshot()
+
+	// Попытка изменить переменную, которая не была объявлена
+	changeEvent := events.VarChanged{
+		Name:  "nonexistent",
+		Value: 100,
+	}
+	err := sn.Apply(changeEvent, 0)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "variable nonexistent not found")
+}
+
+func TestUndefinedBehaviorArrayNotFound(t *testing.T) {
+	sn := NewSnapshot()
+
+	// Попытка изменить элемент масивов, который не был объявлен
+	changeEvent := events.ArrayElementChanged{
+		Name:  "nonexistent_array",
+		Ind:   0,
+		Value: 42,
+	}
+	err := sn.Apply(changeEvent, 0)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "array nonexistent_array not found")
+}
+
+func TestUndefinedBehaviorArray2DNotFound(t *testing.T) {
+	sn := NewSnapshot()
+
+	// Попытка изменить элемент 2D массива, который не был объявлен
+	changeEvent := events.Array2DElementChanged{
+		Name:  "nonexistent_matrix",
+		Ind1:  0,
+		Ind2:  0,
+		Value: 42,
+	}
+	err := sn.Apply(changeEvent, 0)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "array2d nonexistent_matrix not found")
+}
+
+func TestUndefinedBehaviorArrayOutOfBoundsPositive(t *testing.T) {
+	sn := NewSnapshot()
+
+	// Объявляем массив размером 3
+	sn.Apply(events.DeclareArray{
+		Name:  "arr",
+		Value: makeArrayElements([]int{1, 2, 3}),
+		Size:  3,
+	}, 0)
+
+	// Попытка доступа к индексу вне границ (индекс 5 при размере 3)
+	changeEvent := events.ArrayElementChanged{
+		Name:  "arr",
+		Ind:   5,
+		Value: 100,
+	}
+	err := sn.Apply(changeEvent, 0)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "index out of bounds")
+}
+
+func TestUndefinedBehaviorArrayOutOfBoundsNegative(t *testing.T) {
+	sn := NewSnapshot()
+
+	// Объявляем массив
+	sn.Apply(events.DeclareArray{
+		Name:  "arr",
+		Value: makeArrayElements([]int{1, 2, 3}),
+		Size:  3,
+	}, 0)
+
+	// Попытка доступа к отрицательному индексу
+	changeEvent := events.ArrayElementChanged{
+		Name:  "arr",
+		Ind:   -1,
+		Value: 100,
+	}
+	err := sn.Apply(changeEvent, 0)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "index out of bounds")
+}
+
+func TestUndefinedBehaviorArray2DOutOfBoundsRow(t *testing.T) {
+	sn := NewSnapshot()
+
+	// Объявляем 2D массив 2x2
+	sn.Apply(events.DeclareArray2D{
+		Name:  "matrix",
+		Value: makeArray2D([][]int{{1, 2}, {3, 4}}),
+		Size1: 2,
+		Size2: 2,
+	}, 0)
+
+	// Попытка доступа к строке вне границ
+	changeEvent := events.Array2DElementChanged{
+		Name:  "matrix",
+		Ind1:  5,
+		Ind2:  0,
+		Value: 100,
+	}
+	err := sn.Apply(changeEvent, 0)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "index out of bounds")
+}
+
+func TestUndefinedBehaviorArray2DOutOfBoundsCol(t *testing.T) {
+	sn := NewSnapshot()
+
+	// Объявляем 2D массив 2x2
+	sn.Apply(events.DeclareArray2D{
+		Name:  "matrix",
+		Value: makeArray2D([][]int{{1, 2}, {3, 4}}),
+		Size1: 2,
+		Size2: 2,
+	}, 0)
+
+	// Попытка доступа к колонке вне границ
+	changeEvent := events.Array2DElementChanged{
+		Name:  "matrix",
+		Ind1:  0,
+		Ind2:  10,
+		Value: 100,
+	}
+	err := sn.Apply(changeEvent, 0)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "index out of bounds")
+}
+
+func TestUndefinedBehaviorEventApply(t *testing.T) {
+	sn := NewSnapshot()
+
+	// Применяем событие UndefinedBehavior
+	ubEvent := events.UndefinedBehavior{
+		Message: "division by zero",
+	}
+	err := sn.Apply(ubEvent, 0)
+	assert.NoError(t, err)
+
+	// Проверяем, что ошибка сохранена в Snapshot
+	assert.Equal(t, "division by zero", sn.Error)
+}
+
+func TestUndefinedBehaviorEventApplyMultiple(t *testing.T) {
+	sn := NewSnapshot()
+
+	// Применяем первое событие UndefinedBehavior
+	ubEvent1 := events.UndefinedBehavior{
+		Message: "first error",
+	}
+	err := sn.Apply(ubEvent1, 0)
+	assert.NoError(t, err)
+	assert.Equal(t, "first error", sn.Error)
+
+	// Объявляем переменную
+	sn.Apply(events.DeclareVar{Name: "x", Value: nil}, 0)
+	sn.Apply(events.VarChanged{Name: "x", Value: 10}, 0)
+
+	// Применяем второе событие UndefinedBehavior (перезаписываем ошибку)
+	ubEvent2 := events.UndefinedBehavior{
+		Message: "array index out of bounds",
+	}
+	err = sn.Apply(ubEvent2, 0)
+	assert.NoError(t, err)
+	assert.Equal(t, "array index out of bounds", sn.Error)
+}
+
+func TestRuntimeErrorEventApply(t *testing.T) {
+	sn := NewSnapshot()
+
+	runtimeEvent := events.RuntimeError{
+		Message: "runtime error: division by zero",
+	}
+	err := sn.Apply(runtimeEvent, 0)
+	assert.NoError(t, err)
+	assert.Equal(t, "runtime error: division by zero", sn.Error)
+}
+
+func TestUndefinedBehaviorVarNotFoundAfterDeclaration(t *testing.T) {
+	sn := NewSnapshot()
+
+	// Объявляем переменную x
+	sn.Apply(events.DeclareVar{Name: "x", Value: nil}, 0)
+	assert.NoError(t, sn.Apply(events.VarChanged{Name: "x", Value: 5}, 0))
+
+	// Входим в новую область видимости
+	sn.Apply(events.EnterScope{}, 0)
+
+	// Пытаемся изменить x (она должна найтись из родительской области)
+	// но если реализация требует локальную переменную, то будет ошибка
+	err := sn.Apply(events.VarChanged{Name: "y", Value: 10}, 0)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "variable y not found")
+}
+
+func TestUndefinedBehaviorExitScopeWithoutEnter(t *testing.T) {
+	sn := NewSnapshot()
+
+	// Входим в область видимости
+	sn.Apply(events.EnterScope{}, 0)
+	initialFrames := sn.GetFramesCount()
+
+	// Выходим из области видимости
+	err := sn.Apply(events.ExitScope{}, 0)
+	require.NoError(t, err)
+
+	// Фреймов должно остаться столько же (выходили из локальной scope, не из фрейма)
+	assert.Equal(t, initialFrames, sn.GetFramesCount())
+
+	// Попытка выхода из последней области видимости должна вызвать ошибку
+	err = sn.Apply(events.ExitScope{}, 0)
+	assert.Error(t, err)
+}
+
+func TestUndefinedBehaviorComplexErrorScenario(t *testing.T) {
+	sn := NewSnapshot()
+
+	// Объявляем переменные и массив
+	sn.Apply(events.DeclareVar{Name: "count", Value: nil}, 0)
+	sn.Apply(events.DeclareArray{
+		Name:  "data",
+		Value: makeArrayElements([]int{10, 20, 30}),
+		Size:  3,
+	}, 0)
+
+	// Нормальные операции
+	assert.NoError(t, sn.Apply(events.VarChanged{Name: "count", Value: 3}, 0))
+	assert.NoError(t, sn.Apply(events.ArrayElementChanged{Name: "data", Ind: 1, Value: 25}, 0))
+
+	// Эмулируем ошибку: попытка доступа к несуществующему элементу
+	err1 := sn.Apply(events.ArrayElementChanged{Name: "data", Ind: 10, Value: 50}, 0)
+	assert.Error(t, err1)
+
+	// Эмулируем ошибку: изменение несуществующей переменной
+	err2 := sn.Apply(events.VarChanged{Name: "undefined_var", Value: 999}, 0)
+	assert.Error(t, err2)
+
+	// Проверяем, что массив и переменная всё ещё доступны несмотря на ошибки
+	arr, ok := sn.GetArray("data")
+	assert.True(t, ok)
+	assert.NotNil(t, arr)
+
+	count, ok := sn.GetVariable("count")
+	assert.True(t, ok)
+	countVal, _ := count.GetValue()
+	assert.Equal(t, 3, countVal)
+}
+
+func TestUndefinedBehaviorGetNonexistentVariable(t *testing.T) {
+	sn := NewSnapshot()
+
+	// Пытаемся получить несуществующую переменную
+	variable, ok := sn.GetVariable("nonexistent")
+	assert.False(t, ok)
+	assert.Nil(t, variable)
+}
+
+func TestUndefinedBehaviorGetNonexistentArray(t *testing.T) {
+	sn := NewSnapshot()
+
+	// Пытаемся получить несуществующий массив
+	arr, ok := sn.GetArray("nonexistent_array")
+	assert.False(t, ok)
+	assert.Nil(t, arr)
+}
+
+func TestUndefinedBehaviorGetNonexistentArray2D(t *testing.T) {
+	sn := NewSnapshot()
+
+	// Пытаемся получить несуществующий 2D массив
+	arr2d, ok := sn.GetArray2D("nonexistent_matrix")
+	assert.False(t, ok)
+	assert.Nil(t, arr2d)
 }

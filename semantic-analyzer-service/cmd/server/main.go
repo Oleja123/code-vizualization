@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"log/slog"
@@ -10,7 +11,7 @@ import (
 
 	"github.com/Oleja123/code-vizualization/cst-to-ast-service/pkg/converter"
 	"github.com/Oleja123/code-vizualization/semantic-analyzer-service/internal/infrastructure/config"
-	"github.com/Oleja123/code-vizualization/semantic-analyzer-service/internal/infrastructure/onecompiler"
+	"github.com/Oleja123/code-vizualization/semantic-analyzer-service/pkg/onecompiler"
 	"github.com/Oleja123/code-vizualization/semantic-analyzer-service/pkg/validator"
 )
 
@@ -34,7 +35,6 @@ var (
 
 func init() {
 	conv = converter.NewCConverter()
-	val = validator.New()
 	logger = slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
 		Level: slog.LevelInfo,
 	}))
@@ -84,40 +84,26 @@ func handleValidate(w http.ResponseWriter, r *http.Request) {
 
 	prog := program.(*converter.Program)
 
-	// Валидируем
-	if err := val.ValidateProgram(prog); err != nil {
+	// Валидируем (включая compile-check через OneCompiler, если включен)
+	if err := val.ValidateProgram(prog, req.Code); err != nil {
 		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(ValidateResponse{
-			Success: false,
-			Error:   "Semantic error: " + err.Error(),
-		})
-		return
-	}
 
-	// Check compilation if OneCompiler is enabled
-	if cfg.OneCompiler.Enabled && ocClient != nil {
-		result, err := ocClient.CompileC(req.Code)
-		if err != nil {
-			w.Header().Set("Content-Type", "application/json")
+		var unavailableErr validator.CompileUnavailableError
+		if errors.As(err, &unavailableErr) {
 			w.WriteHeader(http.StatusServiceUnavailable)
 			json.NewEncoder(w).Encode(ValidateResponse{
 				Success: false,
-				Error:   "Compilation check unavailable: " + err.Error(),
+				Error:   err.Error(),
 			})
 			return
 		}
 
-		// Check if compilation failed (error in stderr)
-		if result.Stderr != "" {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusBadRequest)
-			json.NewEncoder(w).Encode(ValidateResponse{
-				Success: false,
-				Error:   "Compilation error: " + result.Stderr,
-			})
-			return
-		}
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(ValidateResponse{
+			Success: false,
+			Error:   err.Error(),
+		})
+		return
 	}
 
 	// Успех
@@ -180,8 +166,11 @@ func main() {
 			cfg.OneCompiler.APIKey,
 			cfg.OneCompiler.TimeoutSeconds,
 		)
+		val = validator.NewWithOneCompilerClient(ocClient)
 		logger.Info("OneCompiler client initialized",
 			slog.Int("timeout_seconds", cfg.OneCompiler.TimeoutSeconds))
+	} else {
+		val = validator.New()
 	}
 
 	// Регистрируем обработчики

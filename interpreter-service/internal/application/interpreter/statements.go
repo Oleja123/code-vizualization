@@ -4,14 +4,17 @@ import (
 	"fmt"
 
 	"github.com/Oleja123/code-vizualization/cst-to-ast-service/pkg/converter"
-	"github.com/Oleja123/code-vizualization/interpreter-service/domain/runtime"
-	runtimeerrors "github.com/Oleja123/code-vizualization/interpreter-service/domain/runtime/errors"
+	"github.com/Oleja123/code-vizualization/interpreter-service/internal/domain/events"
+	"github.com/Oleja123/code-vizualization/interpreter-service/internal/domain/runtime"
+	runtimeerrors "github.com/Oleja123/code-vizualization/interpreter-service/internal/domain/runtime/errors"
 )
 
 func (i *Interpreter) executeStatement(stmt converter.Stmt) (ExecResult, error) {
 	switch t := stmt.(type) {
 	case *VariableDecl:
 		return i.executeNonFunctionDecl(t)
+	case *converter.VariableDecl:
+		return i.executeNonFunctionDecl(&VariableDecl{VariableDecl: *t, IsGlobal: false})
 	case *converter.FunctionDecl:
 		return i.executeFunctionDecl(t)
 	case *converter.IfStmt:
@@ -39,13 +42,16 @@ func (i *Interpreter) executeStatement(stmt converter.Stmt) (ExecResult, error) 
 }
 
 func (i *Interpreter) executeNonFunctionDecl(v *VariableDecl) (ExecResult, error) {
+	i.addEvents(events.LineChanged{Line: int(v.Loc.Line)})
+	i.addStep()
+
 	switch len(v.VarType.ArraySizes) {
 	case 0:
 		return i.executeVariableDecl(*v)
 	case 1:
 		return i.executeArrayDecl(*v)
-	// case 2:
-	// 	return i.executeArray2DDecl(*v)
+	case 2:
+		return i.executeArray2DDecl(*v)
 	default:
 		return ExecResult{}, runtimeerrors.NewErrUnexpectedInternalError("unknown decaration type")
 	}
@@ -65,11 +71,13 @@ func (i *Interpreter) executeVariableDecl(v VariableDecl) (ExecResult, error) {
 		value = &v
 	}
 
-	variable := runtime.NewVariable(v.Name, value, 0, v.IsGlobal) // step=0 пока
+	variable := runtime.NewVariable(v.Name, value, i.currentStepNumber, v.IsGlobal)
 
 	frame := i.CallStack.GetCurrentFrame()
 	currentScope := frame.GetCurrentScope()
 	currentScope.Declare(variable)
+
+	i.addEvents(events.DeclareVar{Name: v.Name, Value: cloneValue(value), IsGlobal: v.IsGlobal})
 
 	return NormalResult(), nil
 }
@@ -83,47 +91,55 @@ func (i *Interpreter) executeArrayDecl(v VariableDecl) (ExecResult, error) {
 		}
 		v, ok := val.([]runtime.ArrayElement)
 		if !ok {
-			return ExecResult{}, runtimeerrors.NewErrUnexpectedInternalError("types mismatch")
+			return ExecResult{}, runtimeerrors.NewErrUnexpectedInternalError(fmt.Sprintf("types mismatch: expected []ArrayElement, got %T", val))
 		}
 		value = v
 	}
 
-	variable := runtime.NewArray(v.Name, v.VarType.ArraySizes[0], value, 0, v.IsGlobal) // step=0 пока
+	variable := runtime.NewArray(v.Name, v.VarType.ArraySizes[0], value, i.currentStepNumber, v.IsGlobal)
 
 	frame := i.CallStack.GetCurrentFrame()
 	currentScope := frame.GetCurrentScope()
 	currentScope.Declare(variable)
 
+	i.addEvents(events.DeclareArray{Name: v.Name, Value: cloneArrayElements(value), Size: v.VarType.ArraySizes[0], IsGlobal: v.IsGlobal})
+
 	return NormalResult(), nil
 }
 
-// func (i *Interpreter) executeArray2DDecl(v VariableDecl) (ExecResult, error) {
-// 	var value []runtime.A
-// 	if v.InitExpr != nil {
-// 		val, err := i.executeExpression(v.InitExpr)
-// 		if err != nil {
-// 			return NormalResult(), err
-// 		}
-// 		v, ok := val.([][]runtime.ArrayElement)
-// 		if !ok {
-// 			return ExecResult{}, runtimeerrors.NewErrUnexpectedInternalError("types mismatch")
-// 		}
-// 		value = v
-// 	}
+func (i *Interpreter) executeArray2DDecl(v VariableDecl) (ExecResult, error) {
+	var value []runtime.Array
+	if v.InitExpr != nil {
+		val, err := i.executeExpression(v.InitExpr)
+		if err != nil {
+			return NormalResult(), err
+		}
+		v, ok := val.([]runtime.Array)
+		if !ok {
+			return ExecResult{}, runtimeerrors.NewErrUnexpectedInternalError("types mismatch")
+		}
+		value = v
+	}
 
-// 	variable := runtime.NewArray2D(v.Name, v.VarType.ArraySizes[0], v.VarType.ArraySizes[1], value, 0, v.IsGlobal) // step=0 пока
+	variable := runtime.NewArray2D(v.Name, v.VarType.ArraySizes[0], v.VarType.ArraySizes[1], value, i.currentStepNumber, v.IsGlobal)
 
-// 	frame := i.CallStack.GetCurrentFrame()
-// 	currentScope := frame.GetCurrentScope()
-// 	currentScope.Declare(variable)
+	frame := i.CallStack.GetCurrentFrame()
+	currentScope := frame.GetCurrentScope()
+	currentScope.Declare(variable)
 
-// 	return NormalResult(), nil
-// }
+	i.addEvents(events.DeclareArray2D{Name: v.Name, Value: cloneArrayRows(value), Size1: v.VarType.ArraySizes[0], Size2: v.VarType.ArraySizes[1], IsGlobal: v.IsGlobal})
+
+	return NormalResult(), nil
+}
 
 func (i *Interpreter) executeBlockStmt(b *converter.BlockStmt) (ExecResult, error) {
 	frame := i.CallStack.GetCurrentFrame()
 	frame.EnterScope()
-	defer frame.ExitScope()
+	i.addEvents(events.EnterScope{})
+	defer func() {
+		frame.ExitScope()
+		i.addEvents(events.ExitScope{})
+	}()
 
 	for _, stmt := range b.Statements {
 		res, err := i.executeStatement(stmt)
@@ -139,6 +155,9 @@ func (i *Interpreter) executeBlockStmt(b *converter.BlockStmt) (ExecResult, erro
 }
 
 func (i *Interpreter) executeIfStmt(ifStmt *converter.IfStmt) (ExecResult, error) {
+	i.addEvents(events.LineChanged{Line: int(ifStmt.Loc.Line)})
+	i.addStep()
+
 	cond, err := i.executeExpression(ifStmt.Condition)
 	if err != nil {
 		return NormalResult(), err
@@ -159,6 +178,9 @@ func (i *Interpreter) executeIfStmt(ifStmt *converter.IfStmt) (ExecResult, error
 }
 
 func (i *Interpreter) executeReturnStmt(r *converter.ReturnStmt) (ExecResult, error) {
+	i.addEvents(events.LineChanged{Line: int(r.Loc.Line)})
+	i.addStep()
+
 	var val *int
 	if r.Value != nil {
 		v, err := i.executeExpression(r.Value)
@@ -171,10 +193,19 @@ func (i *Interpreter) executeReturnStmt(r *converter.ReturnStmt) (ExecResult, er
 		}
 		val = &t
 	}
-	return ExecResult{Signal: SignalReturn, Value: val}, nil
+
+	defer func() {
+		i.addEvents(events.LineChanged{Line: int(r.Loc.Line)})
+		i.addStep()
+	}()
+
+	return ReturnResult(val), nil
 }
 
 func (i *Interpreter) executeExprStmt(e *converter.ExprStmt) (ExecResult, error) {
+	i.addEvents(events.LineChanged{Line: int(e.Loc.Line)})
+	i.addStep()
+
 	if e.Expression == nil {
 		return NormalResult(), nil
 	}
@@ -189,6 +220,9 @@ func (i *Interpreter) executeExprStmt(e *converter.ExprStmt) (ExecResult, error)
 
 func (i *Interpreter) executeWhileStmt(loop *converter.WhileStmt) (ExecResult, error) {
 	for {
+		i.addEvents(events.LineChanged{Line: int(loop.Loc.Line)})
+		i.addStep()
+
 		condVal, err := i.executeExpression(loop.Condition)
 		if err != nil {
 			return NormalResult(), err
@@ -237,6 +271,9 @@ func (i *Interpreter) executeDoWhileStmt(loop *converter.DoWhileStmt) (ExecResul
 			return res, nil
 		}
 
+		i.addEvents(events.LineChanged{Line: int(loop.Condition.GetLocation().Line)})
+		i.addStep()
+
 		condVal, err := i.executeExpression(loop.Condition)
 		if err != nil {
 			return NormalResult(), err
@@ -256,10 +293,17 @@ func (i *Interpreter) executeDoWhileStmt(loop *converter.DoWhileStmt) (ExecResul
 }
 
 func (i *Interpreter) executeForStmt(loop *converter.ForStmt) (ExecResult, error) {
+	i.addEvents(events.LineChanged{Line: int(loop.Loc.Line)})
+	i.addStep()
+
 	frame := i.CallStack.GetCurrentFrame()
 
 	frame.EnterScope()
-	defer frame.ExitScope()
+	i.addEvents(events.EnterScope{})
+	defer func() {
+		frame.ExitScope()
+		i.addEvents(events.ExitScope{})
+	}()
 
 	if loop.Init != nil {
 		_, err := i.executeStatement(loop.Init)
@@ -310,11 +354,15 @@ func (i *Interpreter) executeForStmt(loop *converter.ForStmt) (ExecResult, error
 }
 
 func (i *Interpreter) executeBreakStmt(b *converter.BreakStmt) (ExecResult, error) {
-	return ExecResult{Signal: SignalBreak}, nil
+	i.addEvents(events.LineChanged{Line: int(b.Loc.Line)})
+	i.addStep()
+	return BreakResult(), nil
 }
 
 func (i *Interpreter) executeContinueStmt(c *converter.ContinueStmt) (ExecResult, error) {
-	return ExecResult{Signal: SignalContinue}, nil
+	i.addEvents(events.LineChanged{Line: int(c.Loc.Line)})
+	i.addStep()
+	return ContinueResult(), nil
 }
 
 func (i *Interpreter) executeFunctionDecl(f *converter.FunctionDecl) (ExecResult, error) {
@@ -324,4 +372,45 @@ func (i *Interpreter) executeFunctionDecl(f *converter.FunctionDecl) (ExecResult
 
 	i.Functions[f.Name] = f
 	return NormalResult(), nil
+}
+
+// cloneArrayElements создает deep-copy массива элементов для сохранения снимка значений
+func cloneArrayElements(src []runtime.ArrayElement) []runtime.ArrayElement {
+	if src == nil {
+		return nil
+	}
+	dst := make([]runtime.ArrayElement, len(src))
+	for i := range src {
+		dst[i].StepChanged = src[i].StepChanged
+		if src[i].Value != nil {
+			val := *src[i].Value
+			dst[i].Value = &val
+		}
+	}
+	return dst
+}
+
+// cloneArrayRows создает deep-copy 2D массива для сохранения снимка значений
+func cloneArrayRows(src []runtime.Array) []runtime.Array {
+	if src == nil {
+		return nil
+	}
+	dst := make([]runtime.Array, len(src))
+	for i := range src {
+		dst[i] = runtime.Array{
+			Name:   src[i].Name,
+			Size:   src[i].Size,
+			Values: cloneArrayElements(src[i].Values),
+		}
+	}
+	return dst
+}
+
+// cloneValue создает копию значения указателя для сохранения снимка
+func cloneValue(src *int) *int {
+	if src == nil {
+		return nil
+	}
+	val := *src
+	return &val
 }

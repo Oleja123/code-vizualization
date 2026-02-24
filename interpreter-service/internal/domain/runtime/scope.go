@@ -1,8 +1,8 @@
 package runtime
 
 type Scope struct {
-	Parent       *Scope
-	Declarations DeclarationStack
+	Parent       *Scope           `json:"-"`
+	Declarations DeclarationStack `json:"declarations"`
 }
 
 func NewScope(parent *Scope) *Scope {

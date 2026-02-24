@@ -1,5 +1,7 @@
 package events
 
+import "github.com/Oleja123/code-vizualization/interpreter-service/internal/domain/runtime"
+
 type Event interface{}
 
 type EnterScope struct{}
@@ -7,21 +9,24 @@ type EnterScope struct{}
 type ExitScope struct{}
 
 type DeclareVar struct {
-	Name  string
-	Value *int
+	Name     string
+	Value    *int
+	IsGlobal bool
 }
 
 type DeclareArray struct {
-	Name  string
-	Value []int
-	Size  int
+	Name     string
+	Value    []runtime.ArrayElement
+	Size     int
+	IsGlobal bool
 }
 
 type DeclareArray2D struct {
-	Name  string
-	Value [][]int
-	Size1 int
-	Size2 int
+	Name     string
+	Value    []runtime.Array
+	Size1    int
+	Size2    int
+	IsGlobal bool
 }
 
 type VarChanged struct {
@@ -54,4 +59,12 @@ type FunctionReturn struct {
 
 type LineChanged struct {
 	Line int
+}
+
+type UndefinedBehavior struct {
+	Message string
+}
+
+type RuntimeError struct {
+	Message string
 }

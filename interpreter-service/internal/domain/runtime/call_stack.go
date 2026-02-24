@@ -1,15 +1,13 @@
 package runtime
 
-import (
-	runtimeerrors "github.com/Oleja123/code-vizualization/interpreter-service/domain/runtime/errors"
-)
+import runtimeerrors "github.com/Oleja123/code-vizualization/interpreter-service/internal/domain/runtime/errors"
 
 type CallStack struct {
-	Frames []*StackFrame
+	Frames []*StackFrame `json:"frames"`
 }
 
 func NewCallStack(globalScope *Scope) *CallStack {
-	mainFrame := NewStackFrame("main", globalScope)
+	mainFrame := NewStackFrame("global", globalScope)
 	return &CallStack{
 		Frames: []*StackFrame{mainFrame},
 	}

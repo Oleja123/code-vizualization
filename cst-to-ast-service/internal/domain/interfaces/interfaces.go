@@ -4,6 +4,14 @@ import (
 	sitter "github.com/smacker/go-tree-sitter"
 )
 
+// Location представляет позицию узла в исходном коде
+type Location struct {
+	Line      uint32 `json:"line"`
+	Column    uint32 `json:"column"`
+	EndLine   uint32 `json:"endLine"`
+	EndColumn uint32 `json:"endColumn"`
+}
+
 // Node является базовым интерфейсом для всех узлов AST
 type Node interface{}
 
@@ -11,12 +19,14 @@ type Node interface{}
 type Stmt interface {
 	Node
 	StmtNode() // маркерный метод для statements
+	GetLocation() Location
 }
 
 // Expr представляет выражение (expression) в C
 type Expr interface {
 	Node
 	ExprNode() // маркерный метод для expressions
+	GetLocation() Location
 }
 
 // Converter определяет интерфейс для конвертации tree-sitter CST в AST
