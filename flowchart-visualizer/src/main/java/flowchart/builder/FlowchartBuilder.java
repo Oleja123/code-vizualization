@@ -8,17 +8,69 @@ public class FlowchartBuilder {
 
     private Map<String, FunctionDecl> functions = new HashMap<>();
 
+    /**
+     * Строит граф для функции main.
+     */
     public FlowchartNode buildFromProgram(Program program) {
+        return buildFromProgram(program, "main");
+    }
+
+    /**
+     * Строит граф для функции с заданным именем.
+     * Если функция не найдена — бросает исключение с перечнем доступных функций.
+     */
+    public FlowchartNode buildFromProgram(Program program, String functionName) {
+        functions.clear();
         for (Statement stmt : program.getDeclarations()) {
             if (stmt instanceof FunctionDecl func) {
                 functions.put(func.getName(), func);
             }
         }
 
-        FunctionDecl main = functions.get("main");
-        if (main == null) throw new RuntimeException("main() not found");
+        FunctionDecl target = functions.get(functionName);
+        if (target == null) {
+            throw new RuntimeException(
+                    "Function '" + functionName + "' not found. " +
+                            "Available functions: " + String.join(", ", functions.keySet()));
+        }
 
-        return buildFunction(main);
+        return buildFunction(target);
+    }
+
+    /**
+     * Возвращает список всех функций из программы (для построения меню выбора).
+     */
+    public List<String> getFunctionNames(Program program) {
+        List<String> names = new ArrayList<>();
+        for (Statement stmt : program.getDeclarations()) {
+            if (stmt instanceof FunctionDecl func) {
+                names.add(func.getName());
+            }
+        }
+        return names;
+    }
+
+    /**
+     * Строит граф для КАЖДОЙ функции в программе.
+     * Возвращает карту: имя функции → корневой узел графа.
+     * Порядок сохранён (LinkedHashMap): сначала идут функции в порядке объявления.
+     */
+    public Map<String, FlowchartNode> buildAllFunctions(Program program) {
+        // Сначала регистрируем все функции (нужно для корректного expr)
+        functions.clear();
+        for (Statement stmt : program.getDeclarations()) {
+            if (stmt instanceof FunctionDecl func) {
+                functions.put(func.getName(), func);
+            }
+        }
+
+        Map<String, FlowchartNode> result = new java.util.LinkedHashMap<>();
+        for (Statement stmt : program.getDeclarations()) {
+            if (stmt instanceof FunctionDecl func) {
+                result.put(func.getName(), buildFunction(func));
+            }
+        }
+        return result;
     }
 
     private FlowchartNode buildFunction(FunctionDecl func) {
@@ -65,14 +117,12 @@ public class FlowchartBuilder {
         if (node instanceof LoopStartNode loop) {
             // Обходим тело цикла
             attachEnd(loop.getLoopBody(), end, visited);
-            // EXIT цикла — НЕ трогаем: exitNode должен быть следующим узлом после цикла,
-            // который будет подключён через linkNodes в buildBlock.
-            // Если exitNode уже установлен — обходим его продолжение.
             if (loop.getExitNode() != null) {
                 attachEnd(loop.getExitNode(), end, visited);
+            } else {
+                // Цикл — последний оператор функции: подключаем «конец» как exitNode
+                loop.setExitNode(end);
             }
-            // Если exitNode == null — его подключит linkNodes или он останется null
-            // (attachEnd не должен сам ставить end как exitNode!)
             return;
         }
 
@@ -90,7 +140,7 @@ public class FlowchartBuilder {
         if (node instanceof DecisionNode decision) {
             attachEnd(decision.getTrueBranch(), end, visited);
             attachEnd(decision.getFalseBranch(), end, visited);
-            // Sanitize NEXT: remove any entries that are branches or null (guard against builder bugs)
+            // Sanitize NEXT: remove any entries that are branches or null
             decision.getNext().removeIf(n ->
                     n == null ||
                             n == decision.getTrueBranch() ||
@@ -292,10 +342,6 @@ public class FlowchartBuilder {
             end.addNext(start);
         }
 
-        // exitNode будет установлен через linkNodes в buildBlock,
-        // когда после while идёт следующий оператор.
-        // Здесь намеренно НЕ устанавливаем exitNode.
-
         return start;
     }
 
@@ -378,20 +424,17 @@ public class FlowchartBuilder {
         node.setLoopBody(body);
 
         LoopEndNode end = new LoopEndNode();
-        end.setLoopStart(node); // reuse LoopEndNode pointing back to DoWhileNode
+        end.setLoopStart(node);
 
-        // Connect body leaves → LoopEndNode → back to condition (DoWhileNode renders this as back-arrow)
         if (body != null) {
             Set<FlowchartNode> visited = new HashSet<>();
             linkLeaves(body, end, visited);
         }
 
-        // LoopEndNode → back to DoWhileNode (the renderer uses this to know body is done)
         if (!end.getNext().contains(node)) {
             end.addNext(node);
         }
 
-        // exitNode will be set by linkNodes when the statement after do-while is connected
         return node;
     }
 }
