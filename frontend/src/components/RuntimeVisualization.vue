@@ -18,10 +18,27 @@
     <div v-else class="empty-state">
       Нет данных для визуализации
     </div>
+
+    <!-- Модальное окно ошибки -->
+    <div v-if="showErrorModal" class="error-modal-overlay" @click="closeErrorModal">
+      <div class="error-modal" @click.stop>
+        <div class="error-modal-header">
+          <h3>Ошибка выполнения</h3>
+          <button class="close-button" @click="closeErrorModal">×</button>
+        </div>
+        <div class="error-modal-body">
+          <p>{{ currentError }}</p>
+        </div>
+        <div class="error-modal-footer">
+          <button class="error-button" @click="closeErrorModal">Закрыть</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script>
+import { ref, watch } from 'vue'
 import StackFrame from './StackFrame.vue'
 
 export default {
@@ -37,6 +54,28 @@ export default {
     currentStep: {
       type: Number,
       default: 0
+    }
+  },
+  setup(props) {
+    const showErrorModal = ref(false)
+    const currentError = ref('')
+
+    // Отслеживание изменений в snapshot.error
+    watch(() => props.snapshot?.error, (newError) => {
+      if (newError && newError.trim() !== '') {
+        currentError.value = newError
+        showErrorModal.value = true
+      }
+    })
+
+    const closeErrorModal = () => {
+      showErrorModal.value = false
+    }
+
+    return {
+      showErrorModal,
+      currentError,
+      closeErrorModal
     }
   }
 }
@@ -89,5 +128,122 @@ export default {
   justify-content: center;
   color: #999;
   font-size: 1.1rem;
+}
+
+/* Модальное окно ошибки */
+.error-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.error-modal {
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+  max-width: 500px;
+  width: 90%;
+  animation: slideIn 0.3s ease;
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateY(-50px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.error-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1.5rem;
+  border-bottom: 1px solid #e0e0e0;
+  background-color: #e74c3c;
+  color: white;
+  border-radius: 8px 8px 0 0;
+}
+
+.error-modal-header h3 {
+  margin: 0;
+  font-size: 1.3rem;
+  font-weight: 600;
+}
+
+.close-button {
+  background: none;
+  border: none;
+  color: white;
+  font-size: 2rem;
+  cursor: pointer;
+  padding: 0;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: background-color 0.2s;
+}
+
+.close-button:hover {
+  background-color: rgba(255, 255, 255, 0.2);
+}
+
+.error-modal-body {
+  padding: 1.5rem;
+  font-size: 1rem;
+  line-height: 1.6;
+  color: #333;
+}
+
+.error-modal-body p {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.error-modal-footer {
+  padding: 1rem 1.5rem;
+  border-top: 1px solid #e0e0e0;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.error-button {
+  background-color: #e74c3c;
+  color: white;
+  border: none;
+  padding: 0.6rem 1.5rem;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 1rem;
+  font-weight: 500;
+  transition: background-color 0.2s;
+}
+
+.error-button:hover {
+  background-color: #c0392b;
 }
 </style>
