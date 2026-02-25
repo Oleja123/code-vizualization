@@ -17,53 +17,72 @@ const currentZoom = ref(1)
 const lineNumbers = ref('')
 
 // Примеры кода
+// Примеры кода
 const EXAMPLES = {
-  if: `int main() {
-    int x = 10;
-    if (x > 5) {
-        x = x - 1;
-    }
-    return 0;
+  dowhile: `void main() {
+    int year = 2014;
+    int population = 650;
+    do {
+        population = (population * 103) / 100;
+        year = year + 1;
+    } while (year <= 2040);
 }`,
-  ifelse: `int main() {
-    int x = 10;
-    if (x > 5) {
-        x = x - 1;
+
+  minmax: `void main() {
+    int a, b, min, max;
+
+    if (a < b) {
+        min = a;
+        max = b;
     } else {
-        x = x + 1;
+        min = b;
+        max = a;
     }
-    return 0;
 }`,
-  while: `int main() {
-    int i = 0;
-    int sum = 0;
-    while (i < 10) {
-        sum = sum + i;
-        i = i + 1;
+
+  whilecontinue: `void main() {
+    int a = 1999;
+    while (a < 2030) {
+        a = a + 1;
+        if (a % 4 == 0)
+            continue;
     }
-    return 0;
 }`,
-  for: `int main() {
-    int sum = 0;
-    int i;
-    for (i = 0; i < 5; i = i + 1) {
-        sum = sum + i;
-    }
-    return 0;
+
+  arrayfor: `int a1[5] = {1, 2, 3, 7, 8};
+
+void main() {
+    int i, s;
+
+    for (i = 0; i < 5; i++)
+        if (a1[i] % 2 == 1)
+            a1[i] = 1;
+
+    s = 1;
+    for (i = 1; i < 5; i++)
+        s += a1[i];
 }`,
-  nested: `int main() {
-    int x = 15;
-    int result = 0;
-    if (x > 10) {
-        int i = 0;
-        while (i < x) {
-            result = result + 1;
-            i = i + 1;
+
+  prime: `int isPrime(int num) {
+    int del = 2;
+    while (del < num) {
+        if (num % del == 0) {
+            return 0;
         }
-    } else {
-        result = x;
+        del++;
     }
-    return 0;
+    return 1;
+}
+
+void main() {
+    int num = 20;
+
+    while (1) {
+        if (isPrime(num)) {
+            break;
+        }
+        num++;
+    }
 }`
 }
 
@@ -160,11 +179,11 @@ function handleTab(e) {
             📚 Примеры
           </button>
           <div v-if="showExamples" class="examples-dropdown">
-            <div class="example-item" @click="loadExample('if')">If</div>
-            <div class="example-item" @click="loadExample('ifelse')">If-Else</div>
-            <div class="example-item" @click="loadExample('while')">While</div>
-            <div class="example-item" @click="loadExample('for')">For</div>
-            <div class="example-item" @click="loadExample('nested')">Nested</div>
+  <div class="example-item" @click="loadExample('dowhile')">Do-While population</div>
+<div class="example-item" @click="loadExample('minmax')">Min / Max</div>
+<div class="example-item" @click="loadExample('whilecontinue')">While + Continue</div>
+<div class="example-item" @click="loadExample('arrayfor')">Array + For</div>
+<div class="example-item" @click="loadExample('prime')">Prime finder</div>
           </div>
         </div>
       </div>
