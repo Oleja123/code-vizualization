@@ -136,10 +136,6 @@ func (i *Interpreter) executeBlockStmt(b *converter.BlockStmt) (ExecResult, erro
 	frame := i.CallStack.GetCurrentFrame()
 	frame.EnterScope()
 	i.addEvents(events.EnterScope{})
-	defer func() {
-		frame.ExitScope()
-		i.addEvents(events.ExitScope{})
-	}()
 
 	for _, stmt := range b.Statements {
 		res, err := i.executeStatement(stmt)
@@ -150,6 +146,9 @@ func (i *Interpreter) executeBlockStmt(b *converter.BlockStmt) (ExecResult, erro
 			return res, nil
 		}
 	}
+
+	frame.ExitScope()
+	i.addEvents(events.ExitScope{})
 
 	return NormalResult(), nil
 }
