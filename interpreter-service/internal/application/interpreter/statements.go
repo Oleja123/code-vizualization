@@ -194,10 +194,7 @@ func (i *Interpreter) executeReturnStmt(r *converter.ReturnStmt) (ExecResult, er
 		val = &t
 	}
 
-	defer func() {
-		i.addEvents(events.LineChanged{Line: int(r.Loc.Line)})
-		i.addStep()
-	}()
+	i.addEvents(events.FunctionReturn{Name: i.CallStack.GetCurrentFrame().FuncName, ReturnValue: val})
 
 	return ReturnResult(val), nil
 }

@@ -58,9 +58,6 @@ func (i *Interpreter) ExecuteProgram(program *converter.Program) (*int, []eventd
 		}
 	}
 
-	i.addEvents(events.LineChanged{Line: -1})
-	i.addStep()
-
 	switch v := value.(type) {
 	case nil:
 		return nil, i.Steps, stepBegin, nil
