@@ -67,7 +67,7 @@
           ← Шаг назад
         </button>
         <div class="step-info">
-          Шаг {{ currentStep }} из {{ stepsCount }}
+          Шаг {{ displayCurrentStep }} из {{ displayStepsCount }}
         </div>
         <button
           class="control-button"
@@ -147,6 +147,18 @@ export default {
       return props.code.split('\n').length
     })
 
+    const displayCurrentStep = computed(() => {
+      if (props.stepsCount <= 0) {
+        return 0
+      }
+
+      return Math.min(props.currentStep + 1, props.stepsCount)
+    })
+
+    const displayStepsCount = computed(() => {
+      return Math.max(props.stepsCount, 0)
+    })
+
     const handleInput = (event) => {
       emit('update:code', event.target.value)
     }
@@ -213,6 +225,8 @@ export default {
       textarea,
       lineNumbers,
       lineCount,
+      displayCurrentStep,
+      displayStepsCount,
       handleInput,
       handleScroll,
       handleKeydown,
