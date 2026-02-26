@@ -1,7 +1,26 @@
 <template>
   <div class="code-editor">
     <div class="editor-header">
-      <h2>Код программы</h2>
+      <div class="editor-title-row">
+        <h2>Код программы</h2>
+        <label v-if="!isExecuted && examples.length" class="examples-select-label">
+          Пример:
+          <select
+            class="examples-select"
+            :value="selectedExample"
+            @change="handleExampleChange"
+          >
+            <option value="">Выберите пример</option>
+            <option
+              v-for="example in examples"
+              :key="example.id"
+              :value="example.id"
+            >
+              {{ example.name }}
+            </option>
+          </select>
+        </label>
+      </div>
       <div v-if="error" class="error-message">
         {{ error }}
       </div>
@@ -109,9 +128,17 @@ export default {
     currentLine: {
       type: Number,
       default: null
+    },
+    examples: {
+      type: Array,
+      default: () => []
+    },
+    selectedExample: {
+      type: String,
+      default: ''
     }
   },
-  emits: ['update:code', 'execute', 'edit', 'step-forward', 'step-backward'],
+  emits: ['update:code', 'update:selectedExample', 'execute', 'edit', 'step-forward', 'step-backward'],
   setup(props, { emit }) {
     const textarea = ref(null)
     const lineNumbers = ref(null)
@@ -168,6 +195,10 @@ export default {
       emit('edit')
     }
 
+    const handleExampleChange = (event) => {
+      emit('update:selectedExample', event.target.value)
+    }
+
     // Автоматическая прокрутка к текущей строке
     watch(() => props.currentLine, async (newLine) => {
       if (newLine && textarea.value) {
@@ -188,7 +219,8 @@ export default {
       handleExecute,
       handleStepForward,
       handleStepBackward,
-      handleEdit
+      handleEdit,
+      handleExampleChange
     }
   }
 }
@@ -213,7 +245,29 @@ export default {
 .editor-header h2 {
   font-size: 1.2rem;
   font-weight: 600;
-  margin-bottom: 0.5rem;
+}
+
+.editor-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.examples-select-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+  color: #555;
+}
+
+.examples-select {
+  padding: 0.35rem 0.5rem;
+  border: 1px solid #d0d7de;
+  border-radius: 4px;
+  background-color: #fff;
+  font-size: 0.9rem;
 }
 
 .error-message {

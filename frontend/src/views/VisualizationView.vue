@@ -3,6 +3,8 @@
     <div class="left-panel">
       <CodeEditor
         :code="code"
+        :examples="examples"
+        :selected-example="selectedExample"
         :current-step="currentStep"
         :steps-count="stepsCount"
         :loading="loading"
@@ -10,6 +12,7 @@
         :is-executed="isExecuted"
         :current-line="snapshot?.line"
         @update:code="code = $event"
+        @update:selected-example="selectedExample = $event"
         @execute="executeCode"
         @edit="editCode"
         @step-forward="stepForward"
@@ -38,7 +41,41 @@ export default {
     RuntimeVisualization
   },
   setup() {
-    const code = ref('int main() {\n  int x = 5;\n  int y = 10;\n  int sum = x + y;\n  return sum;\n}')
+    const examples = [
+      {
+        id: 'sum',
+        name: 'Сложение двух чисел',
+        code: 'int main() {\n  int x = 5;\n  int y = 10;\n  int sum = x + y;\n  return sum;\n}'
+      },
+      {
+        id: 'factorial',
+        name: 'Рекурсивный факториал',
+        code: 'int factorial(int n) {\n  if(n <= 1) {\n    return 1;\n  }\n  return factorial(n - 1) * n;\n}\n\nint main() {\n  int res = factorial(4);\n  return 0;\n}'
+      },
+      {
+        id: 'while-loop',
+        name: 'Сумма в цикле while',
+        code: 'int main() {\n  int i = 1;\n  int sum = 0;\n  while (i <= 5) {\n    sum += i;\n    i++;\n  }\n  return sum;\n}'
+      },
+      {
+        id: 'array-max',
+        name: 'Максимум в массиве',
+        code: 'int main() {\n  int arr[5] = {3, 7, 2, 9, 5};\n  int max = arr[0];\n  int i = 1;\n  while (i < 5) {\n    if (arr[i] > max) {\n      max = arr[i];\n    }\n    i++;\n  }\n  return max;\n}'
+      },
+      {
+        id: 'global-for',
+        name: 'for + глобальные переменные и массив',
+        code: 'int gBase = 2;\nint gSum = 0;\nint gArr[5] = {1, 3, 5, 7, 9};\n\nint main() {\n  for (int i = 0; i < 5; i++) {\n    gSum += gArr[i] * gBase;\n  }\n  return gSum;\n}'
+      },
+      {
+        id: 'nested-loops',
+        name: 'Вложенные циклы',
+        code: 'int main() {\n  int i = 1;\n  int total = 0;\n  while (i <= 3) {\n    int j = 1;\n    while (j <= 2) {\n      total += i * j;\n      j++;\n    }\n    i++;\n  }\n  return total;\n}'
+      }
+    ]
+
+    const selectedExample = ref('sum')
+    const code = ref(examples[0].code)
     const currentStep = ref(0)
     const stepsCount = ref(0)
     const snapshot = ref(null)
@@ -99,6 +136,21 @@ export default {
       }
     }
 
+    const applySelectedExample = (exampleId) => {
+      const selected = examples.find((example) => example.id === exampleId)
+      if (!selected) {
+        return
+      }
+
+      code.value = selected.code
+      editCode()
+    }
+
+    const setSelectedExample = (exampleId) => {
+      selectedExample.value = exampleId
+      applySelectedExample(exampleId)
+    }
+
     const stepBackward = async () => {
       console.log('stepBackward called', { currentStep: currentStep.value, stepsCount: stepsCount.value })
       if (currentStep.value > 0) {
@@ -110,6 +162,8 @@ export default {
 
     return {
       code,
+      examples,
+      selectedExample,
       currentStep,
       stepsCount,
       snapshot,
@@ -118,8 +172,14 @@ export default {
       isExecuted,
       executeCode,
       editCode,
+      setSelectedExample,
       stepForward,
       stepBackward
+    }
+  },
+  watch: {
+    selectedExample(newValue) {
+      this.setSelectedExample(newValue)
     }
   }
 }
