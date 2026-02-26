@@ -296,10 +296,6 @@ func (i *Interpreter) executeForStmt(loop *converter.ForStmt) (ExecResult, error
 
 	frame.EnterScope()
 	i.addEvents(events.EnterScope{})
-	defer func() {
-		frame.ExitScope()
-		i.addEvents(events.ExitScope{})
-	}()
 
 	if loop.Init != nil {
 		_, err := i.executeStatement(loop.Init)
@@ -345,6 +341,9 @@ func (i *Interpreter) executeForStmt(loop *converter.ForStmt) (ExecResult, error
 			}
 		}
 	}
+
+	frame.ExitScope()
+	i.addEvents(events.ExitScope{})
 
 	return NormalResult(), nil
 }

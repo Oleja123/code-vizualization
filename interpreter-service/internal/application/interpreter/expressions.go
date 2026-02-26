@@ -496,11 +496,7 @@ func (i *Interpreter) executeCallExpr(expr *converter.CallExpr) (interface{}, er
 
 	i.addEvents(events.FunctionCall{Name: expr.FunctionName})
 	i.addEvents(events.EnterScope{})
-	defer func() {
-		i.addEvents(events.LineChanged{Line: int(expr.Loc.Line)})
-		i.addStep()
-		i.CallStack.PopFrame()
-	}()
+
 	i.CallStack.PushFrame(runtime.NewStackFrame(expr.FunctionName, i.GlobalScope))
 	i.CallStack.GetCurrentFrame().EnterScope()
 
@@ -522,6 +518,10 @@ func (i *Interpreter) executeCallExpr(expr *converter.CallExpr) (interface{}, er
 	if err != nil {
 		return nil, err
 	}
+
+	i.addEvents(events.LineChanged{Line: int(expr.Loc.Line)})
+	i.addStep()
+	i.CallStack.PopFrame()
 
 	if res.Signal == SignalReturn {
 		if res.Value == nil {

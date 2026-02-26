@@ -81,6 +81,11 @@ export default {
         id: 'uninitialized-access',
         name: 'Доступ к неинициализированной переменной',
         code: 'int main() {\n  int x;\n  int y = x + 1;\n  return y;\n}'
+      },
+      {
+        id: 'runtime-division-by-zero',
+        name: 'Runtime error: деление на ноль',
+        code: 'int main() {\n  int a = 10;\n  int b = 0;\n  int c = a / b;\n  return c;\n}'
       }
     ]
 
