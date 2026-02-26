@@ -63,6 +63,11 @@ export default {
         code: 'int main() {\n  int arr[5] = {3, 7, 2, 9, 5};\n  int max = arr[0];\n  int i = 1;\n  while (i < 5) {\n    if (arr[i] > max) {\n      max = arr[i];\n    }\n    i++;\n  }\n  return max;\n}'
       },
       {
+        id: 'bubble-sort',
+        name: 'Сортировка массива пузырьком',
+        code: 'int main() {\n  int arr[5] = {5, 1, 4, 2, 8};\n  int i = 0;\n  while (i < 4) {\n    int j = 0;\n    while (j < 4 - i) {\n      if (arr[j] > arr[j + 1]) {\n        int temp = arr[j];\n        arr[j] = arr[j + 1];\n        arr[j + 1] = temp;\n      }\n      j++;\n    }\n    i++;\n  }\n  return arr[4];\n}'
+      },
+      {
         id: 'global-for',
         name: 'for + глобальные переменные и массив',
         code: 'int gBase = 2;\nint gSum = 0;\nint gArr[5] = {1, 3, 5, 7, 9};\n\nint main() {\n  for (int i = 0; i < 5; i++) {\n    gSum += gArr[i] * gBase;\n  }\n  return gSum;\n}'

@@ -143,6 +143,10 @@ func (i *Interpreter) executeBlockStmt(b *converter.BlockStmt) (ExecResult, erro
 			return res, err
 		}
 		if res.Signal != SignalNormal {
+			if res.Signal != SignalReturn {
+				frame.ExitScope()
+				i.addEvents(events.ExitScope{})
+			}
 			return res, nil
 		}
 	}
