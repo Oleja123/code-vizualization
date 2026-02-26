@@ -71,6 +71,11 @@ export default {
         id: 'nested-loops',
         name: 'Вложенные циклы',
         code: 'int main() {\n  int i = 1;\n  int total = 0;\n  while (i <= 3) {\n    int j = 1;\n    while (j <= 2) {\n      total += i * j;\n      j++;\n    }\n    i++;\n  }\n  return total;\n}'
+      },
+      {
+        id: 'dp-grid-paths',
+        name: 'ДП: число путей в матрице',
+        code: 'int rows = 4;\nint cols = 4;\nint dp[4][4];\n\nint main() {\n  for (int i = 0; i < rows; i++) {\n    for (int j = 0; j < cols; j++) {\n      if (i == 0 || j == 0) {\n        dp[i][j] = 1;\n      } else {\n        dp[i][j] = dp[i - 1][j] + dp[i][j - 1];\n      }\n    }\n  }\n\n  return dp[rows - 1][cols - 1];\n}'
       }
     ]
 
