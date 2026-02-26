@@ -9,7 +9,9 @@ import (
 )
 
 const factorialProgram = `int main() {
-  return 0;
+  int x;
+  int y = x + 1;
+  return y;
 }
 `
 

@@ -76,6 +76,11 @@ export default {
         id: 'dp-grid-paths',
         name: 'ДП: число путей в матрице',
         code: 'int rows = 4;\nint cols = 4;\nint dp[4][4];\n\nint main() {\n  for (int i = 0; i < rows; i++) {\n    for (int j = 0; j < cols; j++) {\n      if (i == 0 || j == 0) {\n        dp[i][j] = 1;\n      } else {\n        dp[i][j] = dp[i - 1][j] + dp[i][j - 1];\n      }\n    }\n  }\n\n  return dp[rows - 1][cols - 1];\n}'
+      },
+      {
+        id: 'uninitialized-access',
+        name: 'Доступ к неинициализированной переменной',
+        code: 'int main() {\n  int x;\n  int y = x + 1;\n  return y;\n}'
       }
     ]
 
