@@ -6,3 +6,7 @@ onecompiler:
   api_key: "oc_44ej3ggmj_44ej3ggn4_9c8ec343d7c6bc4f3582e9e568f1a257af5da6af1c3a74f9"
   enabled: true
   timeout_seconds: 10
+
+limitations:
+  max_allocated_elements: 100
+  max_steps: 1000

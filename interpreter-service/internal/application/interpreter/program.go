@@ -15,6 +15,8 @@ func (i *Interpreter) ExecuteProgram(program *converter.Program) (*int, []eventd
 		return nil, nil, 0, runtimeerrors.NewErrUnexpectedInternalError("program is nil")
 	}
 
+	i.resetExecutionState()
+
 	for _, decl := range program.Declarations {
 		switch d := decl.(type) {
 		case *converter.FunctionDecl:
@@ -47,11 +49,15 @@ func (i *Interpreter) ExecuteProgram(program *converter.Program) (*int, []eventd
 
 		if errors.As(err, &unfErr) {
 			i.addEvents(events.UndefinedBehavior{Message: err.Error()})
-			i.addStep()
+			if stepErr := i.addStep(); stepErr != nil {
+				return nil, nil, 0, stepErr
+			}
 			return nil, i.Steps, stepBegin, err
 		} else if errors.As(err, &runErr) {
 			i.addEvents(events.RuntimeError{Message: err.Error()})
-			i.addStep()
+			if stepErr := i.addStep(); stepErr != nil {
+				return nil, nil, 0, stepErr
+			}
 			return nil, i.Steps, stepBegin, err
 		} else {
 			return nil, nil, 0, err

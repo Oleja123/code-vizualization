@@ -7,16 +7,20 @@ import (
 	"net/http"
 
 	"github.com/Oleja123/code-vizualization/interpreter-service/internal/handler"
+	configinfra "github.com/Oleja123/code-vizualization/interpreter-service/internal/infrastructure/config"
 )
 
 func main() {
-	port := flag.Int("port", 8080, "Port to listen on")
-	oneCompilerConfigPath := flag.String("onecompiler-config", "config.yaml", "Path to OneCompiler YAML config (optional)")
+	configPath := flag.String("config", "config.yaml", "Path to YAML config")
 	flag.Parse()
 
-	http.Handle("/snapshot", handler.NewSnapshotHandler(*oneCompilerConfigPath))
+	cfg := configinfra.LoadOrDefault(*configPath)
 
-	address := fmt.Sprintf(":%d", *port)
+	listenPort := cfg.Port
+
+	http.Handle("/snapshot", handler.NewSnapshotHandler(*configPath))
+
+	address := fmt.Sprintf(":%d", listenPort)
 	log.Printf("interpreter-service listening on %s", address)
 
 	if err := http.ListenAndServe(address, nil); err != nil {
