@@ -136,10 +136,6 @@ func (i *Interpreter) executeBlockStmt(b *converter.BlockStmt) (ExecResult, erro
 	frame := i.CallStack.GetCurrentFrame()
 	frame.EnterScope()
 	i.addEvents(events.EnterScope{})
-	defer func() {
-		frame.ExitScope()
-		i.addEvents(events.ExitScope{})
-	}()
 
 	for _, stmt := range b.Statements {
 		res, err := i.executeStatement(stmt)
@@ -147,9 +143,16 @@ func (i *Interpreter) executeBlockStmt(b *converter.BlockStmt) (ExecResult, erro
 			return res, err
 		}
 		if res.Signal != SignalNormal {
+			if res.Signal != SignalReturn {
+				frame.ExitScope()
+				i.addEvents(events.ExitScope{})
+			}
 			return res, nil
 		}
 	}
+
+	frame.ExitScope()
+	i.addEvents(events.ExitScope{})
 
 	return NormalResult(), nil
 }
@@ -194,10 +197,7 @@ func (i *Interpreter) executeReturnStmt(r *converter.ReturnStmt) (ExecResult, er
 		val = &t
 	}
 
-	defer func() {
-		i.addEvents(events.LineChanged{Line: int(r.Loc.Line)})
-		i.addStep()
-	}()
+	i.addEvents(events.FunctionReturn{Name: i.CallStack.GetCurrentFrame().FuncName, ReturnValue: val})
 
 	return ReturnResult(val), nil
 }
@@ -300,10 +300,6 @@ func (i *Interpreter) executeForStmt(loop *converter.ForStmt) (ExecResult, error
 
 	frame.EnterScope()
 	i.addEvents(events.EnterScope{})
-	defer func() {
-		frame.ExitScope()
-		i.addEvents(events.ExitScope{})
-	}()
 
 	if loop.Init != nil {
 		_, err := i.executeStatement(loop.Init)
@@ -349,6 +345,9 @@ func (i *Interpreter) executeForStmt(loop *converter.ForStmt) (ExecResult, error
 			}
 		}
 	}
+
+	frame.ExitScope()
+	i.addEvents(events.ExitScope{})
 
 	return NormalResult(), nil
 }

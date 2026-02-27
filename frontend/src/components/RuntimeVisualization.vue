@@ -6,6 +6,9 @@
         Строка: {{ snapshot.line }}
       </div>
     </div>
+    <div v-if="hasFunctionReturn" class="function-return">
+      возврат из функции {{ snapshot.function_name }}: {{ snapshot.return_value }}
+    </div>
     <div class="call-stack" v-if="snapshot && snapshot.call_stack">
       <StackFrame
         v-for="(frame, index) in snapshot.call_stack.frames"
@@ -54,6 +57,11 @@ export default {
     currentStep: {
       type: Number,
       default: 0
+    }
+  },
+  computed: {
+    hasFunctionReturn() {
+      return this.snapshot && this.snapshot.return_value !== null && this.snapshot.return_value !== undefined
     }
   },
   setup(props) {
@@ -119,6 +127,15 @@ export default {
   display: flex;
   flex-direction: column;
   gap: 1rem;
+}
+
+.function-return {
+  margin: 1rem 1rem 0;
+  padding: 0.5rem 0.75rem;
+  border-radius: 4px;
+  background-color: #e8f5e9;
+  color: #2e7d32;
+  font-weight: 500;
 }
 
 .empty-state {
