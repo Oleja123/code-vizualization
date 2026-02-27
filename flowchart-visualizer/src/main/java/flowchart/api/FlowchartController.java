@@ -1,6 +1,9 @@
 package flowchart.api;
 
 import flowchart.FlowchartGenerator;
+import flowchart.builder.FlowchartBuilder;
+import flowchart.renderer.SVGRenderer;
+import flowchart.model.FlowchartNode;
 import flowchart.parser.SemanticAnalyzerClient;
 import flowchart.parser.ParseException;
 import flowchart.ast.Program;
@@ -19,6 +22,7 @@ import java.util.Map;
  * Endpoints:
  * POST /api/flowchart/generate - Генерация SVG из AST
  * POST /api/flowchart/generate-from-code - Генерация SVG из C кода (с парсингом через semantic-analyzer)
+ * POST /api/flowchart/generate-all-functions - Генерация SVG для каждой функции отдельно
  */
 @RestController
 @RequestMapping("/api/flowchart")
@@ -171,6 +175,82 @@ public class FlowchartController {
             Map<String, Object> metadata = new HashMap<>();
             metadata.put("success", true);
             metadata.put("svgLength", svg.length());
+            response.put("metadata", metadata);
+
+            return ResponseEntity.ok(response);
+
+        } catch (Exception e) {
+            System.err.println("[FlowchartController] Unexpected error: " + e.getClass().getName() + ": " + e.getMessage());
+            e.printStackTrace();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(createErrorResponse(e.getMessage()));
+        }
+    }
+
+    /**
+     * POST /api/flowchart/generate-all-functions
+     *
+     * Генерирует отдельный SVG для каждой функции в программе.
+     *
+     * Request Body:
+     * {
+     *   "code": "int foo() { ... } int main() { ... }"
+     * }
+     *
+     * Response:
+     * {
+     *   "functions": {
+     *     "main":    "<svg>...</svg>",
+     *     "isPrime": "<svg>...</svg>"
+     *   },
+     *   "metadata": { "success": true, "functionCount": 2 }
+     * }
+     */
+    @PostMapping(value = "/generate-all-functions",
+            consumes = MediaType.APPLICATION_JSON_VALUE,
+            produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<Map<String, Object>> generateAllFunctions(@RequestBody Map<String, String> request) {
+        try {
+            String code = request.get("code");
+            if (code == null || code.trim().isEmpty()) {
+                return ResponseEntity.badRequest()
+                        .body(createErrorResponse("Missing 'code' field in request"));
+            }
+
+            // Убираем директивы препроцессора
+            code = code.lines()
+                    .filter(line -> !line.trim().startsWith("#"))
+                    .collect(java.util.stream.Collectors.joining("\n"));
+
+            System.out.println("[FlowchartController] generate-all-functions: code length=" + code.length());
+
+            // 1. Парсим код
+            Program program;
+            try {
+                program = astClient.parse(code);
+            } catch (ParseException e) {
+                System.err.println("[FlowchartController] Parse error: " + e.getMessage());
+                return ResponseEntity.badRequest()
+                        .body(createErrorResponse(e.getMessage()));
+            }
+
+            // 2. Строим граф для каждой функции
+            FlowchartBuilder builder = new FlowchartBuilder();
+            Map<String, FlowchartNode> graphs = builder.buildAllFunctions(program);
+
+            // 3. Рендерим каждую функцию в отдельный SVG
+            SVGRenderer renderer = new SVGRenderer();
+            Map<String, String> svgs = renderer.renderAll(graphs);
+
+            System.out.println("[FlowchartController] Generated SVGs for functions: " + svgs.keySet());
+
+            // 4. Формируем ответ
+            Map<String, Object> response = new HashMap<>();
+            response.put("functions", svgs);
+
+            Map<String, Object> metadata = new HashMap<>();
+            metadata.put("success", true);
+            metadata.put("functionCount", svgs.size());
             response.put("metadata", metadata);
 
             return ResponseEntity.ok(response);
