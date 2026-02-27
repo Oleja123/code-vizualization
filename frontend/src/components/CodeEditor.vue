@@ -61,6 +61,13 @@
       <template v-else>
         <button
           class="control-button"
+          @click="handleStepFirst"
+          :disabled="loading || currentStep === 0"
+        >
+          ⏮ В начало
+        </button>
+        <button
+          class="control-button"
           @click="handleStepBackward"
           :disabled="loading || currentStep === 0"
         >
@@ -75,6 +82,13 @@
           :disabled="loading || currentStep >= stepsCount - 1"
         >
           Шаг вперед →
+        </button>
+        <button
+          class="control-button"
+          @click="handleStepLast"
+          :disabled="loading || currentStep >= stepsCount - 1"
+        >
+          В конец ⏭
         </button>
         <button
           class="control-button reset-button"
@@ -138,7 +152,7 @@ export default {
       default: ''
     }
   },
-  emits: ['update:code', 'update:selectedExample', 'execute', 'edit', 'step-forward', 'step-backward'],
+  emits: ['update:code', 'update:selectedExample', 'execute', 'edit', 'step-forward', 'step-backward', 'step-first', 'step-last'],
   setup(props, { emit }) {
     const textarea = ref(null)
     const lineNumbers = ref(null)
@@ -202,6 +216,16 @@ export default {
       emit('step-backward')
     }
 
+    const handleStepFirst = () => {
+      console.log('handleStepFirst called')
+      emit('step-first')
+    }
+
+    const handleStepLast = () => {
+      console.log('handleStepLast called')
+      emit('step-last')
+    }
+
     const handleEdit = () => {
       console.log('handleEdit called')
       emit('edit')
@@ -233,6 +257,8 @@ export default {
       handleExecute,
       handleStepForward,
       handleStepBackward,
+      handleStepFirst,
+      handleStepLast,
       handleEdit,
       handleExampleChange
     }

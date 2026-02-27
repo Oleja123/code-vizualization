@@ -17,6 +17,8 @@
         @edit="editCode"
         @step-forward="stepForward"
         @step-backward="stepBackward"
+        @step-first="stepFirst"
+        @step-last="stepLast"
       />
     </div>
     <div class="right-panel">
@@ -81,6 +83,11 @@ export default {
         id: 'dp-grid-paths',
         name: 'ДП: число путей в матрице',
         code: 'int rows = 4;\nint cols = 4;\nint dp[4][4];\n\nint main() {\n  for (int i = 0; i < rows; i++) {\n    for (int j = 0; j < cols; j++) {\n      if (i == 0 || j == 0) {\n        dp[i][j] = 1;\n      } else {\n        dp[i][j] = dp[i - 1][j] + dp[i][j - 1];\n      }\n    }\n  }\n\n  return dp[rows - 1][cols - 1];\n}'
+      },
+      {
+        id: 'merge-sort-global-void',
+        name: 'Слияние: сортировка глобального массива (void)',
+        code: 'int gArr[4] = {5, 2, 8, 1};\nint gTemp[4];\n\nvoid merge(int left, int mid, int right) {\n  int i = left;\n  int j = mid + 1;\n  int k = left;\n\n  while (i <= mid && j <= right) {\n    if (gArr[i] <= gArr[j]) {\n      gTemp[k] = gArr[i];\n      i++;\n    } else {\n      gTemp[k] = gArr[j];\n      j++;\n    }\n    k++;\n  }\n\n  while (i <= mid) {\n    gTemp[k] = gArr[i];\n    i++;\n    k++;\n  }\n\n  while (j <= right) {\n    gTemp[k] = gArr[j];\n    j++;\n    k++;\n  }\n\n  i = left;\n  while (i <= right) {\n    gArr[i] = gTemp[i];\n    i++;\n  }\n}\n\nvoid mergeSort(int left, int right) {\n  if (left >= right) {\n    return;\n  }\n\n  int mid = (left + right) / 2;\n  mergeSort(left, mid);\n  mergeSort(mid + 1, right);\n  merge(left, mid, right);\n}\n\nint main() {\n  mergeSort(0, 3);\n  return gArr[3];\n}'
       },
       {
         id: 'uninitialized-access',
@@ -180,6 +187,25 @@ export default {
       }
     }
 
+    const stepFirst = async () => {
+      console.log('stepFirst called', { currentStep: currentStep.value, stepsCount: stepsCount.value })
+      if (currentStep.value > 0) {
+        await loadSnapshot(0)
+      } else {
+        console.log('Cannot step to first: already at first step')
+      }
+    }
+
+    const stepLast = async () => {
+      console.log('stepLast called', { currentStep: currentStep.value, stepsCount: stepsCount.value })
+      const lastStep = stepsCount.value - 1
+      if (lastStep >= 0 && currentStep.value < lastStep) {
+        await loadSnapshot(lastStep)
+      } else {
+        console.log('Cannot step to last: already at last step or no steps')
+      }
+    }
+
     return {
       code,
       examples,
@@ -194,7 +220,9 @@ export default {
       editCode,
       setSelectedExample,
       stepForward,
-      stepBackward
+      stepBackward,
+      stepFirst,
+      stepLast
     }
   },
   watch: {
