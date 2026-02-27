@@ -1,69 +1,46 @@
-# Semantic Analyzer Service
+# semantic-analyzer-service
 
-HTTP-сервис для семантической валидации C кода с опциональной проверкой компиляции через OneCompiler API.
+HTTP-сервис для валидации C-кода:
 
-## Возможности
+1. парсинг в AST (`cst-to-ast-service`),
+2. семантическая проверка,
+3. опциональная compile-check проверка через OneCompiler.
 
-✅ **HTTP REST API**: Готовый к продакшену веб-сервис
-✅ **Валидация типов переменных и параметров**: Только `int`
-✅ **Проверка операторов присваивания**: `=`, `+=`, `-=`, `*=`, `%=`, `/=`
-✅ **Проверка унарных операторов**: `-`, `+`, `++`, `--`, `!` (префиксные и постфиксные)
-✅ **Проверка бинарных операторов**: `+`, `-`, `*`, `/`, `%`, `==`, `!=`, `<`, `<=`, `>`, `>=`, `&&`, `||`
-✅ **Валидация типов функций**: Возвращаемый тип только `void` или `int`
-✅ **Проверка параметров функций**: Только тип `int`
-✅ **Детальные ошибки**: С указанием строки, колонки и типа ошибки
-✅ **Проверка компиляции**: Опциональная интеграция с OneCompiler API
-✅ **Структурированное логирование**: JSON-формат с помощью slog
-✅ **Гибкая конфигурация**: YAML + переменные окружения + флаги командной строки
+## Что делает сервис
 
-## Структура проекта
+- Валидирует AST, полученный из C-кода.
+- Проверяет допустимые типы и операторы.
+- При включённом OneCompiler дополнительно проверяет компилируемость.
+- Возвращает AST при успешной валидации.
 
-```
-semantic-analyzer-service/
-├── cmd/
-│   └── server/
-│       └── main.go              # HTTP сервер
-├── internal/
-│   ├── domain/
-│   │   └── interfaces/
-│   │       └── validator.go     # Интерфейсы валидатора
-│   └── infrastructure/
-│       ├── config/
-│       │   └── config.go        # Управление конфигурацией
-│       └── onecompiler/
-│           └── client.go        # Клиент для OneCompiler API
-├── pkg/
-│   └── validator/
-│       ├── validator.go         # Реализация валидатора
-│       ├── validator_test.go    # Тесты
-│       └── errors.go            # Типы ошибок
-├── config.yaml                  # Конфигурация по умолчанию
-├── HTTP_API.md                  # Документация HTTP API
-├── go.mod
-└── README.md
-```
+## HTTP endpoints
 
-## Быстрый старт
+- `POST /validate` — валидация кода.
+- `GET /health` — health-check.
+- `GET /info` — информация о сервисе и поддерживаемых операторах.
 
-### HTTP Сервер
+Подробный контракт: [HTTP_API.md](HTTP_API.md).
+
+## Быстрый запуск
 
 ```bash
-# Запуск с конфигурацией по умолчанию
+cd semantic-analyzer-service
 go run ./cmd/server/main.go
+```
 
-# Сервер слушает на :8080
-# Проверить статус:
-curl http://localhost:8080/health
+Сервис слушает порт из конфига (`server.port`, обычно `8080`).
 
-# Отправить код на валидацию:
+Пример запроса:
+
+```bash
 curl -X POST http://localhost:8080/validate \
   -H "Content-Type: application/json" \
   -d '{"code":"int main() { return 0; }"}'
 ```
 
-### Конфигурация
+## Конфигурация
 
-Создайте `config.yaml`:
+Файл: `config.yaml`
 
 ```yaml
 server:
@@ -71,25 +48,25 @@ server:
 
 onecompiler:
   api_url: "https://api.onecompiler.com/api/v1"
-  api_key: ""  # или через ONECOMPILER_API_KEY
+  api_key: ""
   enabled: true
   timeout_seconds: 10
 ```
 
-Запуск с кастомной конфигурацией:
+### Источники конфигурации
 
-```bash
-# С указанием файла конфигурации
-./semantic-analyzer-service -config config.yaml
+- `-config` — путь к YAML (по умолчанию `config.yaml`).
+- `-port` — переопределяет `server.port`.
+- `ONECOMPILER_API_KEY` — переопределяет `onecompiler.api_key`.
 
-# С переопределением порта
-./semantic-analyzer-service -port 9000
+Если конфиг не загрузился, применяется fallback:
 
-# С API ключом OneCompiler через переменную окружения
-ONECOMPILER_API_KEY="your-key" ./semantic-analyzer-service
-```
+- `server.port = 8080`
+- `onecompiler.api_url = https://api.onecompiler.com/api/v1`
+- `onecompiler.enabled = true`
+- `onecompiler.timeout_seconds = 10`
 
-### Использование как библиотеки
+## Использование как библиотеки (`pkg/validator`)
 
 ```go
 import (
@@ -97,95 +74,73 @@ import (
     "github.com/Oleja123/code-vizualization/semantic-analyzer-service/pkg/validator"
 )
 
-// Парсим код в AST
-conv := converter.NewCConverter()
-tree, err := conv.Parse(sourceCode)
-program, err := conv.ConvertToProgram(tree, sourceCode)
+conv := converter.New()
+program, err := conv.ParseToAST("int main(){ return 0; }")
+if err != nil {
+    panic(err)
+}
 
-// Проверяем семантику
 val := validator.New()
 if err := val.ValidateProgram(program); err != nil {
-    log.Printf("Semantic error: %v", err)
+    panic(err)
 }
 ```
 
-## HTTP API
+С OneCompiler:
 
-Сервис предоставляет REST API для валидации C кода:
+```go
+import (
+    "github.com/Oleja123/code-vizualization/semantic-analyzer-service/pkg/onecompiler"
+    "github.com/Oleja123/code-vizualization/semantic-analyzer-service/pkg/validator"
+)
 
-### Endpoints
-
-- **POST /validate** - Валидирует C код
-- **GET /health** - Проверка статуса сервиса
-- **GET /info** - Информация о сервисе и поддерживаемых функциях
-
-Подробная документация: [`HTTP_API.md`](HTTP_API.md)
-
-### Примеры запросов
-
-```bash
-# Валидный код
-curl -X POST http://localhost:8080/validate \
-  -H "Content-Type: application/json" \
-  -d '{"code":"int add(int a, int b) { return a + b; }"}'
-
-# Код с ошибкой типа
-curl -X POST http://localhost:8080/validate \
-  -H "Content-Type: application/json" \
-  -d '{"code":"float x = 3.14;"}'
-
-# Проверка здоровья
-curl http://localhost:8080/health
-
-# Информация о сервисе
-curl http://localhost:8080/info
+client := onecompiler.NewClient("https://api.onecompiler.com/api/v1", "API_KEY", 10)
+val := validator.NewWithOneCompilerClient(client)
+err := val.ValidateProgram(program, sourceCode)
 ```
+
+## Поддерживаемые правила (текущее состояние)
+
+- Базовый тип: `int`.
+- Возвращаемые типы функций: `int` и `void`.
+- Максимальная размерность массива: `2`.
+- Указатели запрещены (`pointerLevel` должен быть `0`).
+- Массивы в параметрах и возвращаемом типе функций запрещены.
+
+Операторы:
+
+- Присваивание: `=`, `+=`, `-=`, `*=`, `%=` ,`/=`
+- Унарные: `-`, `+`, `++`, `--`, `!`
+- Бинарные: `+`, `-`, `*`, `/`, `%`, `==`, `!=`, `<`, `<=`, `>`, `>=`, `&&`, `||`
+
+## Коды ошибок валидатора
+
+`pkg/validator/errors.go`:
+
+- `INVALID_TYPE`
+- `UNSUPPORTED_ASSIGN_OP`
+- `UNSUPPORTED_UNARY_OP`
+- `UNSUPPORTED_BINARY_OP`
+- `INVALID_FUNCTION_CALL`
+- `SEMANTIC_ERROR`
+- `UNKNOWN_STMT`
+- `UNKNOWN_EXPR`
+
+Также используются ошибки compile-check:
+
+- `compilation error: ...`
+- `compilation check unavailable: ...`
 
 ## Тесты
 
 ```bash
 go test ./pkg/validator -v
-```
-
-## Ошибки
-
-Валидатор возвращает `SemanticError` со следующими кодами:
-
-- `INVALID_TYPE` - неправильный тип переменной/параметра/возврата
-- `UNSUPPORTED_ASSIGN_OP` - неподдерживаемый оператор присваивания
-- `UNSUPPORTED_UNARY_OP` - неподдерживаемый унарный оператор
-- `UNSUPPORTED_BINARY_OP` - неподдерживаемый бинарный оператор
-- `INVALID_FUNCTION_CALL` - ошибка вызова функции
-- `SEMANTIC_ERROR` - другая семантическая ошибка
-- `UNKNOWN_STMT` - неизвестный тип оператора
-- `UNKNOWN_EXPR` - неизвестный тип выражения
-
-## Возможности OneCompiler
-
-Когда `onecompiler.enabled: true`, сервис дополнительно проверяет код через компиляцию:
-
-1. Выполняется семантическая валидация
-2. Если семантика корректна, код отправляется на OneCompiler API
-3. Если компиляция не удаётся, возвращается ошибка компиляции
-
-Это позволяет обнаружить ошибки, которые не покрыты семантическим анализом.
-
-## Логирование
-
-Сервис использует структурированное логирование (slog) в формате JSON:
-
-```json
-{"time":"2026-02-13T12:00:00Z","level":"INFO","msg":"Starting Semantic Analyzer Server","address":":8080"}
-{"time":"2026-02-13T12:00:01Z","level":"INFO","msg":"OneCompiler client initialized","timeout_seconds":10}
+go test ./... -v
 ```
 
 ## Зависимости
 
-- Go 1.21+
-- `cst-to-ast-service` (как replace в go.mod)
+- Go `1.23+`
+- `cst-to-ast-service`
 - `github.com/smacker/go-tree-sitter`
-- `gopkg.in/yaml.v2` (для конфигурации)
-
-## Автор
-
-Code Visualization Project
+- `gopkg.in/yaml.v2`

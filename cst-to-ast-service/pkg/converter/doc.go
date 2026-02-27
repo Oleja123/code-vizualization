@@ -8,7 +8,7 @@
 //
 //	func main() {
 //	    conv := converter.New()
-//	    program, err := conv.Parse(`
+//	    program, err := conv.ParseToAST(`
 //	        int factorial(int n) {
 //	            if (n <= 1) return 1;
 //	            return n * factorial(n - 1);
@@ -16,14 +16,15 @@
 //	    `)
 //	    if err != nil {
 //	        // err имеет тип *ConverterError с полной информацией
-//	        println("Error at", err.Loc.Line, ":", err.Message)
-//	        println("Type:", string(err.Code))
+//	        loc := err.GetLocation()
+//	        println("Error at", loc.Line, ":", err.GetMessage())
+//	        println("Type:", string(err.GetCode()))
 //	        return
 //	    }
-//	
+//
 //	    // program имеет тип *Program
 //	    for _, decl := range program.Declarations {
-//	        if fn, ok := decl.(*FunctionDecl); ok {
+//	        if fn, ok := decl.(*converter.FunctionDecl); ok {
 //	            println("Function:", fn.Name)
 //	        }
 //	    }
@@ -31,10 +32,10 @@
 //
 // API:
 //
-//	conv := converter.New()                      // Создает новый конвертер
-//	program, err := conv.Parse(code)             // Парсит код в AST
-//	tree, err := conv.ParseCST(code)             // Парсит в CST (для отладки)
-//	program, err := conv.ConvertCST(tree, code)  // Конвертирует CST в AST
+//	conv := converter.New()                                  // Создает новый конвертер
+//	program, err := conv.ParseToAST(code)                    // Парсит код в AST
+//	tree, err := conv.Parse([]byte(code))                    // Парсит в CST (для отладки)
+//	node, err := conv.ConvertToProgram(tree, []byte(code))   // Конвертирует CST в AST
 //
 // Ошибки:
 //
@@ -48,9 +49,10 @@
 //
 //	if err != nil {
 //	    if convErr, ok := err.(*converter.ConverterError); ok {
-//	        fmt.Printf("Error at %d:%d\n", convErr.Loc.Line, convErr.Loc.Column)
-//	        fmt.Printf("Code: %s\n", convErr.Code)
-//	        fmt.Printf("Message: %s\n", convErr.Message)
+//	        loc := convErr.GetLocation()
+//	        fmt.Printf("Error at %d:%d\n", loc.Line, loc.Column)
+//	        fmt.Printf("Code: %s\n", convErr.GetCode())
+//	        fmt.Printf("Message: %s\n", convErr.GetMessage())
 //	    }
 //	}
 //
@@ -58,7 +60,7 @@
 //   - Типы: int, int*, int**, int[N]
 //   - Переменные с инициализацией
 //   - Функции с параметрами
-//   - Операторы: if/else if/else, while, for, return, break, continue
+//   - Операторы: if/else if/else, while, do-while, for, return, break, continue, goto, label
 //   - Выражения: арифметика, логика, битовые операции, вызовы функций
 //   - Присваивание: =, +=, -=, *=, /=, %=, &=, |=, ^=, <<=, >>=
 //

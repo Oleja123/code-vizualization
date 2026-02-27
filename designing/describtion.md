@@ -1,307 +1,75 @@
-# Code Vizualiztion
+# Code Visualization
 
-Приложение для обучения основам программирования с визуализацией выполнения кода. В качестве языка программирования для визуализации используется "подмножество" языка C. Его описание будет дано далее.
+Проект для обучения основам программирования через пошаговую визуализацию выполнения C-кода.
 
-## Описание подмножества языка C
-- Переменные, массивы (не более двух измерений)
-- Типы: `int` и  `void` (только для функций)
-- Объявление и инициализация переменных и массивов 
-- Присваивание (операторы: `=`, `+=`, `-=`, `*=`, `/=`, `%=`)
-- Бинарные операторы (`+`, `-`, `*`, `/`, `%`, `==`, `!=`, `<`, `>`, `<=`, `>=`, `&&`, `||`)
-- Поддержка скобок и индексации в массивах
-- Управляющие конструкции (`if`, `else`, `for`, `while`, `do while`, `continue`, `break`, `goto`)
-- Функции (с возвратом значения и без, тип возвращаемого значения только `int` или `void`, возврат значения через `return`, **передачи массивов нет**)
-- **Указателей нет**
-- **Препроцессора нет**
+## Цель проекта
 
-## Основные фишки
-- Подсветка изменяющихся элементов после шага (благодаря `StepChanged` у `Variable` и `ArrayElement`)
-- Поддержка видимых переменных
-- Визуализация scope'ов
-- Предупреждения об `undefined behavior` при работе с неинициализированными данными
+Пользователь пишет программу на C, запускает её и получает состояние выполнения по шагам: стек вызовов, области видимости, значения переменных и массивов, текущую строку и ошибки времени выполнения.
 
-## Общие принципы архитекутуры приложения
-- Приложение подключает `semantic-analyzer-service` как библиотеку и получает из него семантически верное ast дерево
-- Архитектурная база приложения - `event driven`. Текущее состояние выполнения (`call stack`, `stack frame`, `scope`, `переменные`) задается последовательностью событий, восстановив которые можно получить текущее состояние.
-- Интерпретатор генерирует события. После этого они последовательно применяются диспетчером событий.
+## Актуальная архитектура
 
-## Подробное описание архитектуры
+Система состоит из четырёх основных частей:
 
-### domain
+1. `cst-to-ast-service`  
+   Парсит C-код и строит AST.
+2. `semantic-analyzer-service`  
+   Проверяет семантику AST (типы, допустимые операции, базовые ограничения языка), опционально выполняет compile-check через OneCompiler.
+3. `interpreter-service`  
+   Интерпретирует программу, формирует последовательность шагов и возвращает snapshot состояния для выбранного шага.
+4. `frontend`  
+   Визуализирует состояние исполнения и даёт UI для навигации по шагам.
 
-#### events - события
+## Поток обработки запроса
 
-- Event - пустой интерфейс события
-- EnterScope - событие входа в scope
-- ExitScope - событие выхода из scope
-- DeclareVar - событие объявления переменной
-    
-    **Атрибуты**
-    - Name: `string`
-    - Value: `*int`
-- DeclareArray - событие объявления массива
-    
-    **Атрибуты**
-    - Name: `string`
-    - Value: `[]int`
-    - Size: `int`
-- DeclareArray2D - событие объявления массива
-    
-    **Атрибуты**
-    - Name: `string`
-    - Value: `[][]int`
-    - Size1: `int`
-    - Size2: `int`
-- VarChanged - событие изменения значения переменной
-    
-    **Атрибуты**
-    - Name: `string`
-    - Value: `int`
-- ArrayElementChanged - событие изменения значения элемента массива
-    
-    **Атрибуты**
-    - Name: `string`
-    - Ind: `int`
-    - Value: `int`
-- Array2DElementChanged - событие изменения значения элемента двухмерного массива
-    
-    **Атрибуты**
-    - Name: `string`
-    - Ind1: `int`
-    - Ind2: `int`
-    - Value: `int`
-- FunctionCall - событие вызова функции
-    
-    **Атрибуты**
-    - Name: `string`
-- FunctionReturn - событие возврата значения из функции
-    
-    **Атрибуты**
-    - Name: `string`
-    - Value: `int`
-- LineChanged - событие смены строки
-    
-    **Атрибуты**
-    - Line: `int`
+Базовый сценарий выглядит так:
 
-#### runtime - сущности времени исполнения (по сути то, что и отрисовывается)
+1. Пользователь отправляет код и номер шага через frontend.
+2. `interpreter-service` принимает `POST /snapshot`.
+3. Код парсится в AST (`cst-to-ast-service`).
+4. AST проходит семантическую проверку (`semantic-analyzer-service`).
+5. Интерпретатор выполняет программу и накапливает шаги исполнения.
+6. Диспетчер шагов применяет события до запрошенного шага.
+7. Клиент получает snapshot для отрисовки.
 
-- Declared - пустой интерфейс объявления (для массивов и переменных)
-- Variable - переменная
-    
-    **Атрибуты**
-    - Name: `string`
-    - Value: `*int`
-    - StepChanged: `int`
-    
-    **Методы**
-    - NewVariable(name: `string`, value: `*int`, step: `int`): `Variable`
-    - ChangeValue(value: `int`, step: `int`)
-    - GetValue(): `int`, `error`
-- ArrayElement - элемент массива
-    
-    **Атрибуты**
-    - Value: `*int`
-    - StepChanged: `int`
-    
-    **Методы**
-    - NewArrayElement(value: `*int`, step: `int`): `ArrayElement`
-    - ChangeValue(value: `int`, step: `int`)
-    - GetValue(): `int`, `error`
-- Array - массив
-    
-    **Атрибуты**
-    - Name: `string`
-    - Size: `int`
-    - Values: `[]ArrayElement`
-    
-    **Методы**
-    - NewArray(name: `string`, size: `int`, values: `[]ArrayElement`): `Array`
-    - ChangeElement(index: `int`, value: `int`, step: `int`): `error`
-    - GetElement(index: `int`): `*ArrayElement`, `error`
-- Array2D - двумерный массив
-    
-    **Атрибуты**
-    - Name: `string`
-    - Size1: `int`
-    - Size2: `int`
-    - Values: `[][]ArrayElement`
-    
-    **Методы**
-    - NewArray2D(name: `string`, size1: `int`, size2: `int`, values: `[][]ArrayElement`): `Array2D`
-    - ChangeElement(index1: `int`, index2: `int`, value: `int`, step: `int`): `error`
-    - GetElement(index1: `int`, index2: `int`): `*ArrayElement`, `error`
-- DeclarationStack - последовательность объявлений
-    
-    **Атрибуты**
-    - Declarations: `[]Declared`
-    
-    **Методы**
-    - NewDeclarationStack(): `DeclarationStack`
-    - Declare(decl: `Declared`)
-    - GetVariable(name: `string`): `*Variable`, `error`
-    - GetArray(name: `string`): `*Array`, `error`
-    - GetArray2D(name: `string`): `*Array2D`, `error`
-- Scope
-    
-    **Атрибуты**
-    - Parent: `*Scope`
-    - Declarations: `DeclarationStack`
-    
-    **Методы**
-    - NewScope(Parent: `*Scope`): `Scope`
-    - Declare(decl: `Declared`)
-    - GetVariable(name: `string`): `*Variable`, `error`
-    - GetArray(name: `string`): `*Array`, `error`
-    - GetArray2D(name: `string`): `*Array2D`, `error`
-- StackFrame
-    
-    **Атрибуты**
-    - FuncName: `string`
-    - Scopes: `[]Scope`
-    - ReturnValue: `*int*`
-    
-    **Методы**
-    - NewStackFrame(funcName: `string`): `StackFrame`
-    - EnterScope()
-    - ExitScope(): `error`
-    - GetCurrentScope(): `*Scope`
-    - GetVariable(name: `string`): `*Variable`, `error`
-    - GetArray(name: `string`): `*Array`, `error`
-    - GetArray2D(name: `string`): `*Array2D`, `error`
-- CallStack
-    
-    **Атрибуты**
-    - Frames: `[]StackFrame`
-    
-    **Методы**
-    - NewCallStack(): `CallStack`
-    - PushFrame()
-    - PopFrame(): `*int`, `error`
-    - GetCurrentFrame(): `*StackFrame`, `error`
-- Snapshot - "снимок" текущего состояния исполнения
-    
-    **Атрибуты**
-    - CallStack: `CallStack`
-    - Line: `int`
-    - Step: `int`
-    
-    **Методы**
-    - Apply(event: `event`): `error`
-    - Reset()
-    - applyEnterScope(): `error`
-    - applyExitScope(): `error`
-    - applyDeclareVariable(e: `Event`)`: `error`
-    - applyVariableChanged(e: `Event`): `error`
-    - applyDeclareArray(e: `Event`): `error`
-    - applyArrayElementChanged(e: `Event`): `error`
-    - applyDeclareArray2D(e: `Event`): `error`
-    - applyArray2DElementChanged(e: `Event`): `error`
-    - applyFunctionCall(e: `Event`): `error`
-    - applyFunctionReturn(e: `Event`): `error`
-    - applyLineChanged(e: `Event`): `error`
-#### event_dispatcher - диспетчер событий
-- Step - шаг выполнения
-    
-    **Атрибуты**
-    - Events: `[]Event`
-- EventDispatcher - диспетчер событий
-    
-    **Атрибуты**
-    - Snapshot: `Snapshot`
-    - Steps: `[]Step`
-    - currentStep: `Step`
-    
-    **Методы**
-    - BeginStep()
-    - Emit(event: `Event`) : `error`
-    - EndStep(): `Step`
-    - ApplyStep(step: `Step`): `error`
-    - Replay(): `error`
-    - PopStep()
-#### scope_collection - все области видимости программы
-- ScopeInfo - информация о Scope
+## Модель выполнения (высокоуровнево)
 
-    **Атрибуты**
-    - ParentId: `int`
-    - LoopCtx: `*LoopContext`
-    - BlockAST: `BlockStmt`
+- Интерпретатор формирует последовательность событий выполнения.
+- События сгруппированы по шагам.
+- Snapshot восстанавливается детерминированно из последовательности шагов.
+- Это позволяет двигаться по шагам вперёд/назад без повторного исполнения кода на каждый переход.
 
-- ScopeCollection - коллекция scope'ов
+## Ограничения исполняемого подмножества C
 
-    **Атрибуты**
-    - ScopeIds: map[`BlockStmt`]`int`
-    - nextId: `int`
-    - ScopeInfo: map[`int`]`ScopeInfo`
+Текущее поведение системы ориентировано на учебное подмножество языка:
 
-    **Методы**
-    - NewScopeCollection(): `ScopeCollection`
-    - EnsureScope(node: `Stmt`, parentId `int`): `int`
-    - GetScopeId(node: `BlockStmt`): `int`, `bool`
-    - GetScopeInfo(id: `int`): `ScopeInfo`
-#### loop - информация о цикле
-- LoopContext - информация о цикле
+- базовые типы и функции,
+- переменные и массивы (включая двумерные),
+- условные конструкции и циклы,
+- арифметические, логические и сравнительные выражения,
+- `return`, `break`, `continue`.
 
-    **Атрибуты**
-    - BreakTarget: `Stmt`
-    - ContinueTarget: `Stmt`
-#### label_collector - сборщик меток для goto
-- LabelInfo - информация о метке
+Неподдерживаемые или ограниченные конструкции отсекаются на этапе семантической проверки.
 
-    **Атрибуты**
-    - Node: `LabelStmt`
-    - ScopeChain: `int[]`
+## Ограничения исполнения (safety limits)
 
-- LabelCollector - сборщик меток для goto
+В `interpreter-service` используются защитные лимиты из конфигурации:
 
-    **Атрибуты**
-    - ScopeCollection: `ScopeCollection`
-    - Labels: `map[string]LabelInfo`
+- `max_allocated_elements` — максимальное число выделяемых элементов,
+- `max_steps` — максимальное число шагов интерпретации.
 
-    **Методы**
-    - NewLabelCollector(): `LabelCollector`
-    - Collect(node: `Node`, chain `[]int`)
+Это защищает сервис от бесконечных/слишком дорогих вычислений.
 
-### application
-#### interpreter - интерпретатор
-- Interpreter - интерпретатор
+## Интерфейс API (кратко)
 
-    **Атрибуты**
-    - ScopeCollection: `ScopeCollection`
-    - LabelCollector: `LabelCollector`
-    - CallStack: `CallStack`
-    - EventDispatcher: `EventDispatcher`
-    - GlobalScope: `Scope`
+- Основной endpoint визуализации: `POST /snapshot` (`interpreter-service`).
+- Вход: `code`, `step`.
+- Выход: `success/error`, `current_step`, `steps_count`, `result`, `snapshot`.
 
-    **Методы**
-    - NewInterpreter(): `Interpreter`
-    - PrecomputeLabels(prog: `Program`)
-    - ExecuteProgram(prog: `Program`)
-    - ExecuteStatement(stmt: `Stmt`) : `error`
-    - JumpToNode(stmt: `Stmt`) : `error`
-    - executeVariableDecl(v: `VariableDecl`) : `error`
-    - executeFunctionDecl(v: `FunctionDecl`) : `error`
-    - executeBlockStmt(b: `BlockStmt`) : `error`
-    - executeIfStmt(ifStmt: `IfStmt`) : `error`
-    - executeLoop(loopStmt: `LoopStmt`) : `error`
-    - executeBreak() : `error`
-    - executeContinue() : `error`
-    - executeGoto(g: `GotoStmt`) : `error`
-    - executeLabelStmt(l: `LabelStmt`) : `error`
-    - executeReturnStmt(r: `ReturnStmt`) : `*int`, `error`
-    - executeExprStmt(e: `ExprStmt`) : `*int`, `error`
-    - executeBinaryExprStmt(e: `BinaryExprStmt`) : `*int`, `error`
-    - executeUnaryExprStmt(e: `UnaryExprStmt`) : `*int`, `error`
-    - executeAssignmentExprStmt(e: `AssignmentExpr`) : `int`, `error`
-    - executeCallExpr(c: `CallExpr`) : `int`, `error`
-    - executeArrayAccessExpr(a: `ArrayAccessExpr`) : `int`, `error`
-    - recomputeLoops(stmt: `Stmt`) : `LoopContext[]`
+Подробные контракты вынесены в документацию сервисов (`HTTP_API.md` внутри соответствующих директорий).
 
-## Ключевые моменты логики работы интерпретатора
+## Принципы развития
 
-### Работа с goto, continue и break
-- Заранее собираются все метки (метка записывается как `имя_метки.имя_функции`), информация о метках будет лежать в `LabelCollector`
-- Во время этого прохода, каждому новому scope присваивается свой id
-- Также для каждого scope (если это тело цикла) считается свой LoopContext (то есть узлы ast куда нужно прыгать при break и continue)
-- Также для каждой метки хранится список id scope'ов, в которые она входит
-- При прыжке по метке, текущий stack_frame удаляет все лишние scope и добавляет новые при необходимости. Далее происходит обновление информации о текущих циклах (пробежавшись по scopes) и обновление текущей информации о циклах в StackFrame.
+- Явное разделение ответственности между сервисами.
+- Минимальная связанность через стабильные HTTP/пакетные контракты.
+- Предсказуемость исполнения через детерминированную модель шагов.
+- Приоритет корректности и прозрачных ошибок над расширением языка любой ценой.
