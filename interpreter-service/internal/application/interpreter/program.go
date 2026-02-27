@@ -15,7 +15,7 @@ func (i *Interpreter) ExecuteProgram(program *converter.Program) (*int, []eventd
 		return nil, nil, 0, runtimeerrors.NewErrUnexpectedInternalError("program is nil")
 	}
 
-	i.resetLimitManager()
+	i.resetExecutionState()
 
 	for _, decl := range program.Declarations {
 		switch d := decl.(type) {

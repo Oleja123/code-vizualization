@@ -42,17 +42,12 @@ func NewInterpreterWithLimits(maxAllocatedElements int, maxSteps int) *Interpret
 		maxSteps = defaultMaxSteps
 	}
 
-	globalScope := runtime.NewScope(nil)
 	interpreter := &Interpreter{
-		GlobalScope:  globalScope,
-		CallStack:    runtime.NewCallStack(globalScope),
-		Functions:    make(map[string]*converter.FunctionDecl),
-		currentLine:  -1,
 		maxAllocated: maxAllocatedElements,
 		maxSteps:     maxSteps,
 	}
 
-	interpreter.resetLimitManager()
+	interpreter.resetExecutionState()
 
 	return interpreter
 }
@@ -103,4 +98,15 @@ func (i *Interpreter) resetLimitManager() {
 		AllocatedElementsRemained: i.maxAllocated,
 		StepsRemained:             i.maxSteps,
 	}
+}
+
+func (i *Interpreter) resetExecutionState() {
+	i.GlobalScope = runtime.NewScope(nil)
+	i.CallStack = runtime.NewCallStack(i.GlobalScope)
+	i.Functions = make(map[string]*converter.FunctionDecl)
+	i.currentStepNumber = 0
+	i.currentLine = -1
+	i.CurrentStep = eventdispatcher.Step{}
+	i.Steps = nil
+	i.resetLimitManager()
 }

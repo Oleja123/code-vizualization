@@ -245,3 +245,31 @@ func TestInterpreter_InfiniteExecutionStopsByStepLimit(t *testing.T) {
 		})
 	}
 }
+
+func TestInterpreter_ReusedInstanceResetsStatePerExecuteProgram(t *testing.T) {
+	conv := converter.New()
+
+	program1, err1 := conv.ParseToAST("int main(){ return 1; }")
+	_ = err1
+	require.NotNil(t, program1)
+
+	program2, err2 := conv.ParseToAST("int main(){ int x = 2; return x; }")
+	_ = err2
+	require.NotNil(t, program2)
+
+	runner := NewInterpreterWithLimits(10, 20)
+
+	result1, steps1, stepBegin1, execErr1 := runner.ExecuteProgram(program1)
+	require.NoError(t, execErr1)
+	require.NotNil(t, result1)
+	assert.Equal(t, 1, *result1)
+	assert.Equal(t, 0, stepBegin1)
+	assert.NotEmpty(t, steps1)
+
+	result2, steps2, stepBegin2, execErr2 := runner.ExecuteProgram(program2)
+	require.NoError(t, execErr2)
+	require.NotNil(t, result2)
+	assert.Equal(t, 2, *result2)
+	assert.Equal(t, 0, stepBegin2)
+	assert.NotEmpty(t, steps2)
+}
