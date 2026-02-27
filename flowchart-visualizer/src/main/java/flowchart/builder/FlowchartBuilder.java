@@ -97,6 +97,8 @@ public class FlowchartBuilder {
     private void attachEnd(FlowchartNode node, TerminalNode end, Set<FlowchartNode> visited) {
         if (node == null || visited.contains(node)) return;
         if (node == end) return;
+        // LoopEndNode — граница тела цикла, не трогаем
+        if (node instanceof LoopEndNode) return;
         visited.add(node);
 
         // return-узел → привязываем конец
@@ -138,9 +140,10 @@ public class FlowchartBuilder {
         }
 
         if (node instanceof DecisionNode decision) {
+            // Рекурсивно обходим ветки
             attachEnd(decision.getTrueBranch(), end, visited);
             attachEnd(decision.getFalseBranch(), end, visited);
-            // Sanitize NEXT: remove any entries that are branches or null
+            // Sanitize NEXT: убираем дубликаты и null
             decision.getNext().removeIf(n ->
                     n == null ||
                             n == decision.getTrueBranch() ||
@@ -260,8 +263,16 @@ public class FlowchartBuilder {
         if (node instanceof DecisionNode decision) {
             if (next == decision.getTrueBranch()) return;
             if (next == decision.getFalseBranch()) return;
-            if (next != null && next != decision.getTrueBranch() && next != decision.getFalseBranch()
-                    && !decision.getNext().contains(next)) {
+            // Соединяем листья веток с next (чтобы a1[i]=1 → i++ в for-цикле)
+            if (decision.getTrueBranch() != null) {
+                linkLeaves(decision.getTrueBranch(), next, visited);
+            }
+            if (decision.getFalseBranch() != null) {
+                linkLeaves(decision.getFalseBranch(), next, visited);
+            }
+            // Добавляем next в getNext только если нет else-ветки
+            // (рендерер использует getNext для рисования стрелки после слияния)
+            if (next != null && !decision.getNext().contains(next)) {
                 decision.addNext(next);
             }
             return;
@@ -328,18 +339,17 @@ public class FlowchartBuilder {
         FlowchartNode body = buildStatement(stmt.getBody());
         start.setLoopBody(body);
 
-        LoopEndNode end = new LoopEndNode();
-        end.setLoopStart(start);
+        LoopEndNode loopEnd = new LoopEndNode();
+        loopEnd.setLoopStart(start);
 
-        // Хвосты тела → LoopEndNode
         if (body != null) {
             Set<FlowchartNode> visited = new HashSet<>();
-            linkLeaves(body, end, visited);
+            linkLeaves(body, loopEnd, visited);
         }
 
-        // LoopEndNode → обратно к началу (только один раз!)
-        if (!end.getNext().contains(start)) {
-            end.addNext(start);
+        // LoopEndNode → обратно к началу — только один раз
+        if (!loopEnd.getNext().contains(start)) {
+            loopEnd.addNext(start);
         }
 
         return start;
@@ -356,21 +366,25 @@ public class FlowchartBuilder {
 
         FlowchartNode post = stmt.getPost() != null ? buildStatement(stmt.getPost()) : null;
 
-        LoopEndNode end = new LoopEndNode();
-        end.setLoopStart(start);
+        LoopEndNode loopEnd = new LoopEndNode();
+        loopEnd.setLoopStart(start);
 
         if (body != null) {
             Set<FlowchartNode> visited = new HashSet<>();
             if (post != null) {
                 linkLeaves(body, post, visited);
-                post.addNext(end);
+                if (!post.getNext().contains(loopEnd)) {
+                    post.addNext(loopEnd);
+                }
             } else {
-                linkLeaves(body, end, visited);
+                linkLeaves(body, loopEnd, visited);
             }
         }
 
-        // Только один переход назад
-        end.addNext(start);
+        // Только один переход назад — с защитой от дублирования
+        if (!loopEnd.getNext().contains(start)) {
+            loopEnd.addNext(start);
+        }
 
         if (init != null) {
             init.addNext(start);

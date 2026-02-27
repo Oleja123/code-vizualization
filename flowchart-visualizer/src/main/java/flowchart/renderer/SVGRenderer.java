@@ -107,18 +107,159 @@ public class SVGRenderer {
      * Каждая функция рендерится независимо.
      */
     public Map<String, String> renderAll(Map<String, FlowchartNode> functions) {
-        // Сохраняем порядок: сначала main, потом остальные по алфавиту
         Map<String, String> result = new java.util.LinkedHashMap<>();
-        List<String> names = new ArrayList<>(functions.keySet());
-        names.sort((a, b) -> {
-            if (a.equals("main")) return -1;
-            if (b.equals("main")) return 1;
-            return a.compareTo(b);
-        });
+        List<String> names = sortedFunctionNames(functions.keySet());
         for (String name : names) {
             result.put(name, render(functions.get(name)));
         }
         return result;
+    }
+
+    /**
+     * Рендерит все функции в одном SVG, расположенных горизонтально.
+     * Между схемами — вертикальный разделитель, над каждой — подпись с именем функции.
+     */
+    public String renderAllInOne(Map<String, FlowchartNode> functions) {
+        List<String> names = sortedFunctionNames(functions.keySet());
+        if (names.isEmpty()) return "<svg xmlns=\"http://www.w3.org/2000/svg\"/>";
+        if (names.size() == 1) return render(functions.get(names.get(0)));
+
+        // Рендерим каждую функцию и собираем данные
+        double GAP_BETWEEN   = 80;   // горизонтальный зазор между схемами
+        double LABEL_HEIGHT  = 30;   // высота подписи имени функции над схемой
+        double padding       = 60;
+
+        // [0]=name, [1]=inner, [2]=vbX, [3]=vbY, [4]=vbW, [5]=vbH
+        List<Object[]> parts = new ArrayList<>();
+
+        for (String name : names) {
+            String svgStr = render(functions.get(name));
+            double[] vb = parseViewBox(svgStr);
+            String inner = extractInnerContent(svgStr);
+            parts.add(new Object[]{name, inner, vb[0], vb[1], vb[2], vb[3]});
+        }
+
+        // Вычисляем суммарные размеры
+        double totalW = 0;
+        double maxH   = 0;
+        for (Object[] p : parts) {
+            double vbW = (double) p[4];
+            double vbH = (double) p[5];
+            totalW += vbW;
+            if (vbH + LABEL_HEIGHT > maxH) maxH = vbH + LABEL_HEIGHT;
+        }
+        totalW += GAP_BETWEEN * (parts.size() - 1);
+
+        double svgW = totalW;
+        double svgH = maxH + padding;
+
+        StringBuilder out = new StringBuilder();
+        out.append("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
+        out.append(String.format(Locale.US,
+                "<svg xmlns=\"http://www.w3.org/2000/svg\" " +
+                        "width=\"100%%\" height=\"100%%\" " +
+                        "viewBox=\"0 0 %.1f %.1f\" " +
+                        "preserveAspectRatio=\"xMidYMin meet\">\n",
+                svgW, svgH));
+
+        // Общие defs (arrowhead + styles) — один раз
+        out.append("<defs>\n");
+        out.append("<marker id=\"arrow\" markerWidth=\"10\" markerHeight=\"10\" refX=\"9\" refY=\"5\" orient=\"auto\">\n");
+        out.append("<path d=\"M0,0 L10,5 L0,10 z\" fill=\"black\"/>\n");
+        out.append("</marker>\n");
+        out.append("<style>\n");
+        out.append(".shape  { fill: white; stroke: black; stroke-width: 2; }\n");
+        out.append(".line   { stroke: black; stroke-width: 2; fill: none; }\n");
+        out.append(".arrow  { stroke: black; stroke-width: 2; fill: none; marker-end: url(#arrow); }\n");
+        out.append(".text   { font-family: Arial; font-size: 13px; text-anchor: middle; dominant-baseline: middle; }\n");
+        out.append(".label  { font-family: Arial; font-size: 11px; fill: #333; }\n");
+        out.append(".func-label { font-family: Arial; font-size: 15px; font-weight: bold; fill: #444; text-anchor: middle; }\n");
+        out.append("</style>\n");
+        out.append("</defs>\n");
+
+        // Размещаем каждую схему
+        double curX = 0;
+        for (int i = 0; i < parts.size(); i++) {
+            Object[] p    = parts.get(i);
+            String pName  = (String) p[0];
+            String pInner = (String) p[1];
+            double pVbX   = (double) p[2];
+            double pVbY   = (double) p[3];
+            double pVbW   = (double) p[4];
+            double pVbH   = (double) p[5];
+
+            // Подпись функции над схемой
+            double labelX = curX + pVbW / 2;
+            double labelY = LABEL_HEIGHT / 2 + 5;
+            out.append(String.format(Locale.US,
+                    "<text class=\"func-label\" x=\"%.1f\" y=\"%.1f\">%s</text>\n",
+                    labelX, labelY, escapeXml(pName)));
+
+            // Группа со сдвигом: переносим vbX→curX, vbY→LABEL_HEIGHT
+            double tx = curX - pVbX;
+            double ty = LABEL_HEIGHT - pVbY;
+            out.append(String.format(Locale.US,
+                    "<g transform=\"translate(%.3f, %.3f)\">\n", tx, ty));
+            out.append(pInner);
+            out.append("</g>\n");
+
+            // Вертикальный разделитель между схемами
+            if (i < parts.size() - 1) {
+                double sepX = curX + pVbW + GAP_BETWEEN / 2;
+                out.append(String.format(Locale.US,
+                        "<line x1=\"%.1f\" y1=\"%.1f\" x2=\"%.1f\" y2=\"%.1f\" " +
+                                "style=\"stroke:#ccc;stroke-width:1;stroke-dasharray:6,4\"/>\n",
+                        sepX, 0.0, sepX, svgH));
+            }
+
+            curX += pVbW + GAP_BETWEEN;
+        }
+
+        out.append("</svg>");
+        return out.toString();
+    }
+
+    /** Парсит viewBox из SVG-строки, возвращает [x, y, w, h]. */
+    private double[] parseViewBox(String svg) {
+        int idx = svg.indexOf("viewBox=\"");
+        if (idx < 0) return new double[]{0, 0, 800, 600};
+        int start = idx + 9;
+        int end   = svg.indexOf('"', start);
+        String[] parts = svg.substring(start, end).trim().split("\\s+");
+        return new double[]{
+                Double.parseDouble(parts[0]),
+                Double.parseDouble(parts[1]),
+                Double.parseDouble(parts[2]),
+                Double.parseDouble(parts[3])
+        };
+    }
+
+    /**
+     * Извлекает SVG-контент без оберточного тега и без блока <defs>…</defs>.
+     * Т.е. всё что между </defs> и </svg>.
+     */
+    private String extractInnerContent(String svgStr) {
+        int defsEnd = svgStr.indexOf("</defs>");
+        if (defsEnd < 0) {
+            // Нет defs — берём всё между <svg...> и </svg>
+            int svgOpen = svgStr.indexOf('>') + 1;
+            int svgClose = svgStr.lastIndexOf("</svg>");
+            return svgStr.substring(svgOpen, svgClose);
+        }
+        int contentStart = defsEnd + "</defs>".length();
+        int svgClose = svgStr.lastIndexOf("</svg>");
+        return svgStr.substring(contentStart, svgClose);
+    }
+
+    /** Сортирует имена функций: main первый, остальные по алфавиту. */
+    private List<String> sortedFunctionNames(java.util.Collection<String> names) {
+        List<String> sorted = new ArrayList<>(names);
+        sorted.sort((a, b) -> {
+            if (a.equals("main")) return -1;
+            if (b.equals("main")) return 1;
+            return a.compareTo(b);
+        });
+        return sorted;
     }
 
     private void trackX(double x) {
@@ -170,25 +311,39 @@ public class SVGRenderer {
         svg.append(String.format(Locale.US,
                 "<ellipse class=\"shape\" cx=\"%.1f\" cy=\"%.1f\" rx=\"%.1f\" ry=\"%.1f\"/>\n",
                 x, y + h / 2, w / 2, h / 2));
-        text(node.getLabel(), x, y + h / 2);
+        textWrapped(node.getLabel(), x, y + h / 2, w * 0.85, 16);
         trackX(x - w / 2);
         trackX(x + w / 2);
     }
 
     private void renderProcess(FlowchartNode node, double x, double y) {
-        node.setSize(PROCESS_WIDTH, PROCESS_HEIGHT);
+        double maxW = PROCESS_WIDTH - 16; // отступы по 8px
+        List<String> lines = wrapText(node.getLabel(), maxW, 13);
+        double lineH   = 18;
+        double minH    = PROCESS_HEIGHT;
+        double actualH = Math.max(minH, lines.size() * lineH + 20);
+
+        node.setSize(PROCESS_WIDTH, actualH);
         svg.append(String.format(Locale.US,
                 "<rect class=\"shape\" x=\"%.1f\" y=\"%.1f\" width=\"%.1f\" height=\"%.1f\"/>\n",
-                x - PROCESS_WIDTH / 2, y, PROCESS_WIDTH, PROCESS_HEIGHT));
-        text(node.getLabel(), x, y + PROCESS_HEIGHT / 2);
+                x - PROCESS_WIDTH / 2, y, PROCESS_WIDTH, actualH));
+
+        double textStartY = y + actualH / 2 - (lines.size() - 1) * lineH / 2.0;
+        for (int i = 0; i < lines.size(); i++) {
+            double lineY = textStartY + i * lineH;
+            svg.append(String.format(Locale.US,
+                    "<text class=\"text\" x=\"%.1f\" y=\"%.1f\">%s</text>\n",
+                    x, lineY, escapeXml(lines.get(i))));
+        }
     }
 
     private void renderDecision(DecisionNode node, double x, double y, FlowchartNode stopBefore) {
-        double w = DECISION_WIDTH, h = DECISION_HEIGHT;
+        double w = DECISION_WIDTH;
+        double h = diamondHeight(node.getLabel());
         double halfW = w / 2, halfH = h / 2;
+
         node.setSize(w, h);
-        drawDiamond(x, y, w, h);
-        text(node.getLabel(), x, y + halfH);
+        drawDiamondWithText(x, y, w, h, node.getLabel());
 
         double branchY = y + h + VERTICAL_SPACING;
         double leftX   = x - HORIZONTAL_SPACING;
@@ -214,13 +369,15 @@ public class SVGRenderer {
 
             if (node.getFalseBranch() != null) {
                 trackX(rightX + PROCESS_WIDTH / 2);
+                // FIX Bug 1: draw arrow (not just line) for the НЕТ branch going right then down
                 line(x + halfW, y + halfH, rightX, y + halfH);
-                line(rightX, y + halfH, rightX, branchY - 5);
+                arrow(rightX, y + halfH, rightX, branchY - 5);
                 arrow(rightX, branchY - 5, rightX, branchY);
                 labelText("НЕТ", x + halfW + 10, y + halfH - 10);
                 renderNode(node.getFalseBranch(), rightX, branchY, stopBefore);
                 rightBottom = branchY + branchHeight(node.getFalseBranch(), stopBefore);
             } else {
+                // No false branch: НЕТ arrow goes right then down to merge
                 rightBottom = leftBottom;
             }
 
@@ -234,9 +391,13 @@ public class SVGRenderer {
                 line(rightX, rightBottom, rightX, mergeY);
                 line(rightX, mergeY, x, mergeY);
             } else {
-                line(rightX, y + halfH, rightX, mergeY);
-                line(rightX, mergeY, x, mergeY);
-                trackX(rightX + 5);
+                // FIX Bug 1: when no false branch, draw НЕТ path to the right and down to mergeY
+                double noElseRightX = x + HORIZONTAL_SPACING;
+                trackX(noElseRightX + 5);
+                line(x + halfW, y + halfH, noElseRightX, y + halfH);
+                labelText("НЕТ", x + halfW + 10, y + halfH - 10);
+                line(noElseRightX, y + halfH, noElseRightX, mergeY);
+                line(noElseRightX, mergeY, x, mergeY);
             }
 
             node.setSize(w, mergeY - y);
@@ -337,11 +498,11 @@ public class SVGRenderer {
     // ── LOOP ──────────────────────────────────────────────────────────────────
 
     private void renderLoop(LoopStartNode node, double x, double y, FlowchartNode stopBefore) {
-        double w = DECISION_WIDTH, h = DECISION_HEIGHT;
+        double w = DECISION_WIDTH;
+        double h = diamondHeight(node.getLabel());
         double halfW = w / 2, halfH = h / 2;
 
-        drawDiamond(x, y, w, h);
-        text(node.getLabel(), x, y + halfH);
+        drawDiamondWithText(x, y, w, h, node.getLabel());
 
         double rightX  = x + HORIZONTAL_SPACING + PROCESS_WIDTH / 2 + BACK_ARROW_MARGIN / 2;
         double branchY = y + h + VERTICAL_SPACING;
@@ -353,8 +514,6 @@ public class SVGRenderer {
         currentLoopReturnRightX = Double.MAX_VALUE;
 
         // Сохраняем координаты — тело цикла не должно перезаписывать точку выхода.
-        // endNode НЕ сохраняем: он может быть найден внутри тела (через exitNode цикла)
-        // и должен остаться установленным после renderLoopBodyChain.
         double savedEndArrowFromX = endArrowFromX;
         double savedEndArrowFromY = endArrowFromY;
 
@@ -362,8 +521,7 @@ public class SVGRenderer {
         double bodyEndY = renderLoopBodyChain(bodyChain, rightX, branchY, node);
         if (bodyEndY < 0) bodyEndY = -bodyEndY;
 
-        // Восстанавливаем координаты — они будут выставлены правильно ниже,
-        // после того как определится exitY.
+        // Восстанавливаем координаты
         endArrowFromX = savedEndArrowFromX;
         endArrowFromY = savedEndArrowFromY;
 
@@ -523,14 +681,15 @@ public class SVGRenderer {
 
         if (node.getExitNode() != null) {
             // Если exitNode — терминал «конец»: рисуем стрелку до exitY
-            // (нужно для корректного уровня подключения break-стрелок),
-            // выставляем флаг чтобы render() не рисовал стрелку повторно.
             if (node.getExitNode() instanceof TerminalNode t && !t.isStart()) {
                 arrow(x, diamondBottom, x, exitY - 5);
                 endNode = t;
                 endArrowFromX = x;
                 endArrowFromY = exitY;
-                endArrowAlreadyDrawn = true;
+                // FIX Bug 2: do NOT set endArrowAlreadyDrawn = true here.
+                // The arrow drawn above goes to exitY, but the terminal still needs
+                // an arrow from exitY to (exitY + VERTICAL_SPACING).
+                // endArrowAlreadyDrawn = true;  <-- removed
                 node.setSize(w, exitY - y);
                 return;
             }
@@ -691,11 +850,11 @@ public class SVGRenderer {
                                         double loopBodyX, double loopBodyY,
                                         DoWhileNode doWhileLoop,
                                         List<double[]> continueExits) {
-        double w = DECISION_WIDTH, h = DECISION_HEIGHT;
+        double w = DECISION_WIDTH;
+        double h = diamondHeight(node.getLabel());
         double halfW = w / 2, halfH = h / 2;
         node.setSize(w, h);
-        drawDiamond(x, y, w, h);
-        text(node.getLabel(), x, y + halfH);
+        drawDiamondWithText(x, y, w, h, node.getLabel());
 
         boolean trueEndsWithBreak    = chainEndsWithBreak(node.getTrueBranch());
         boolean falseEndsWithBreak   = chainEndsWithBreak(node.getFalseBranch());
@@ -1114,7 +1273,6 @@ public class SVGRenderer {
         List<double[]> continueExits = new ArrayList<>();
 
         // Сохраняем координаты — тело do-while не должно перезаписывать точку выхода.
-        // endNode НЕ сохраняем: он может быть найден внутри тела.
         double savedEndArrowFromX = endArrowFromX;
         double savedEndArrowFromY = endArrowFromY;
 
@@ -1152,11 +1310,11 @@ public class SVGRenderer {
         double dY = bodyEndY + VERTICAL_SPACING;
         arrow(x, bodyEndY, x, dY - 5);
 
-        double dW = DECISION_WIDTH, dH = DECISION_HEIGHT;
+        double dW = DECISION_WIDTH;
+        double dH = diamondHeight(node.getLabel());
         double halfW = dW / 2, halfH = dH / 2;
         node.setPosition(x, dY);
-        drawDiamond(x, dY, dW, dH);
-        text(node.getLabel(), x, dY + halfH);
+        drawDiamondWithText(x, dY, dW, dH, node.getLabel());
         updateMaxY(dY + dH);
 
         boolean hasContinue = !continueExits.isEmpty();
@@ -1345,11 +1503,9 @@ public class SVGRenderer {
                     return decBottom;
                 }
 
-                // FIX: обработка вложенного while-цикла внутри do-while
             } else if (cur instanceof LoopStartNode innerLoop) {
                 rendered.add(cur);
 
-                // Сохраняем только координаты, endNode не трогаем
                 double savedEAX = endArrowFromX;
                 double savedEAY = endArrowFromY;
 
@@ -1371,7 +1527,6 @@ public class SVGRenderer {
                         break;
                     }
                 } else {
-                    // exitNode уже отрендерен — ищем следующий через getNext самого цикла
                     for (FlowchartNode n : cur.getNext()) {
                         if (n instanceof LoopEndNode)  continue;
                         if (n instanceof TerminalNode) continue;
@@ -1390,11 +1545,9 @@ public class SVGRenderer {
                     return innerBottom;
                 }
 
-                // FIX: обработка вложенного do-while внутри do-while
             } else if (cur instanceof DoWhileNode innerDoWhile) {
                 rendered.add(cur);
 
-                // Сохраняем только координаты, endNode не трогаем
                 double savedEAX = endArrowFromX;
                 double savedEAY = endArrowFromY;
 
@@ -1461,6 +1614,65 @@ public class SVGRenderer {
             if (found != null) return found;
         }
         return null;
+    }
+
+    // ── TEXT WRAPPING HELPERS ─────────────────────────────────────────────────
+
+    private static final double CHAR_WIDTH_PX = 7.2;
+    private static final double LINE_HEIGHT   = 17.0;
+
+    private List<String> wrapText(String txt, double maxWidth, double fontSize) {
+        double scale = fontSize / 13.0;
+        double charW  = CHAR_WIDTH_PX * scale;
+        int maxChars  = Math.max(1, (int) (maxWidth / charW));
+
+        List<String> lines = new ArrayList<>();
+        if (txt == null || txt.isEmpty()) { lines.add(""); return lines; }
+
+        String[] words = txt.split(" ");
+        StringBuilder cur = new StringBuilder();
+        for (String word : words) {
+            if (cur.length() == 0) {
+                cur.append(word);
+            } else if (cur.length() + 1 + word.length() <= maxChars) {
+                cur.append(' ').append(word);
+            } else {
+                lines.add(cur.toString());
+                cur = new StringBuilder(word);
+            }
+        }
+        if (cur.length() > 0) lines.add(cur.toString());
+        return lines;
+    }
+
+    private double diamondHeight(String label) {
+        double usableW = DECISION_WIDTH * 0.55;
+        List<String> lines = wrapText(label, usableW, 13);
+        double needed = lines.size() * LINE_HEIGHT + 30;
+        return Math.max(DECISION_HEIGHT, needed);
+    }
+
+    private void drawDiamondWithText(double x, double y, double w, double h, String label) {
+        drawDiamond(x, y, w, h);
+        double halfH = h / 2;
+        double usableW = w * 0.55;
+        List<String> lines = wrapText(label, usableW, 13);
+        double textStartY = y + halfH - (lines.size() - 1) * LINE_HEIGHT / 2.0;
+        for (int i = 0; i < lines.size(); i++) {
+            svg.append(String.format(Locale.US,
+                    "<text class=\"text\" x=\"%.1f\" y=\"%.1f\">%s</text>\n",
+                    x, textStartY + i * LINE_HEIGHT, escapeXml(lines.get(i))));
+        }
+    }
+
+    private void textWrapped(String txt, double cx, double cy, double maxWidth, double fontSize) {
+        List<String> lines = wrapText(txt, maxWidth, fontSize);
+        double startY = cy - (lines.size() - 1) * LINE_HEIGHT / 2.0;
+        for (int i = 0; i < lines.size(); i++) {
+            svg.append(String.format(Locale.US,
+                    "<text class=\"text\" x=\"%.1f\" y=\"%.1f\" font-size=\"%.0f\">%s</text>\n",
+                    cx, startY + i * LINE_HEIGHT, fontSize, escapeXml(lines.get(i))));
+        }
     }
 
     private void drawDiamond(double x, double y, double w, double h) {
