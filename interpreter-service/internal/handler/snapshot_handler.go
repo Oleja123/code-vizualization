@@ -76,7 +76,7 @@ func NewSnapshotHandler(oneCompilerConfigPath string) http.HandlerFunc {
 			return
 		}
 
-		runner := interpreter.NewInterpreter()
+		runner := interpreter.NewInterpreterWithLimits(cfg.MaxAllocatedElements, cfg.MaxSteps)
 		result, steps, stepBegin, execErr := runner.ExecuteProgram(program)
 		if execErr != nil && steps == nil {
 			writeJSON(w, http.StatusBadRequest, SnapshotResponse{Success: false, Error: "error: " + execErr.Error()})

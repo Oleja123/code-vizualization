@@ -8,13 +8,9 @@ import (
 	"github.com/Oleja123/code-vizualization/interpreter-service/internal/application/interpreter"
 )
 
-const factorialProgram = `int bebra() {
-  int a;
-  return a + 1;
-}
-
+const factorialProgram = `
 int main() {
-  return bebra();
+  int a = 1;
 }
 `
 

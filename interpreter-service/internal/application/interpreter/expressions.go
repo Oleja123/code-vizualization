@@ -503,6 +503,10 @@ func (i *Interpreter) executeCallExpr(expr *converter.CallExpr) (interface{}, er
 	parameters := make([]*runtime.Variable, len(declNode.Parameters))
 
 	for ind, val := range declNode.Parameters {
+		if err := i.LimitManager.AllocateVariable(); err != nil {
+			return nil, err
+		}
+
 		variable := runtime.NewVariable(val.Name, nil, i.currentStepNumber, false)
 		parameters[ind] = variable
 		i.addEvents(events.DeclareVar{Name: val.Name, IsGlobal: false})
@@ -520,16 +524,21 @@ func (i *Interpreter) executeCallExpr(expr *converter.CallExpr) (interface{}, er
 	}
 
 	i.addEvents(events.LineChanged{Line: int(expr.Loc.Line)})
-	i.addStep()
 	i.CallStack.PopFrame()
 
 	if res.Signal == SignalReturn {
+		if err := i.addStep(); err != nil {
+			return nil, err
+		}
 		if res.Value == nil {
 			return nil, nil
 		}
 		return *res.Value, nil
 	} else {
 		i.addEvents(events.FunctionReturn{Name: expr.FunctionName, ReturnValue: nil})
+		if err := i.addStep(); err != nil {
+			return nil, err
+		}
 	}
 
 	return nil, nil
