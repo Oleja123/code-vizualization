@@ -523,7 +523,12 @@ func (i *Interpreter) executeCallExpr(expr *converter.CallExpr) (interface{}, er
 		return nil, err
 	}
 
-	i.addEvents(events.LineChanged{Line: int(expr.Loc.Line)})
+	line := int(expr.Loc.Line)
+	if expr.FunctionName == "main" && line == 0 {
+		line = -1
+	}
+
+	i.addEvents(events.LineChanged{Line: line})
 	i.CallStack.PopFrame()
 
 	if res.Signal == SignalReturn {

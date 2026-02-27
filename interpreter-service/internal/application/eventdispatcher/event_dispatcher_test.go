@@ -600,9 +600,21 @@ int main() {
 		},
 		{
 			Step:        9,
-			Description: "returned from all factorial calls to main, result assigned",
+			Description: "returned from all factorial calls to main",
 			Expected: expectedSnapshotState{
 				FramesCount:       2, // all factorial frames popped
+				CurrentLine:       9,
+				CurrentFrameScope: 3,
+				Variables: map[string]expectedVariable{
+					"result": {Exists: false},
+				},
+			},
+		},
+		{
+			Step:        10,
+			Description: "result assigned in main",
+			Expected: expectedSnapshotState{
+				FramesCount:       2,
 				CurrentLine:       10,
 				CurrentFrameScope: 3,
 				Variables: map[string]expectedVariable{
@@ -611,7 +623,7 @@ int main() {
 			},
 		},
 		{
-			Step:        10,
+			Step:        11,
 			Description: "program finished",
 			Expected: expectedSnapshotState{
 				FramesCount:       1, // only global frame remains
@@ -646,7 +658,7 @@ int main() {
 	ed, _ := runDispatcherForCode(t, code)
 
 	// Apply all steps forward to the end
-	require.NoError(t, ed.ApplyStep(10))
+	require.NoError(t, ed.ApplyStep(11))
 	assertSnapshotState(t, ed, expectedSnapshotState{
 		FramesCount:       1,
 		CurrentLine:       -1,
@@ -656,8 +668,8 @@ int main() {
 		},
 	})
 
-	// Rollback to step 9 (in main, result = 6)
-	require.NoError(t, ed.ApplyStep(9))
+	// Rollback to step 10 (in main, result = 6)
+	require.NoError(t, ed.ApplyStep(10))
 	assertSnapshotState(t, ed, expectedSnapshotState{
 		FramesCount:       2,
 		CurrentLine:       10,
@@ -1222,9 +1234,9 @@ func TestEventDispatcher_UndefinedBehaviorByStep(t *testing.T) {
 
 	require.NoError(t, ed.ApplyStep(lastExternalStep))
 	assertSnapshotState(t, ed, expectedSnapshotState{
-		FramesCount:       1,
+		FramesCount:       2,
 		CurrentLine:       3,
-		CurrentFrameScope: 1,
+		CurrentFrameScope: 3,
 		Error:             "undefined behavior: getting an uninitialized variable x",
 	})
 }
@@ -1241,9 +1253,9 @@ func TestEventDispatcher_RuntimeErrorByStep(t *testing.T) {
 
 	require.NoError(t, ed.ApplyStep(lastExternalStep))
 	assertSnapshotState(t, ed, expectedSnapshotState{
-		FramesCount:       1,
+		FramesCount:       2,
 		CurrentLine:       3,
-		CurrentFrameScope: 1,
+		CurrentFrameScope: 3,
 		Error:             "runtime error: division by zero",
 	})
 }
@@ -1260,9 +1272,9 @@ func TestEventDispatcher_RollbackUndefinedBehavior(t *testing.T) {
 
 	require.NoError(t, ed.ApplyStep(lastExternalStep))
 	assertSnapshotState(t, ed, expectedSnapshotState{
-		FramesCount:       1,
+		FramesCount:       2,
 		CurrentLine:       3,
-		CurrentFrameScope: 1,
+		CurrentFrameScope: 3,
 		Error:             "undefined behavior: getting an uninitialized variable x",
 	})
 
@@ -1276,9 +1288,9 @@ func TestEventDispatcher_RollbackUndefinedBehavior(t *testing.T) {
 
 	require.NoError(t, ed.ApplyStep(lastExternalStep))
 	assertSnapshotState(t, ed, expectedSnapshotState{
-		FramesCount:       1,
+		FramesCount:       2,
 		CurrentLine:       3,
-		CurrentFrameScope: 1,
+		CurrentFrameScope: 3,
 		Error:             "undefined behavior: getting an uninitialized variable x",
 	})
 }
@@ -1295,9 +1307,9 @@ func TestEventDispatcher_RollbackRuntimeError(t *testing.T) {
 
 	require.NoError(t, ed.ApplyStep(lastExternalStep))
 	assertSnapshotState(t, ed, expectedSnapshotState{
-		FramesCount:       1,
+		FramesCount:       2,
 		CurrentLine:       3,
-		CurrentFrameScope: 1,
+		CurrentFrameScope: 3,
 		Error:             "runtime error: division by zero",
 	})
 
@@ -1314,9 +1326,9 @@ func TestEventDispatcher_RollbackRuntimeError(t *testing.T) {
 
 	require.NoError(t, ed.ApplyStep(lastExternalStep))
 	assertSnapshotState(t, ed, expectedSnapshotState{
-		FramesCount:       1,
+		FramesCount:       2,
 		CurrentLine:       3,
-		CurrentFrameScope: 1,
+		CurrentFrameScope: 3,
 		Error:             "runtime error: division by zero",
 	})
 }

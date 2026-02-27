@@ -173,7 +173,6 @@ func TestInterpreterSteps_MainLifecycleEvents(t *testing.T) {
 			"LineChanged(line=2)",
 		}},
 		{Events: []string{
-			"ExitScope",
 			"FunctionReturn(name=main,value=1)",
 			"LineChanged(line=-1)",
 		}},
@@ -211,7 +210,6 @@ func TestInterpreterSteps_AssignmentEmitsVarChanged(t *testing.T) {
 			"LineChanged(line=4)",
 		}},
 		{Events: []string{
-			"ExitScope",
 			"FunctionReturn(name=main,value=2)",
 			"LineChanged(line=-1)",
 		}},
@@ -261,7 +259,6 @@ func TestInterpreterSteps_ArraysAndElementChangesWithCondition(t *testing.T) {
 			"LineChanged(line=7)",
 		}},
 		{Events: []string{
-			"ExitScope",
 			"FunctionReturn(name=main,value=6)",
 			"LineChanged(line=-1)",
 		}},
@@ -308,7 +305,7 @@ func TestInterpreterSteps_WhileLoopWithIfAndVarChanges(t *testing.T) {
 		{Events: []string{"LineChanged(line=8)"}},
 		{Events: []string{"VarChanged(name=i,value=4)", "ExitScope", "LineChanged(line=4)"}},
 		{Events: []string{"LineChanged(line=10)"}},
-		{Events: []string{"ExitScope", "FunctionReturn(name=main,value=2)", "LineChanged(line=-1)"}},
+		{Events: []string{"FunctionReturn(name=main,value=2)", "LineChanged(line=-1)"}},
 	}
 
 	assert.Equal(t, expectedSteps, normalizeSteps(steps))
@@ -342,12 +339,10 @@ int main() {
 			"LineChanged(line=2)",
 		}},
 		{Events: []string{
-			"ExitScope",
 			"FunctionReturn(name=foo,value=7)",
 			"LineChanged(line=5)",
 		}},
 		{Events: []string{
-			"ExitScope",
 			"FunctionReturn(name=main,value=7)",
 			"LineChanged(line=-1)",
 		}},
@@ -382,7 +377,7 @@ func TestInterpreterSteps_ForLoopWithVarChanges(t *testing.T) {
 		{Events: []string{"VarChanged(name=i,value=2)", "EnterScope", "LineChanged(line=4)"}},
 		{Events: []string{"VarChanged(name=sum,value=3)", "ExitScope", "LineChanged(line=3)"}},
 		{Events: []string{"VarChanged(name=i,value=3)", "ExitScope", "LineChanged(line=6)"}},
-		{Events: []string{"ExitScope", "FunctionReturn(name=main,value=3)", "LineChanged(line=-1)"}},
+		{Events: []string{"FunctionReturn(name=main,value=3)", "LineChanged(line=-1)"}},
 	}
 
 	assert.Equal(t, expectedSteps, normalizeSteps(steps))
@@ -412,7 +407,7 @@ func TestInterpreterSteps_DoWhileLoopWithCondition(t *testing.T) {
 		{Events: []string{"EnterScope", "LineChanged(line=4)"}},
 		{Events: []string{"VarChanged(name=i,value=3)", "ExitScope", "LineChanged(line=5)"}},
 		{Events: []string{"LineChanged(line=6)"}},
-		{Events: []string{"ExitScope", "FunctionReturn(name=main,value=3)", "LineChanged(line=-1)"}},
+		{Events: []string{"FunctionReturn(name=main,value=3)", "LineChanged(line=-1)"}},
 	}
 
 	assert.Equal(t, expectedSteps, normalizeSteps(steps))
@@ -437,7 +432,7 @@ func TestInterpreterSteps_MultiVarDeclarationSingleLine(t *testing.T) {
 		{Events: []string{"DeclareVar(name=b,global=false)", "LineChanged(line=2)"}},
 		{Events: []string{"DeclareVar(name=c,global=false)", "LineChanged(line=3)"}},
 		{Events: []string{"VarChanged(name=c,value=3)", "LineChanged(line=4)"}},
-		{Events: []string{"ExitScope", "FunctionReturn(name=main,value=3)", "LineChanged(line=-1)"}},
+		{Events: []string{"FunctionReturn(name=main,value=3)", "LineChanged(line=-1)"}},
 	}
 
 	assert.Equal(t, expectedSteps, normalizeSteps(steps))
@@ -488,7 +483,7 @@ func TestInterpreterSteps_ContinueInWhileLoop(t *testing.T) {
 		{Events: []string{"LineChanged(line=9)"}},
 		{Events: []string{"VarChanged(name=sum,value=13)", "ExitScope", "LineChanged(line=4)"}},
 		{Events: []string{"LineChanged(line=11)"}},
-		{Events: []string{"ExitScope", "FunctionReturn(name=main,value=13)", "LineChanged(line=-1)"}},
+		{Events: []string{"FunctionReturn(name=main,value=13)", "LineChanged(line=-1)"}},
 	}
 
 	assert.Equal(t, expectedSteps, normalizeSteps(steps))
@@ -538,7 +533,7 @@ func TestInterpreterSteps_BreakInWhileLoop(t *testing.T) {
 		{Events: []string{"VarChanged(name=i,value=5)", "LineChanged(line=6)"}},
 		{Events: []string{"EnterScope", "LineChanged(line=7)"}},
 		{Events: []string{"ExitScope", "ExitScope", "LineChanged(line=11)"}},
-		{Events: []string{"ExitScope", "FunctionReturn(name=main,value=10)", "LineChanged(line=-1)"}},
+		{Events: []string{"FunctionReturn(name=main,value=10)", "LineChanged(line=-1)"}},
 	}
 
 	assert.Equal(t, expectedSteps, normalizeSteps(steps))
@@ -591,8 +586,8 @@ func TestInterpreterSteps_ForLoopWithContinueAndBreak(t *testing.T) {
 		{Events: []string{"VarChanged(name=i,value=5)", "EnterScope", "LineChanged(line=4)"}},
 		{Events: []string{"LineChanged(line=7)"}},
 		{Events: []string{"EnterScope", "LineChanged(line=8)"}},
-		{Events: []string{"ExitScope", "ExitScope", "ExitScope", "LineChanged(line=12)"}},
-		{Events: []string{"ExitScope", "FunctionReturn(name=main,value=8)", "LineChanged(line=-1)"}},
+		{Events: []string{"ExitScope", "ExitScope", "LineChanged(line=12)"}},
+		{Events: []string{"FunctionReturn(name=main,value=8)", "LineChanged(line=-1)"}},
 	}
 
 	assert.Equal(t, expectedSteps, normalizeSteps(steps))
@@ -617,7 +612,7 @@ func TestInterpreterSteps_Array2DDeclarationAndElementChanges(t *testing.T) {
 		{Events: []string{"DeclareArray2D(name=m,size1=2,size2=2,global=false)", "LineChanged(line=3)"}},
 		{Events: []string{"Array2DElementChanged(name=m,ind1=1,ind2=0,value=7)", "LineChanged(line=4)"}},
 		{Events: []string{"Array2DElementChanged(name=m,ind1=0,ind2=1,value=8)", "LineChanged(line=5)"}},
-		{Events: []string{"ExitScope", "FunctionReturn(name=main,value=8)", "LineChanged(line=-1)"}},
+		{Events: []string{"FunctionReturn(name=main,value=8)", "LineChanged(line=-1)"}},
 	}
 
 	assert.Equal(t, expectedSteps, normalizeSteps(steps))
@@ -659,7 +654,7 @@ int main() {
 	expectedSteps := []normalizedStep{
 		{Events: []string{"LineChanged(line=1)"}},
 		{Events: []string{"DeclareVar(name=g,global=true)", "FunctionCall(name=main)", "EnterScope", "EnterScope", "LineChanged(line=3)"}},
-		{Events: []string{"ExitScope", "FunctionReturn(name=main,value=5)", "LineChanged(line=-1)"}},
+		{Events: []string{"FunctionReturn(name=main,value=5)", "LineChanged(line=-1)"}},
 	}
 
 	assert.Equal(t, expectedSteps, normalizeSteps(steps))
@@ -687,7 +682,7 @@ func TestInterpreterSteps_IfElseFalseBranchEvents(t *testing.T) {
 		{Events: []string{"DeclareVar(name=x,global=false)", "LineChanged(line=3)"}},
 		{Events: []string{"EnterScope", "LineChanged(line=6)"}},
 		{Events: []string{"VarChanged(name=x,value=2)", "ExitScope", "LineChanged(line=8)"}},
-		{Events: []string{"ExitScope", "FunctionReturn(name=main,value=2)", "LineChanged(line=-1)"}},
+		{Events: []string{"FunctionReturn(name=main,value=2)", "LineChanged(line=-1)"}},
 	}
 
 	assert.Equal(t, expectedSteps, normalizeSteps(steps))
@@ -719,7 +714,7 @@ func TestInterpreterSteps_ForContinueRunsPostExpression(t *testing.T) {
 		{Events: []string{"VarChanged(name=i,value=2)", "EnterScope", "LineChanged(line=4)"}},
 		{Events: []string{"ExitScope", "LineChanged(line=3)"}},
 		{Events: []string{"VarChanged(name=i,value=3)", "ExitScope", "LineChanged(line=6)"}},
-		{Events: []string{"ExitScope", "FunctionReturn(name=main,value=3)", "LineChanged(line=-1)"}},
+		{Events: []string{"FunctionReturn(name=main,value=3)", "LineChanged(line=-1)"}},
 	}
 
 	assert.Equal(t, expectedSteps, normalizeSteps(steps))
@@ -745,8 +740,8 @@ func TestInterpreterSteps_ForBreakSkipsPostExpression(t *testing.T) {
 		{Events: []string{"DeclareVar(name=i,global=false)", "LineChanged(line=3)"}},
 		{Events: []string{"EnterScope", "LineChanged(line=3)"}},
 		{Events: []string{"VarChanged(name=i,value=0)", "EnterScope", "LineChanged(line=4)"}},
-		{Events: []string{"ExitScope", "ExitScope", "LineChanged(line=6)"}},
-		{Events: []string{"ExitScope", "FunctionReturn(name=main,value=0)", "LineChanged(line=-1)"}},
+		{Events: []string{"ExitScope", "LineChanged(line=6)"}},
+		{Events: []string{"FunctionReturn(name=main,value=0)", "LineChanged(line=-1)"}},
 	}
 
 	assert.Equal(t, expectedSteps, normalizeSteps(steps))
@@ -789,7 +784,7 @@ int main() {
 
 	require.NotNil(t, result)
 	assert.Equal(t, 6, *result)
-	require.Len(t, steps, 11)
+	require.Len(t, steps, 12)
 
 	expectedSteps := []normalizedStep{
 		{Events: []string{
@@ -833,24 +828,22 @@ int main() {
 			"LineChanged(line=3)",
 		}},
 		{Events: []string{
-			"ExitScope",
-			"ExitScope",
 			"FunctionReturn(name=factorial,value=1)",
 			"LineChanged(line=5)",
 		}},
 		{Events: []string{
-			"ExitScope",
 			"FunctionReturn(name=factorial,value=2)",
 			"LineChanged(line=5)",
 		}},
 		{Events: []string{
-			"ExitScope",
 			"FunctionReturn(name=factorial,value=6)",
+			"LineChanged(line=9)",
+		}},
+		{Events: []string{
 			"DeclareVar(name=result,global=false)",
 			"LineChanged(line=10)",
 		}},
 		{Events: []string{
-			"ExitScope",
 			"FunctionReturn(name=main,value=6)",
 			"LineChanged(line=-1)",
 		}},
@@ -873,7 +866,7 @@ int main() {
 
 	require.NotNil(t, result)
 	assert.Equal(t, 8, *result)
-	require.Len(t, steps, 4)
+	require.Len(t, steps, 5)
 
 	expectedSteps := []normalizedStep{
 		{Events: []string{
@@ -893,13 +886,14 @@ int main() {
 			"LineChanged(line=2)",
 		}},
 		{Events: []string{
-			"ExitScope",
 			"FunctionReturn(name=add,value=8)",
+			"LineChanged(line=6)",
+		}},
+		{Events: []string{
 			"DeclareVar(name=x,global=false)",
 			"LineChanged(line=7)",
 		}},
 		{Events: []string{
-			"ExitScope",
 			"FunctionReturn(name=main,value=8)",
 			"LineChanged(line=-1)",
 		}},
@@ -923,7 +917,7 @@ int main() {
 
 	require.NotNil(t, result)
 	assert.Equal(t, 5, *result)
-	require.Len(t, steps, 5)
+	require.Len(t, steps, 6)
 
 	expectedSteps := []normalizedStep{
 		{Events: []string{
@@ -947,11 +941,13 @@ int main() {
 		{Events: []string{
 			"VarChanged(name=x,value=6)",
 			"ExitScope",
+			"LineChanged(line=7)",
 			"FunctionReturn(name=printValue,value=nil)",
+		}},
+		{Events: []string{
 			"LineChanged(line=8)",
 		}},
 		{Events: []string{
-			"ExitScope",
 			"FunctionReturn(name=main,value=5)",
 			"LineChanged(line=-1)",
 		}},
@@ -976,7 +972,7 @@ int main() {
 
 	require.NotNil(t, result)
 	assert.Equal(t, 10, *result)
-	require.Len(t, steps, 7)
+	require.Len(t, steps, 9)
 
 	expectedSteps := []normalizedStep{
 		{Events: []string{
@@ -1000,7 +996,10 @@ int main() {
 		{Events: []string{
 			"VarChanged(name=x,value=11)",
 			"ExitScope",
+			"LineChanged(line=7)",
 			"FunctionReturn(name=increment,value=nil)",
+		}},
+		{Events: []string{
 			"LineChanged(line=8)",
 		}},
 		{Events: []string{
@@ -1014,11 +1013,13 @@ int main() {
 		{Events: []string{
 			"VarChanged(name=x,value=11)",
 			"ExitScope",
+			"LineChanged(line=8)",
 			"FunctionReturn(name=increment,value=nil)",
+		}},
+		{Events: []string{
 			"LineChanged(line=9)",
 		}},
 		{Events: []string{
-			"ExitScope",
 			"FunctionReturn(name=main,value=10)",
 			"LineChanged(line=-1)",
 		}},
@@ -1074,7 +1075,7 @@ int main() {
 
 	require.NotNil(t, result)
 	assert.Equal(t, 24, *result)
-	require.Len(t, steps, 5)
+	require.Len(t, steps, 6)
 
 	expectedSteps := []normalizedStep{
 		{Events: []string{
@@ -1100,13 +1101,14 @@ int main() {
 			"LineChanged(line=3)",
 		}},
 		{Events: []string{
-			"ExitScope",
 			"FunctionReturn(name=multiply,value=24)",
+			"LineChanged(line=7)",
+		}},
+		{Events: []string{
 			"DeclareVar(name=value,global=false)",
 			"LineChanged(line=8)",
 		}},
 		{Events: []string{
-			"ExitScope",
 			"FunctionReturn(name=main,value=24)",
 			"LineChanged(line=-1)",
 		}},
