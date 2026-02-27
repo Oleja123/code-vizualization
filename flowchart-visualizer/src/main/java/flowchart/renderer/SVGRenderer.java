@@ -680,16 +680,18 @@ public class SVGRenderer {
         updateMaxY(bodyEndY);
 
         if (node.getExitNode() != null) {
-            // Если exitNode — терминал «конец»: рисуем стрелку до exitY
+            // Если exitNode — терминал «конец»: не рисуем стрелку здесь.
+            // render() сам нарисует стрелку от endArrowFromY до терминала.
+            // Если цикл вложен внутрь if/else, renderDecision возьмёт branchHeight
+            // и нарисует линию слияния на mergeY, откуда уже пойдёт к терминалу.
             if (node.getExitNode() instanceof TerminalNode t && !t.isStart()) {
-                arrow(x, diamondBottom, x, exitY - 5);
+                // Рисуем линию (без стрелки) от низа ромба до exitY —
+                // это выход по НЕТ из цикла. Стрелку к терминалу нарисует render().
+                line(x, diamondBottom, x, exitY);
                 endNode = t;
                 endArrowFromX = x;
                 endArrowFromY = exitY;
-                // FIX Bug 2: do NOT set endArrowAlreadyDrawn = true here.
-                // The arrow drawn above goes to exitY, but the terminal still needs
-                // an arrow from exitY to (exitY + VERTICAL_SPACING).
-                // endArrowAlreadyDrawn = true;  <-- removed
+                endArrowAlreadyDrawn = false;
                 node.setSize(w, exitY - y);
                 return;
             }
@@ -1257,6 +1259,7 @@ public class SVGRenderer {
                 endNode = t;
                 endArrowFromX = x;
                 endArrowFromY = prevBottom;
+                endArrowAlreadyDrawn = false;
                 return;
             }
 
