@@ -6,9 +6,9 @@ export default defineConfig({
   server: {
     port: 3000,
     proxy: {
-      // Interpreter service (трассировка) - порт 8080
+      // Interpreter service (трассировка) - порт 8084
       '/api/snapshot': {
-        target: 'http://localhost:8080',
+        target: 'http://localhost:8084',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api/, '')
       },

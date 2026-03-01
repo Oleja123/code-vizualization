@@ -69,13 +69,19 @@
             :class="['nav-button', { active: activeView === 'tracer' }]"
             @click="activeView = 'tracer'"
           >
-            📊 Трассировка схемы
+            🔍 Трассировка схемы
           </button>
           <button
             :class="['nav-button', { active: activeView === 'visualization' }]"
             @click="activeView = 'visualization'"
           >
             ⚡ Трассировка кода
+          </button>
+          <button
+            :class="['nav-button', { active: activeView === 'flowchart' }]"
+            @click="activeView = 'flowchart'"
+          >
+            📊 Блок-схема
           </button>
         </nav>
         <div class="user-info">
@@ -84,8 +90,9 @@
         </div>
       </header>
       <main class="app-main">
-        <FlowchartTracer   v-if="activeView === 'tracer'" />
-        <VisualizationView v-if="activeView === 'visualization'" />
+        <FlowchartTracer    v-if="activeView === 'tracer'" />
+        <VisualizationView  v-if="activeView === 'visualization'" />
+        <FlowchartBuilder   v-if="activeView === 'flowchart'" />
       </main>
     </template>
   </div>
@@ -94,13 +101,15 @@
 <script>
 import { ref, onMounted } from 'vue'
 import VisualizationView from './views/VisualizationView.vue'
+import FlowchartBuilder from './components/FlowchartBuilder.vue'
 import FlowchartTracer from './components/FlowchartTracer.vue'
-import { checkSession, login, register, logout } from './api/auth.js'
+import { checkSession, login, register, logout } from '../api/auth.js'
 
 export default {
   name: 'App',
   components: {
     VisualizationView,
+    FlowchartBuilder,
     FlowchartTracer
   },
   setup() {
