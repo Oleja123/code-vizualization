@@ -8,17 +8,10 @@ public class FlowchartBuilder {
 
     private Map<String, FunctionDecl> functions = new HashMap<>();
 
-    /**
-     * Строит граф для функции main.
-     */
     public FlowchartNode buildFromProgram(Program program) {
         return buildFromProgram(program, "main");
     }
 
-    /**
-     * Строит граф для функции с заданным именем.
-     * Если функция не найдена — бросает исключение с перечнем доступных функций.
-     */
     public FlowchartNode buildFromProgram(Program program, String functionName) {
         functions.clear();
         for (Statement stmt : program.getDeclarations()) {
@@ -37,9 +30,6 @@ public class FlowchartBuilder {
         return buildFunction(target);
     }
 
-    /**
-     * Возвращает список всех функций из программы (для построения меню выбора).
-     */
     public List<String> getFunctionNames(Program program) {
         List<String> names = new ArrayList<>();
         for (Statement stmt : program.getDeclarations()) {
@@ -50,13 +40,7 @@ public class FlowchartBuilder {
         return names;
     }
 
-    /**
-     * Строит граф для КАЖДОЙ функции в программе.
-     * Возвращает карту: имя функции → корневой узел графа.
-     * Порядок сохранён (LinkedHashMap): сначала идут функции в порядке объявления.
-     */
     public Map<String, FlowchartNode> buildAllFunctions(Program program) {
-        // Сначала регистрируем все функции (нужно для корректного expr)
         functions.clear();
         for (Statement stmt : program.getDeclarations()) {
             if (stmt instanceof FunctionDecl func) {
@@ -91,38 +75,28 @@ public class FlowchartBuilder {
         return start;
     }
 
-    /**
-     * Рекурсивно обходит граф и цепляет `end` ко всем листьям.
-     */
     private void attachEnd(FlowchartNode node, TerminalNode end, Set<FlowchartNode> visited) {
         if (node == null || visited.contains(node)) return;
         if (node == end) return;
-        // LoopEndNode — граница тела цикла, не трогаем
         if (node instanceof LoopEndNode) return;
         visited.add(node);
 
-        // return-узел → привязываем конец
-        if (node instanceof ProcessNode p
-                && p.getLabel() != null
-                && p.getLabel().startsWith("return")) {
-            if (p.getNext().isEmpty()) {
-                p.addNext(end);
+        if (node instanceof ConnectorNode c && "return".equals(c.getLabel())) {
+            if (c.getNext().isEmpty()) {
+                c.addNext(end);
             }
             return;
         }
 
-        // break/continue коннекторы — не трогаем, они управляются циклом
         if (node instanceof ConnectorNode) {
             return;
         }
 
         if (node instanceof LoopStartNode loop) {
-            // Обходим тело цикла
             attachEnd(loop.getLoopBody(), end, visited);
             if (loop.getExitNode() != null) {
                 attachEnd(loop.getExitNode(), end, visited);
             } else {
-                // Цикл — последний оператор функции: подключаем «конец» как exitNode
                 loop.setExitNode(end);
             }
             return;
@@ -133,17 +107,14 @@ public class FlowchartBuilder {
             if (doWhile.getExitNode() != null) {
                 attachEnd(doWhile.getExitNode(), end, visited);
             } else {
-                // do-while последний оператор — конец идёт сразу после него
                 doWhile.setExitNode(end);
             }
             return;
         }
 
         if (node instanceof DecisionNode decision) {
-            // Рекурсивно обходим ветки
             attachEnd(decision.getTrueBranch(), end, visited);
             attachEnd(decision.getFalseBranch(), end, visited);
-            // Sanitize NEXT: убираем дубликаты и null
             decision.getNext().removeIf(n ->
                     n == null ||
                             n == decision.getTrueBranch() ||
@@ -201,9 +172,6 @@ public class FlowchartBuilder {
         return first;
     }
 
-    /**
-     * Соединяет конец предыдущего узла с началом следующего.
-     */
     private void linkNodes(FlowchartNode prev, FlowchartNode next) {
         if (prev instanceof LoopStartNode loop) {
             if (loop.getExitNode() == null) {
@@ -224,13 +192,16 @@ public class FlowchartBuilder {
         }
 
         if (prev instanceof DecisionNode decision) {
-            // Не добавлять в NEXT то, что уже является веткой
             if (next == decision.getTrueBranch()) return;
             if (next == decision.getFalseBranch()) return;
             if (next != null && next != decision.getTrueBranch() && next != decision.getFalseBranch()
                     && !decision.getNext().contains(next)) {
                 decision.addNext(next);
             }
+            return;
+        }
+
+        if (prev instanceof ConnectorNode) {
             return;
         }
 
@@ -263,22 +234,18 @@ public class FlowchartBuilder {
         if (node instanceof DecisionNode decision) {
             if (next == decision.getTrueBranch()) return;
             if (next == decision.getFalseBranch()) return;
-            // Соединяем листья веток с next (чтобы a1[i]=1 → i++ в for-цикле)
             if (decision.getTrueBranch() != null) {
                 linkLeaves(decision.getTrueBranch(), next, visited);
             }
             if (decision.getFalseBranch() != null) {
                 linkLeaves(decision.getFalseBranch(), next, visited);
             }
-            // Добавляем next в getNext только если нет else-ветки
-            // (рендерер использует getNext для рисования стрелки после слияния)
             if (next != null && !decision.getNext().contains(next)) {
                 decision.addNext(next);
             }
             return;
         }
 
-        // break/continue — не подключаем к следующему узлу блока
         if (node instanceof ConnectorNode) {
             return;
         }
@@ -308,13 +275,22 @@ public class FlowchartBuilder {
         return p;
     }
 
+    /**
+     * return без значения → ConnectorNode("return")
+     * return X           → ProcessNode("return X") → ConnectorNode("return")
+     */
     private FlowchartNode buildReturn(ReturnStmt r) {
-        String label = r.getValue() != null
-                ? "return " + expr(r.getValue())
-                : "return";
-        ProcessNode node = new ProcessNode(label);
-        node.setAstLocation(toLocation(r.getLocation()));
-        return node;
+        ConnectorNode returnConnector = new ConnectorNode("return");
+        returnConnector.setAstLocation(toLocation(r.getLocation()));
+
+        if (r.getValue() != null) {
+            ProcessNode process = new ProcessNode("return " + expr(r.getValue()));
+            process.setAstLocation(toLocation(r.getLocation()));
+            process.addNext(returnConnector);
+            return process;
+        }
+
+        return returnConnector;
     }
 
     private FlowchartNode buildIf(IfStmt stmt) {
@@ -347,7 +323,6 @@ public class FlowchartBuilder {
             linkLeaves(body, loopEnd, visited);
         }
 
-        // LoopEndNode → обратно к началу — только один раз
         if (!loopEnd.getNext().contains(start)) {
             loopEnd.addNext(start);
         }
@@ -381,7 +356,6 @@ public class FlowchartBuilder {
             }
         }
 
-        // Только один переход назад — с защитой от дублирования
         if (!loopEnd.getNext().contains(start)) {
             loopEnd.addNext(start);
         }

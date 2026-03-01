@@ -33,9 +33,13 @@ public class SVGRenderer {
 
     private double currentLoopReturnRightX = Double.MAX_VALUE;
     private double lastBodyBlockX = Double.NaN;
+    // ИСПРАВЛЕНИЕ: добавлено поле для хранения нижней границы последнего блока тела цикла
+    private double lastBodyBlockBottomY = Double.NaN;
 
     private List<Object[]> deferredDoWhileContinueCols;
     private List<double[]> doWhileBreakExits;
+
+    private List<double[]> loopReturnExits;
 
     public String render(FlowchartNode start) {
         svg      = new StringBuilder();
@@ -51,8 +55,10 @@ public class SVGRenderer {
         endArrowAlreadyDrawn = false;
         currentLoopReturnRightX = Double.MAX_VALUE;
         lastBodyBlockX = Double.NaN;
+        lastBodyBlockBottomY = Double.NaN;
         deferredDoWhileContinueCols = new ArrayList<>();
         doWhileBreakExits = new ArrayList<>();
+        loopReturnExits = new ArrayList<>();
 
         renderNode(start, 700, 100, null);
 
@@ -62,7 +68,6 @@ public class SVGRenderer {
             double endX = endArrowFromX;
             double endY;
             if (endArrowAlreadyDrawn) {
-                // Стрелка уже нарисована — просто рисуем терминал вплотную
                 endY = endArrowFromY;
             } else {
                 endY = endArrowFromY + VERTICAL_SPACING;
@@ -70,6 +75,17 @@ public class SVGRenderer {
             }
             renderTerminal(endNode, endX, endY);
             updateMaxY(endY + TERMINAL_HEIGHT);
+
+            if (!loopReturnExits.isEmpty()) {
+                double mergeY = endArrowFromY + VERTICAL_SPACING / 2;
+                for (double[] exit : loopReturnExits) {
+                    double exitX      = exit[0];
+                    double exitBottomY = exit[1];
+                    // Вертикаль вниз от середины основания блока до середины стрелки к конец
+                    line(exitX, exitBottomY, exitX, mergeY);
+                    arrow(exitX, mergeY, endX + 1, mergeY);
+                }
+            }
         }
 
         double svgW = Math.max(maxX - minX + padding * 2, 400);
@@ -102,10 +118,6 @@ public class SVGRenderer {
         return out.toString();
     }
 
-    /**
-     * Рендерит карту функций (имя → граф) и возвращает карту (имя → SVG).
-     * Каждая функция рендерится независимо.
-     */
     public Map<String, String> renderAll(Map<String, FlowchartNode> functions) {
         Map<String, String> result = new java.util.LinkedHashMap<>();
         List<String> names = sortedFunctionNames(functions.keySet());
@@ -115,21 +127,15 @@ public class SVGRenderer {
         return result;
     }
 
-    /**
-     * Рендерит все функции в одном SVG, расположенных горизонтально.
-     * Между схемами — вертикальный разделитель, над каждой — подпись с именем функции.
-     */
     public String renderAllInOne(Map<String, FlowchartNode> functions) {
         List<String> names = sortedFunctionNames(functions.keySet());
         if (names.isEmpty()) return "<svg xmlns=\"http://www.w3.org/2000/svg\"/>";
         if (names.size() == 1) return render(functions.get(names.get(0)));
 
-        // Рендерим каждую функцию и собираем данные
-        double GAP_BETWEEN   = 80;   // горизонтальный зазор между схемами
-        double LABEL_HEIGHT  = 30;   // высота подписи имени функции над схемой
+        double GAP_BETWEEN   = 80;
+        double LABEL_HEIGHT  = 30;
         double padding       = 60;
 
-        // [0]=name, [1]=inner, [2]=vbX, [3]=vbY, [4]=vbW, [5]=vbH
         List<Object[]> parts = new ArrayList<>();
 
         for (String name : names) {
@@ -139,7 +145,6 @@ public class SVGRenderer {
             parts.add(new Object[]{name, inner, vb[0], vb[1], vb[2], vb[3]});
         }
 
-        // Вычисляем суммарные размеры
         double totalW = 0;
         double maxH   = 0;
         for (Object[] p : parts) {
@@ -162,7 +167,6 @@ public class SVGRenderer {
                         "preserveAspectRatio=\"xMidYMin meet\">\n",
                 svgW, svgH));
 
-        // Общие defs (arrowhead + styles) — один раз
         out.append("<defs>\n");
         out.append("<marker id=\"arrow\" markerWidth=\"10\" markerHeight=\"10\" refX=\"9\" refY=\"5\" orient=\"auto\">\n");
         out.append("<path d=\"M0,0 L10,5 L0,10 z\" fill=\"black\"/>\n");
@@ -177,7 +181,6 @@ public class SVGRenderer {
         out.append("</style>\n");
         out.append("</defs>\n");
 
-        // Размещаем каждую схему
         double curX = 0;
         for (int i = 0; i < parts.size(); i++) {
             Object[] p    = parts.get(i);
@@ -188,14 +191,12 @@ public class SVGRenderer {
             double pVbW   = (double) p[4];
             double pVbH   = (double) p[5];
 
-            // Подпись функции над схемой
             double labelX = curX + pVbW / 2;
             double labelY = LABEL_HEIGHT / 2 + 5;
             out.append(String.format(Locale.US,
                     "<text class=\"func-label\" x=\"%.1f\" y=\"%.1f\">%s</text>\n",
                     labelX, labelY, escapeXml(pName)));
 
-            // Группа со сдвигом: переносим vbX→curX, vbY→LABEL_HEIGHT
             double tx = curX - pVbX;
             double ty = LABEL_HEIGHT - pVbY;
             out.append(String.format(Locale.US,
@@ -203,7 +204,6 @@ public class SVGRenderer {
             out.append(pInner);
             out.append("</g>\n");
 
-            // Вертикальный разделитель между схемами
             if (i < parts.size() - 1) {
                 double sepX = curX + pVbW + GAP_BETWEEN / 2;
                 out.append(String.format(Locale.US,
@@ -219,7 +219,6 @@ public class SVGRenderer {
         return out.toString();
     }
 
-    /** Парсит viewBox из SVG-строки, возвращает [x, y, w, h]. */
     private double[] parseViewBox(String svg) {
         int idx = svg.indexOf("viewBox=\"");
         if (idx < 0) return new double[]{0, 0, 800, 600};
@@ -234,14 +233,9 @@ public class SVGRenderer {
         };
     }
 
-    /**
-     * Извлекает SVG-контент без оберточного тега и без блока <defs>…</defs>.
-     * Т.е. всё что между </defs> и </svg>.
-     */
     private String extractInnerContent(String svgStr) {
         int defsEnd = svgStr.indexOf("</defs>");
         if (defsEnd < 0) {
-            // Нет defs — берём всё между <svg...> и </svg>
             int svgOpen = svgStr.indexOf('>') + 1;
             int svgClose = svgStr.lastIndexOf("</svg>");
             return svgStr.substring(svgOpen, svgClose);
@@ -251,7 +245,6 @@ public class SVGRenderer {
         return svgStr.substring(contentStart, svgClose);
     }
 
-    /** Сортирует имена функций: main первый, остальные по алфавиту. */
     private List<String> sortedFunctionNames(java.util.Collection<String> names) {
         List<String> sorted = new ArrayList<>(names);
         sorted.sort((a, b) -> {
@@ -317,7 +310,7 @@ public class SVGRenderer {
     }
 
     private void renderProcess(FlowchartNode node, double x, double y) {
-        double maxW = PROCESS_WIDTH - 16; // отступы по 8px
+        double maxW = PROCESS_WIDTH - 16;
         List<String> lines = wrapText(node.getLabel(), maxW, 13);
         double lineH   = 18;
         double minH    = PROCESS_HEIGHT;
@@ -345,6 +338,81 @@ public class SVGRenderer {
         node.setSize(w, h);
         drawDiamondWithText(x, y, w, h, node.getLabel());
 
+        // Проверяем: одна ветка — return, другая — продолжение (или null/else)
+        boolean trueIsReturn  = chainEndsWithReturn(node.getTrueBranch());
+        boolean falseIsReturn = chainEndsWithReturn(node.getFalseBranch());
+        boolean hasReturn     = trueIsReturn || falseIsReturn;
+        boolean onlyOneReturn = hasReturn && !(trueIsReturn && falseIsReturn);
+
+        if (onlyOneReturn) {
+            // return-ветка: ДА из правой вершины, НЕТ/else из нижней вершины
+            FlowchartNode returnBranch = trueIsReturn ? node.getTrueBranch() : node.getFalseBranch();
+            FlowchartNode elseBranch   = trueIsReturn ? node.getFalseBranch() : node.getTrueBranch();
+            String returnLabel = trueIsReturn ? "ДА" : "НЕТ";
+            String elseLabel   = trueIsReturn ? "НЕТ" : "ДА";
+
+            double rightTipX  = x + halfW;
+            double rightTipY  = y + halfH;
+            double bottomTipY = y + h;
+
+            // return-ветка из правой вершины вправо
+            double retColX   = x + HORIZONTAL_SPACING;
+            double colStartY = bottomTipY + VERTICAL_SPACING;
+            trackX(retColX + PROCESS_WIDTH / 2);
+            labelText(returnLabel, rightTipX + 10, rightTipY - 10);
+            line(rightTipX, rightTipY, retColX, rightTipY);
+
+            double retColEndY;
+            if (isBreak(returnBranch)) {
+                retColEndY = rightTipY;
+            } else {
+                arrow(retColX, rightTipY, retColX, colStartY);
+                retColEndY = renderBreakColumnChain(returnBranch, retColX, colStartY, null);
+            }
+
+            double exitFromY = (retColEndY <= rightTipY + 1) ? rightTipY : retColEndY;
+            loopReturnExits.add(new double[]{retColX, exitFromY});
+
+            // else/продолжение из нижней вершины вниз
+            labelText(elseLabel, x + 8, bottomTipY + 15);
+
+            double blockH = Math.max(h, retColEndY - y + VERTICAL_SPACING);
+            node.setSize(w, blockH);
+            updateMaxY(y + blockH);
+
+            // Определяем первый общий узел после if (stopAt для else-тела)
+            FlowchartNode afterIf = null;
+            for (FlowchartNode n : node.getNext()) {
+                if (n != returnBranch && n != elseBranch) { afterIf = n; break; }
+            }
+
+            // Рисуем else-тело (если есть), потом следующие блоки — всё в центральной колонке
+            if (elseBranch != null && !isBreak(elseBranch)) {
+                double elseStartY = bottomTipY + VERTICAL_SPACING;
+                arrow(x, bottomTipY, x, elseStartY);
+                double elseEndY = renderBreakColumnChain(elseBranch, x, elseStartY, null, afterIf);
+                if (afterIf != null && !rendered.contains(afterIf)) {
+                    double nextY = elseEndY + VERTICAL_SPACING;
+                    arrow(x, elseEndY, x, nextY - 5);
+                    renderNode(afterIf, x, nextY, stopBefore);
+                } else {
+                    endArrowFromX = x;
+                    endArrowFromY = elseEndY;
+                }
+            } else {
+                // нет else — следующие блоки сразу от нижней вершины
+                if (afterIf != null && !rendered.contains(afterIf)) {
+                    double nextY = bottomTipY + VERTICAL_SPACING;
+                    arrow(x, bottomTipY, x, nextY - 5);
+                    renderNode(afterIf, x, nextY, stopBefore);
+                } else {
+                    endArrowFromX = x;
+                    endArrowFromY = bottomTipY;
+                }
+            }
+            return;
+        }
+
         double branchY = y + h + VERTICAL_SPACING;
         double leftX   = x - HORIZONTAL_SPACING;
         trackX(leftX - PROCESS_WIDTH / 2);
@@ -358,18 +426,14 @@ public class SVGRenderer {
             arrow(leftX, branchY - 5, leftX, branchY);
             labelText("ДА", x - halfW - 30, y + halfH - 10);
 
-            // Запоминаем maxX до рендеринга левой ветки
-            double maxXBefore = maxX;
             renderNode(node.getTrueBranch(), leftX, branchY, stopBefore);
             leftBottom = branchY + branchHeight(node.getTrueBranch(), stopBefore);
 
-            // Если левая ветка расширила maxX, правую ветку отодвигаем дальше
             double minRightX = x + HORIZONTAL_SPACING;
             double rightX = Math.max(minRightX, maxX + HORIZONTAL_SPACING / 2);
 
             if (node.getFalseBranch() != null) {
                 trackX(rightX + PROCESS_WIDTH / 2);
-                // FIX Bug 1: draw arrow (not just line) for the НЕТ branch going right then down
                 line(x + halfW, y + halfH, rightX, y + halfH);
                 arrow(rightX, y + halfH, rightX, branchY - 5);
                 arrow(rightX, branchY - 5, rightX, branchY);
@@ -377,7 +441,6 @@ public class SVGRenderer {
                 renderNode(node.getFalseBranch(), rightX, branchY, stopBefore);
                 rightBottom = branchY + branchHeight(node.getFalseBranch(), stopBefore);
             } else {
-                // No false branch: НЕТ arrow goes right then down to merge
                 rightBottom = leftBottom;
             }
 
@@ -391,7 +454,6 @@ public class SVGRenderer {
                 line(rightX, rightBottom, rightX, mergeY);
                 line(rightX, mergeY, x, mergeY);
             } else {
-                // FIX Bug 1: when no false branch, draw НЕТ path to the right and down to mergeY
                 double noElseRightX = x + HORIZONTAL_SPACING;
                 trackX(noElseRightX + 5);
                 line(x + halfW, y + halfH, noElseRightX, y + halfH);
@@ -421,7 +483,6 @@ public class SVGRenderer {
             return;
         }
 
-        // Случай когда trueBranch == null (только else)
         double rightX = x + HORIZONTAL_SPACING;
         trackX(rightX + PROCESS_WIDTH / 2);
 
@@ -495,12 +556,13 @@ public class SVGRenderer {
         return loop.getHeight();
     }
 
-    // ── LOOP ──────────────────────────────────────────────────────────────────
-
     private void renderLoop(LoopStartNode node, double x, double y, FlowchartNode stopBefore) {
         double w = DECISION_WIDTH;
         double h = diamondHeight(node.getLabel());
         double halfW = w / 2, halfH = h / 2;
+
+        // Середина входящей стрелки сверху — точка присоединения обратной стрелки цикла
+        double incomingArrowMidY = y - VERTICAL_SPACING / 2;
 
         drawDiamondWithText(x, y, w, h, node.getLabel());
 
@@ -512,8 +574,9 @@ public class SVGRenderer {
         labelText("ДА", x + halfW + 10, y + halfH - 10);
 
         currentLoopReturnRightX = Double.MAX_VALUE;
+        lastBodyBlockX = Double.NaN;
+        lastBodyBlockBottomY = Double.NaN;
 
-        // Сохраняем координаты — тело цикла не должно перезаписывать точку выхода.
         double savedEndArrowFromX = endArrowFromX;
         double savedEndArrowFromY = endArrowFromY;
 
@@ -521,7 +584,6 @@ public class SVGRenderer {
         double bodyEndY = renderLoopBodyChain(bodyChain, rightX, branchY, node);
         if (bodyEndY < 0) bodyEndY = -bodyEndY;
 
-        // Восстанавливаем координаты
         endArrowFromX = savedEndArrowFromX;
         endArrowFromY = savedEndArrowFromY;
 
@@ -535,27 +597,64 @@ public class SVGRenderer {
         for (double[] g : breakGeometry.values()) {
             boolean isContinueDec = (g.length > 4 && g[4] == 1.0);
             if (isContinueDec) continue;
-            double netColEndY = g[3];
-            maxCornerY = Math.max(maxCornerY, netColEndY + VERTICAL_SPACING / 2);
+            boolean isNewFmt = (g.length > 10 && g[10] == 1.0);
+            if (isNewFmt) {
+                // Для нового формата: break-ветка в g[2], нижняя вершина ромба в g[3]
+                double breakEndY = g[2];
+                double tipY      = (g.length > 5) ? g[5] : 0;
+                boolean isBare   = (breakEndY <= tipY + 1);
+                double effectiveEndY = isBare ? tipY : breakEndY;
+                maxCornerY = Math.max(maxCornerY, effectiveEndY + VERTICAL_SPACING / 2);
+            } else {
+                double netColEndY = g[3];
+                maxCornerY = Math.max(maxCornerY, netColEndY + VERTICAL_SPACING / 2);
+            }
         }
 
         double exitY = maxCornerY + VERTICAL_SPACING / 2;
 
-        double contTargetY = y - VERTICAL_SPACING / 2;
+        // Стрелка возврата приходит к середине входящей стрелки к ромбу
+        double contTargetY = incomingArrowMidY;
 
         for (double[] g : breakGeometry.values()) {
             double daColX     = g[0];
             double netColX    = g[1];
             double daColEndY  = g[2];
             double netColEndY = g[3];
-            boolean isContinueDec = (g.length > 4 && g[4] == 1.0);
-            double tipY      = (g.length > 5) ? g[5] : 0;
-            double colStartY = (g.length > 6) ? g[6] : tipY + DECISION_HEIGHT / 2 + VERTICAL_SPACING;
-
+            boolean isContinueDec  = (g.length > 4  && g[4] == 1.0);
+            double tipY            = (g.length > 5)  ? g[5] : 0;
+            double colStartY       = (g.length > 6)  ? g[6] : tipY + DECISION_HEIGHT / 2 + VERTICAL_SPACING;
             double routingNetColEndY = (g.length > 8) ? g[8] : netColEndY;
+            boolean isReturnBreak  = (g.length > 9  && g[9] == 1.0);
+            boolean isNewFormat    = (g.length > 10 && g[10] == 1.0);
 
             boolean daBare  = (daColEndY  <= colStartY + 1);
             boolean netBare = (routingNetColEndY <= colStartY + 1);
+
+            if (isNewFormat) {
+                // Новый формат: ДА из правой вершины (breakColX=daColX), НЕТ из нижней
+                // breakColEndY = daColEndY (если не bare, это низ последнего блока в break-ветке)
+                double breakColX   = daColX;
+                double breakEndY   = daColEndY; // tipY если bare, иначе низ блока
+                boolean isBare     = (breakEndY <= tipY + 1);
+
+                if (isReturnBreak) {
+                    // return → линия вниз из breakColX, затем к loopReturnExits
+                    double exitFromY = isBare ? tipY : breakEndY;
+                    loopReturnExits.add(new double[]{breakColX, exitFromY});
+                    trackX(breakColX + 5);
+                } else {
+                    // break → линия вниз из breakColX до exitY, стрелка влево к центру
+                    double breakJoinY = exitY - VERTICAL_SPACING / 2;
+                    double exitFromY  = isBare ? tipY : breakEndY;
+                    line(breakColX, exitFromY, breakColX, breakJoinY);
+                    arrow(breakColX, breakJoinY, x + 1, breakJoinY);
+                    trackX(breakColX + 5);
+                    // Обновляем exitY если нужно
+                    if (breakJoinY + VERTICAL_SPACING / 2 > exitY) exitY = breakJoinY + VERTICAL_SPACING / 2;
+                }
+                continue;
+            }
 
             if (isContinueDec) {
                 double tailBottom    = netColEndY;
@@ -578,12 +677,12 @@ public class SVGRenderer {
                 if (netHasBlocks) {
                     line(netBlockRightX, netMidRightY, returnRightX, netMidRightY);
                     line(returnRightX, netMidRightY, returnRightX, contTargetY);
-                    arrow(returnRightX, contTargetY, x + 5, contTargetY);
+                    arrow(returnRightX, contTargetY, x + 1, contTargetY);
                     trackX(returnRightX + 5);
                 } else {
                     line(netColX, tipY, returnRightX, tipY);
                     line(returnRightX, tipY, returnRightX, contTargetY);
-                    arrow(returnRightX, contTargetY, x + 5, contTargetY);
+                    arrow(returnRightX, contTargetY, x + 1, contTargetY);
                     trackX(netColX + 5);
                     trackX(returnRightX + 5);
                 }
@@ -629,10 +728,16 @@ public class SVGRenderer {
                     if (contLoopDownY + VERTICAL_SPACING / 2 > exitY) exitY = contLoopDownY + VERTICAL_SPACING / 2;
                 }
 
+            } else if (isReturnBreak) {
+                double blockBottomY = daBare ? tipY : daColEndY;
+                loopReturnExits.add(new double[]{daColX, blockBottomY});
+                trackX(daColX - 5);
+
             } else {
                 double tailEndY    = netColEndY;
                 boolean hasTailInNet = tailEndY > colStartY + 1;
-                double backTargetY = y - VERTICAL_SPACING / 2;
+                // Стрелка возврата приходит к середине входящей стрелки к ромбу
+                double backTargetY = incomingArrowMidY;
 
                 double netCornerY;
                 if (hasTailInNet) {
@@ -640,7 +745,7 @@ public class SVGRenderer {
                     double netMidRightY = tailEndY - PROCESS_HEIGHT / 2;
                     line(netMidRightX, netMidRightY, returnRightX, netMidRightY);
                     line(returnRightX, netMidRightY, returnRightX, backTargetY);
-                    arrow(returnRightX, backTargetY, x + 5, backTargetY);
+                    arrow(returnRightX, backTargetY, x + 1, backTargetY);
                     trackX(returnRightX + 5);
                     netCornerY = netMidRightY;
                     if (netCornerY + VERTICAL_SPACING / 2 > exitY) {
@@ -650,7 +755,7 @@ public class SVGRenderer {
                     netCornerY = tipY;
                     line(netColX, tipY, returnRightX, tipY);
                     line(returnRightX, netCornerY, returnRightX, backTargetY);
-                    arrow(returnRightX, backTargetY, x + 5, backTargetY);
+                    arrow(returnRightX, backTargetY, x + 1, backTargetY);
                     trackX(returnRightX + 5);
                 }
 
@@ -666,27 +771,40 @@ public class SVGRenderer {
             }
         }
 
-        if (breakGeometry.isEmpty()) {
-            double backStartX  = Double.isNaN(lastBodyBlockX) ? rightX : lastBodyBlockX;
-            double backCornerY = bodyEndY + VERTICAL_SPACING / 2;
-            double backTargetY = y - VERTICAL_SPACING / 2;
-            line(backStartX, bodyEndY, backStartX, backCornerY);
-            line(backStartX, backCornerY, returnRightX, backCornerY);
-            line(returnRightX, backCornerY, returnRightX, backTargetY);
-            arrow(returnRightX, backTargetY, x + 5, backTargetY);
-            trackX(returnRightX + 5);
+        // ИСПРАВЛЕНИЕ: стрелка возврата от правого края последнего блока тела цикла (del++)
+        // Раньше линия начиналась от bodyEndY (точки слияния после if), теперь — от реального
+        // нижнего правого угла блока del++, сохранённого в lastBodyBlockBottomY
+        if (!Double.isNaN(lastBodyBlockX)) {
+            boolean hasNonReturnBreaks = false;
+            for (double[] g : breakGeometry.values()) {
+                boolean isContinueDec = (g.length > 4 && g[4] == 1.0);
+                boolean isReturnBreak = (g.length > 9 && g[9] == 1.0);
+                if (!isContinueDec && !isReturnBreak) {
+                    hasNonReturnBreaks = true;
+                    break;
+                }
+            }
+
+            if (!hasNonReturnBreaks) {
+                double backStartX  = lastBodyBlockX;
+                // ИСПРАВЛЕНИЕ: используем реальный низ блока del++, а не bodyEndY (точку слияния)
+                double blockBottom = Double.isNaN(lastBodyBlockBottomY) ? bodyEndY : lastBodyBlockBottomY;
+                // Стрелка идёт к середине входящей стрелки к ромбу цикла
+                double backTargetY = incomingArrowMidY;
+                // Линия начинается из середины правого бока блока del++
+                double rightEdgeX  = backStartX + PROCESS_WIDTH / 2;
+                double midRightY   = blockBottom - PROCESS_HEIGHT / 2;
+                line(rightEdgeX, midRightY, returnRightX, midRightY);
+                line(returnRightX, midRightY, returnRightX, backTargetY);
+                arrow(returnRightX, backTargetY, x + 1, backTargetY);
+                trackX(returnRightX + 5);
+            }
         }
 
         updateMaxY(bodyEndY);
 
         if (node.getExitNode() != null) {
-            // Если exitNode — терминал «конец»: не рисуем стрелку здесь.
-            // render() сам нарисует стрелку от endArrowFromY до терминала.
-            // Если цикл вложен внутрь if/else, renderDecision возьмёт branchHeight
-            // и нарисует линию слияния на mergeY, откуда уже пойдёт к терминалу.
             if (node.getExitNode() instanceof TerminalNode t && !t.isStart()) {
-                // Рисуем линию (без стрелки) от низа ромба до exitY —
-                // это выход по НЕТ из цикла. Стрелку к терминалу нарисует render().
                 line(x, diamondBottom, x, exitY);
                 endNode = t;
                 endArrowFromX = x;
@@ -710,6 +828,15 @@ public class SVGRenderer {
             List<FlowchartNode> exitNextList = node.getExitNode().getNext();
             if (!exitNextList.isEmpty()) {
                 FlowchartNode exitNext = exitNextList.get(0);
+
+                if (exitNext instanceof ConnectorNode conn && "return".equals(conn.getLabel())) {
+                    rendered.add(conn);
+                    for (FlowchartNode returnNext : conn.getNext()) {
+                        exitNext = returnNext;
+                        break;
+                    }
+                }
+
                 if (exitNext instanceof TerminalNode t && !t.isStart()) {
                     endNode = t;
                     endArrowFromX = x;
@@ -779,12 +906,15 @@ public class SVGRenderer {
                 updateMaxY(currentY + PROCESS_HEIGHT);
 
                 double nodeBottom = currentY + PROCESS_HEIGHT;
+                lastBodyBlockX = x;
+                // ИСПРАВЛЕНИЕ: запоминаем точную нижнюю границу этого блока
+                lastBodyBlockBottomY = nodeBottom;
+
                 if (nextNode != null) {
                     double nextY = nodeBottom + VERTICAL_SPACING;
                     arrow(x, nodeBottom, x, nextY - 5);
                     currentY = nextY;
                 } else {
-                    lastBodyBlockX = x;
                     return nodeBottom;
                 }
 
@@ -803,29 +933,46 @@ public class SVGRenderer {
                     if (nextNode != null) {
                         double[] g = breakGeometry.get(decisionNode);
                         if (g != null) {
-                            double tailColX   = g[1];
-                            double colStartY  = g[6];
-                            double origNetEnd = g[3];
-                            boolean columnWasBare = (origNetEnd <= colStartY + 1);
+                            boolean isNewFmt = (g.length > 10 && g[10] == 1.0);
 
-                            double[] extended = Arrays.copyOf(g, 9);
-                            extended[8] = origNetEnd;
-                            breakGeometry.put(decisionNode, extended);
-                            g = extended;
-
-                            if (columnWasBare) {
-                                arrow(tailColX, g[5], tailColX, colStartY);
-                                double tailEndY = renderTailBlocks(tail, tailColX, colStartY, false);
-                                g[3] = tailEndY;
-                                blockBottom = Math.max(-mergeY, tailEndY);
+                            if (isNewFmt) {
+                                // Новый формат: НЕТ выходит из нижней вершины (g[1]=x, g[3]=bottomTipY)
+                                double bottomX    = g[1];  // = x (центр ромба)
+                                double bottomTipY = g[3];  // = y + h
+                                double nextY = bottomTipY + VERTICAL_SPACING;
+                                arrow(bottomX, bottomTipY, bottomX, nextY - 5);
+                                currentY = nextY;
+                                // tail рисуется дальше в следующей итерации через currentY
+                                blockBottom = bottomTipY;
                             } else {
-                                double tailEndY = renderTailBlocks(tail, tailColX, origNetEnd, true);
-                                g[3] = tailEndY;
-                                blockBottom = Math.max(-mergeY, tailEndY);
+                                double tailColX   = g[1];
+                                double colStartY  = g[6];
+                                double origNetEnd = g[3];
+                                boolean columnWasBare = (origNetEnd <= colStartY + 1);
+
+                                double[] extended = Arrays.copyOf(g, Math.max(11, g.length));
+                                extended[8] = origNetEnd;
+                                breakGeometry.put(decisionNode, extended);
+                                g = extended;
+
+                                if (columnWasBare) {
+                                    arrow(tailColX, g[5], tailColX, colStartY);
+                                    double tailEndY = renderTailBlocks(tail, tailColX, colStartY, false);
+                                    g[3] = tailEndY;
+                                    blockBottom = Math.max(-mergeY, tailEndY);
+                                } else {
+                                    double tailEndY = renderTailBlocks(tail, tailColX, origNetEnd, true);
+                                    g[3] = tailEndY;
+                                    blockBottom = Math.max(-mergeY, tailEndY);
+                                }
                             }
                         }
                     }
-                    return -blockBottom;
+                    if (!((breakGeometry.get(decisionNode) != null && breakGeometry.get(decisionNode).length > 10 && breakGeometry.get(decisionNode)[10] == 1.0) && nextNode != null)) {
+                        return -blockBottom;
+                    }
+                    // для нового формата с nextNode — продолжаем цикл (currentY уже обновлён)
+                    continue;
                 }
 
                 if (nextNode != null) {
@@ -867,7 +1014,6 @@ public class SVGRenderer {
 
         boolean insideDoWhile = (doWhileLoop != null);
 
-        // ── CONTINUE DECISION ─────────────────────────────────────────────────
         if (isContinueDecision && !isBreakDecision) {
             FlowchartNode contBranch   = trueEndsWithContinue ? node.getTrueBranch()  : node.getFalseBranch();
             FlowchartNode normalBranch = trueEndsWithContinue ? node.getFalseBranch() : node.getTrueBranch();
@@ -940,20 +1086,39 @@ public class SVGRenderer {
             }
         }
 
-        // ── BREAK DECISION inside DO-WHILE ───────────────────────────────────
         if (isBreakDecision && insideDoWhile) {
             FlowchartNode breakBranch  = trueEndsWithBreak ? node.getTrueBranch()  : node.getFalseBranch();
             FlowchartNode normalBranch = trueEndsWithBreak ? node.getFalseBranch() : node.getTrueBranch();
             String breakLabel  = trueEndsWithBreak ? "ДА"  : "НЕТ";
             String normalLabel = trueEndsWithBreak ? "НЕТ" : "ДА";
 
-            double rightTipX = x + halfW;
-            double rightTipY = y + halfH;
+            double rightTipX  = x + halfW;
+            double rightTipY  = y + halfH;
             double bottomTipX = x;
             double bottomTipY = y + h;
 
             labelText(breakLabel, rightTipX + 10, rightTipY - 10);
-            doWhileBreakExits.add(new double[]{rightTipX, rightTipY, 2.0});
+
+            // Рисуем тело break/return-ветки вправо
+            double breakColX   = x + HORIZONTAL_SPACING;
+            double colStartY   = bottomTipY + VERTICAL_SPACING;
+            trackX(breakColX + PROCESS_WIDTH / 2);
+            line(rightTipX, rightTipY, breakColX, rightTipY);
+
+            double breakColEndY;
+            if (isBreak(breakBranch)) {
+                // Голый break/return без значения
+                breakColEndY = rightTipY;
+            } else {
+                arrow(breakColX, rightTipY, breakColX, colStartY);
+                breakColEndY = renderBreakColumnChain(breakBranch, breakColX, colStartY, null);
+            }
+
+            // Регистрируем нижнюю середину блока (середина нижней горизонтальной линии)
+            double exitFromY = (breakColEndY <= rightTipY + 1)
+                    ? rightTipY
+                    : breakColEndY;
+            doWhileBreakExits.add(new double[]{breakColX, exitFromY});
 
             labelText(normalLabel, bottomTipX + 8, bottomTipY + 15);
 
@@ -964,12 +1129,12 @@ public class SVGRenderer {
                 normalEndY = bottomTipY;
             }
 
-            node.setSize(w, normalEndY - y);
-            updateMaxY(normalEndY);
-            return normalEndY;
+            double blockBottom = Math.max(Math.abs(normalEndY), breakColEndY);
+            node.setSize(w, blockBottom - y);
+            updateMaxY(blockBottom);
+            return Math.abs(normalEndY);
         }
 
-        // ── BREAK DECISION ────────────────────────────────────────────────────
         if (isBreakDecision) {
             FlowchartNode breakBranch    = trueEndsWithBreak ? node.getTrueBranch()  : node.getFalseBranch();
             FlowchartNode continueBranch = trueEndsWithBreak ? node.getFalseBranch() : node.getTrueBranch();
@@ -1009,7 +1174,16 @@ public class SVGRenderer {
             }
 
             double netBareFlag = netIsBare ? 1.0 : 0.0;
-            breakGeometry.put(node, new double[]{daColX, netColX, daColEndY, netColEndY, 0.0, tipY, colStartY, netBareFlag});
+
+            boolean breakIsReturn = chainEndsWithReturn(breakBranch);
+            double returnBreakFlag = breakIsReturn ? 1.0 : 0.0;
+
+            breakGeometry.put(node, new double[]{
+                    daColX, netColX, daColEndY, netColEndY,
+                    0.0, tipY, colStartY, netBareFlag,
+                    0.0,
+                    returnBreakFlag
+            });
 
             double blockBottom = Math.max(daColEndY, netColEndY) + VERTICAL_SPACING;
             node.setSize(w, blockBottom - y);
@@ -1017,7 +1191,6 @@ public class SVGRenderer {
             return -blockBottom;
         }
 
-        // ── NORMAL DECISION ───────────────────────────────────────────────────
         double branchY = y + h + VERTICAL_SPACING;
         double leftX   = x - HORIZONTAL_SPACING;
         double rightX  = x + HORIZONTAL_SPACING;
@@ -1071,10 +1244,14 @@ public class SVGRenderer {
     }
 
     private double renderBreakColumnChain(FlowchartNode start, double x, double startY) {
-        return renderBreakColumnChain(start, x, startY, null);
+        return renderBreakColumnChain(start, x, startY, null, null);
     }
 
     private double renderBreakColumnChain(FlowchartNode start, double x, double startY, LoopStartNode loop) {
+        return renderBreakColumnChain(start, x, startY, loop, null);
+    }
+
+    private double renderBreakColumnChain(FlowchartNode start, double x, double startY, LoopStartNode loop, FlowchartNode stopAt) {
         double currentY = startY;
         FlowchartNode cur = start;
 
@@ -1082,6 +1259,7 @@ public class SVGRenderer {
             if (cur instanceof ConnectorNode) break;
             if (cur instanceof LoopEndNode)   break;
             if (cur instanceof TerminalNode)  break;
+            if (stopAt != null && cur == stopAt) break;
             if (loop != null && cur == loop.getExitNode()) break;
 
             if (cur instanceof ProcessNode) {
@@ -1099,6 +1277,7 @@ public class SVGRenderer {
                     if (n instanceof ConnectorNode)              break;
                     if (n instanceof LoopEndNode)                break;
                     if (n instanceof TerminalNode)               break;
+                    if (stopAt != null && n == stopAt)           break;
                     if (loop != null && n == loop.getExitNode()) break;
                     next = n;
                     break;
@@ -1148,6 +1327,7 @@ public class SVGRenderer {
         }
 
         lastBodyBlockX = x;
+        lastBodyBlockBottomY = currentY;
         return currentY;
     }
 
@@ -1202,6 +1382,12 @@ public class SVGRenderer {
                         rendered.add(next);
                         return -nodeBottom;
                     }
+                    if (next instanceof ConnectorNode conn && "return".equals(conn.getLabel())) {
+                        double rightEdgeX = x + PROCESS_WIDTH / 2;
+                        doWhileBreakExits.add(new double[]{rightEdgeX, nodeBottom});
+                        rendered.add(conn);
+                        return -nodeBottom;
+                    }
                     double nextY = nodeBottom + VERTICAL_SPACING;
                     arrow(x, nodeBottom, x, nextY - 5);
                     currentY = nextY;
@@ -1230,7 +1416,8 @@ public class SVGRenderer {
     }
 
     private boolean isBreak(FlowchartNode node) {
-        return node instanceof ConnectorNode c && "break".equals(c.getLabel());
+        return node instanceof ConnectorNode c &&
+                ("break".equals(c.getLabel()) || "return".equals(c.getLabel()));
     }
 
     private boolean isContinue(FlowchartNode node) {
@@ -1243,6 +1430,17 @@ public class SVGRenderer {
         if (node instanceof ProcessNode) {
             for (FlowchartNode next : node.getNext()) {
                 if (chainEndsWithContinue(next)) return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean chainEndsWithReturn(FlowchartNode node) {
+        if (node == null) return false;
+        if (node instanceof ConnectorNode c && "return".equals(c.getLabel())) return true;
+        if (node instanceof ProcessNode) {
+            for (FlowchartNode next : node.getNext()) {
+                if (chainEndsWithReturn(next)) return true;
             }
         }
         return false;
@@ -1263,26 +1461,37 @@ public class SVGRenderer {
                 return;
             }
 
+            if (next instanceof ConnectorNode conn && "return".equals(conn.getLabel())) {
+                for (FlowchartNode returnNext : conn.getNext()) {
+                    if (returnNext instanceof TerminalNode t && !t.isStart()) {
+                        endNode = t;
+                        endArrowFromX = x;
+                        endArrowFromY = prevBottom;
+                        endArrowAlreadyDrawn = false;
+                        return;
+                    }
+                }
+                rendered.add(conn);
+                return;
+            }
+
             double nextY = prevBottom + VERTICAL_SPACING;
             arrow(x, prevBottom, x, nextY - 5);
             renderNode(next, x, nextY, stopBefore);
         }
     }
 
-    // ── DO-WHILE ──────────────────────────────────────────────────────────────
     private void renderDoWhile(DoWhileNode node, double x, double y, FlowchartNode stopBefore) {
         double arrowMidY = y - VERTICAL_SPACING / 2;
 
         List<double[]> continueExits = new ArrayList<>();
 
-        // Сохраняем координаты — тело do-while не должно перезаписывать точку выхода.
         double savedEndArrowFromX = endArrowFromX;
         double savedEndArrowFromY = endArrowFromY;
 
         double bodyEndY = renderDoWhileBody(node.getLoopBody(), node, x, y, continueExits);
         if (bodyEndY < 0) bodyEndY = -bodyEndY;
 
-        // Восстанавливаем только координаты
         endArrowFromX = savedEndArrowFromX;
         endArrowFromY = savedEndArrowFromY;
 
@@ -1354,24 +1563,6 @@ public class SVGRenderer {
         double dBottom = dY + dH;
         labelText("НЕТ", x + 8, dBottom + 15);
 
-        if (!doWhileBreakExits.isEmpty()) {
-            double breakJoinY = dBottom + VERTICAL_SPACING / 2;
-            double breakColX = maxX + BACK_ARROW_MARGIN;
-            trackX(breakColX + 5);
-
-            for (double[] exit : doWhileBreakExits) {
-                double exitX = exit[0];
-                double exitY2 = exit[1];
-                line(exitX, exitY2, breakColX, exitY2);
-            }
-
-            double topExitY = doWhileBreakExits.stream().mapToDouble(e -> e[1]).min().orElse(breakJoinY);
-            line(breakColX, topExitY, breakColX, breakJoinY);
-            arrow(breakColX, breakJoinY, x + 1, breakJoinY);
-
-            doWhileBreakExits.clear();
-        }
-
         if (node.getExitNode() != null) {
             FlowchartNode exitNode = node.getExitNode();
             if (exitNode instanceof TerminalNode t && !t.isStart()) {
@@ -1379,6 +1570,15 @@ public class SVGRenderer {
                 endArrowFromX = x;
                 endArrowFromY = dBottom;
                 node.setSize(dW, dBottom - y);
+                // return-выходы идут к середине стрелки к конец
+                if (!doWhileBreakExits.isEmpty()) {
+                    double breakJoinY = dBottom + VERTICAL_SPACING / 2;
+                    for (double[] exit : doWhileBreakExits) {
+                        line(exit[0], exit[1], exit[0], breakJoinY);
+                        arrow(exit[0], breakJoinY, x + 1, breakJoinY);
+                    }
+                    doWhileBreakExits.clear();
+                }
             } else {
                 double exitY = dBottom + VERTICAL_SPACING;
                 arrow(x, dBottom, x, exitY - 5);
@@ -1388,6 +1588,17 @@ public class SVGRenderer {
                 exitNode.setSize(PROCESS_WIDTH, PROCESS_HEIGHT);
                 updateMaxY(exitY + PROCESS_HEIGHT);
                 double exitBottom = exitY + PROCESS_HEIGHT;
+
+                // return-выходы идут к середине стрелки от exitNode к конец
+                if (!doWhileBreakExits.isEmpty()) {
+                    double breakJoinY = exitBottom + VERTICAL_SPACING / 2;
+                    for (double[] exit : doWhileBreakExits) {
+                        line(exit[0], exit[1], exit[0], breakJoinY);
+                        arrow(exit[0], breakJoinY, x + 1, breakJoinY);
+                    }
+                    doWhileBreakExits.clear();
+                }
+
                 List<FlowchartNode> exitNextList = exitNode.getNext();
                 if (!exitNextList.isEmpty()) {
                     FlowchartNode exitNext = exitNextList.get(0);
@@ -1407,6 +1618,15 @@ public class SVGRenderer {
             endArrowFromX = x;
             endArrowFromY = dBottom;
             node.setSize(dW, dBottom - y);
+            // return-выходы идут к середине стрелки к конец
+            if (!doWhileBreakExits.isEmpty()) {
+                double breakJoinY = dBottom + VERTICAL_SPACING / 2;
+                for (double[] exit : doWhileBreakExits) {
+                    line(exit[0], exit[1], exit[0], breakJoinY);
+                    arrow(exit[0], breakJoinY, x + 1, breakJoinY);
+                }
+                doWhileBreakExits.clear();
+            }
         }
     }
 
@@ -1429,6 +1649,11 @@ public class SVGRenderer {
                 return -currentY;
             }
             if (cur instanceof ConnectorNode conn && "break".equals(conn.getLabel())) {
+                doWhileBreakExits.add(new double[]{x + PROCESS_WIDTH / 2, currentY});
+                rendered.add(cur);
+                return -currentY;
+            }
+            if (cur instanceof ConnectorNode conn && "return".equals(conn.getLabel())) {
                 doWhileBreakExits.add(new double[]{x + PROCESS_WIDTH / 2, currentY});
                 rendered.add(cur);
                 return -currentY;
@@ -1460,6 +1685,13 @@ public class SVGRenderer {
                         rendered.add(next);
                         return -nodeBottom;
                     }
+                    if (next instanceof ConnectorNode conn && ("break".equals(conn.getLabel()) || "return".equals(conn.getLabel()))) {
+                        double rightEdgeX = x + PROCESS_WIDTH / 2;
+                        double midBlockY  = currentY + PROCESS_HEIGHT / 2;
+                        doWhileBreakExits.add(new double[]{rightEdgeX, midBlockY});
+                        rendered.add(next);
+                        return -nodeBottom;
+                    }
                     double nextY = nodeBottom + VERTICAL_SPACING;
                     arrow(x, nodeBottom, x, nextY - 5);
                     currentY = nextY;
@@ -1473,8 +1705,10 @@ public class SVGRenderer {
                 boolean falseIsContinue = chainEndsWithContinue(decNode.getFalseBranch());
                 boolean trueIsBreak     = chainEndsWithBreak(decNode.getTrueBranch());
                 boolean falseIsBreak    = chainEndsWithBreak(decNode.getFalseBranch());
+                boolean trueIsReturn    = chainEndsWithReturn(decNode.getTrueBranch());
+                boolean falseIsReturn   = chainEndsWithReturn(decNode.getFalseBranch());
                 boolean hasContinueBranch = trueIsContinue || falseIsContinue;
-                boolean hasBreakBranch    = trueIsBreak    || falseIsBreak;
+                boolean hasBreakBranch    = trueIsBreak    || falseIsBreak || trueIsReturn || falseIsReturn;
 
                 FlowchartNode afterIf = null;
                 for (FlowchartNode n : decNode.getNext()) {
@@ -1618,8 +1852,6 @@ public class SVGRenderer {
         }
         return null;
     }
-
-    // ── TEXT WRAPPING HELPERS ─────────────────────────────────────────────────
 
     private static final double CHAR_WIDTH_PX = 7.2;
     private static final double LINE_HEIGHT   = 17.0;
