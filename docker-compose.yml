@@ -1,16 +1,98 @@
 services:
+
+  # ── Infrastructure ──────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: codeviz-redis
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: codeviz-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: server_code_visualization
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Go services ─────────────────────────────────────────────────
   semantic-analyzer:
     build:
       context: .
       dockerfile: Dockerfile
+    container_name: codeviz-semantic-analyzer
+    restart: unless-stopped
     ports:
       - "8082:8082"
-    restart: unless-stopped
 
   interpreter:
     build:
       context: .
       dockerfile: interpreter-service/Dockerfile
+    container_name: codeviz-interpreter
+    restart: unless-stopped
     ports:
       - "8084:8084"
+
+  # ── Java services ───────────────────────────────────────────────
+  auth-service:
+    build:
+      context: ./auth_service
+      dockerfile: Dockerfile
+    container_name: codeviz-auth
     restart: unless-stopped
+    ports:
+      - "8083:8083"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/server_code_visualization
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: postgres
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  flowchart-visualizer:
+    build:
+      context: ./flowchart-visualizer
+      dockerfile: Dockerfile
+    container_name: codeviz-flowchart
+    restart: unless-stopped
+    ports:
+      - "8081:8081"
+    environment:
+      AST_SERVICE_URL: http://semantic-analyzer:8082
+    depends_on:
+      - semantic-analyzer
+
+  # ── Frontend ────────────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_AUTH_ENABLED: "true"
+        VITE_AUTH_SERVICE_URL: "http://localhost:8083"
+        VITE_FLOWCHART_SERVICE_URL: "http://localhost:8081"
+    container_name: codeviz-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    depends_on:
+      - auth-service
+      - flowchart-visualizer
+      - interpreter
+
+volumes:
+  pg_data:
