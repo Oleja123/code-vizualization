@@ -1,15 +1,16 @@
-version: "3.8"
 services:
-  db:
-    image: postgres:16
-    container_name: postgres-code-visualization
-    environment:
-      POSTGRES_DB: server_code_visualization
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+  semantic-analyzer:
+    build:
+      context: .
+      dockerfile: Dockerfile
     ports:
-      - "5432:5432"
-    volumes:
-      - pg_data:/var/lib/postgresql/data
-volumes:
-  pg_data:
+      - "8082:8082"
+    restart: unless-stopped
+
+  interpreter:
+    build:
+      context: .
+      dockerfile: interpreter-service/Dockerfile
+    ports:
+      - "8084:8084"
+    restart: unless-stopped
