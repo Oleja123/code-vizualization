@@ -9,62 +9,62 @@ type EnterScope struct{}
 type ExitScope struct{}
 
 type DeclareVar struct {
-	Name     string
-	Value    *int
-	IsGlobal bool
+	Name     string `json:"name"`
+	Value    *int   `json:"value"`
+	IsGlobal bool   `json:"isGlobal"`
 }
 
 type DeclareArray struct {
-	Name     string
-	Value    []runtime.ArrayElement
-	Size     int
-	IsGlobal bool
+	Name     string                 `json:"name"`
+	Value    []runtime.ArrayElement `json:"value"`
+	Size     int                    `json:"size"`
+	IsGlobal bool                   `json:"isGlobal"`
 }
 
 type DeclareArray2D struct {
-	Name     string
-	Value    []runtime.Array
-	Size1    int
-	Size2    int
-	IsGlobal bool
+	Name     string          `json:"name"`
+	Value    []runtime.Array `json:"value"`
+	Size1    int             `json:"size1"`
+	Size2    int             `json:"size2"`
+	IsGlobal bool            `json:"isGlobal"`
 }
 
 type VarChanged struct {
-	Name  string
-	Value int
+	Name  string `json:"name"`
+	Value int    `json:"value"`
 }
 
 type ArrayElementChanged struct {
-	Name  string
-	Ind   int
-	Value int
+	Name  string `json:"name"`
+	Ind   int    `json:"ind"`
+	Value int    `json:"value"`
 }
 
 type Array2DElementChanged struct {
-	Name  string
-	Ind1  int
-	Ind2  int
-	Value int
+	Name  string `json:"name"`
+	Ind1  int    `json:"ind1"`
+	Ind2  int    `json:"ind2"`
+	Value int    `json:"value"`
 }
 
 type FunctionCall struct {
-	Name string
+	Name string `json:"name"`
 	// каждый parameter в ast будет порождать DeclareVar
 }
 
 type FunctionReturn struct {
-	Name        string
-	ReturnValue *int // nil если void функция
+	Name        string `json:"name"`
+	ReturnValue *int   `json:"returnValue"` // nil если void функция
 }
 
 type LineChanged struct {
-	Line int
+	Line int `json:"line"`
 }
 
 type UndefinedBehavior struct {
-	Message string
+	Message string `json:"message"`
 }
 
 type RuntimeError struct {
-	Message string
+	Message string `json:"message"`
 }

@@ -8,8 +8,8 @@ import (
 )
 
 type Step struct {
-	Events     []events.Event
-	StepNumber int
+	Events     []events.Event `json:"events"`
+	StepNumber int            `json:"stepNumber"`
 }
 
 type EventDispatcher struct {
