@@ -1,4 +1,14 @@
 services:
+  redis:
+    image: redis:7-alpine
+    container_name: codeviz-redis
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      
   semantic-analyzer:
     build:
       context: .
@@ -14,3 +24,18 @@ services:
     ports:
       - "8084:8084"
     restart: unless-stopped
+    
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_AUTH_ENABLED: "false"
+        VITE_AUTH_SERVICE_URL: "http://localhost:8083"
+        VITE_FLOWCHART_SERVICE_URL: "http://localhost:8081"
+    container_name: codeviz-frontend
+    restart: unless-stopped
+    depends_on:
+      - interpreter
+    ports:
+      - "3000:80"
