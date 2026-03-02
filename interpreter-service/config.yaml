@@ -3,7 +3,7 @@ server:
 
 onecompiler:
   api_url: "https://api.onecompiler.com/api/v1"
-  api_key: "oc_44ej3ggmj_44ej3ggn4_9c8ec343d7c6bc4f3582e9e568f1a257af5da6af1c3a74f9"
+  api_key: "oc_44f56cbmw_44f56cbne_6fffa8296d99846a423510c98b43b42ebbe7915750c0c3b8"
   enabled: true
   timeout_seconds: 10
 

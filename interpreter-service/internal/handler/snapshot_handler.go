@@ -61,23 +61,6 @@ func NewSnapshotHandler(oneCompilerConfigPath string, cacher cache.Cacher) http.
 			return
 		}
 
-		program, parseErr := conv.ParseToAST(req.Code)
-		if parseErr != nil {
-			writeJSON(w, http.StatusBadRequest, SnapshotResponse{Success: false, Error: "parse error: " + parseErr.Error()})
-			return
-		}
-
-		if err := val.ValidateProgram(program, req.Code); err != nil {
-			var unavailableErr validator.CompileUnavailableError
-			if errors.As(err, &unavailableErr) {
-				writeJSON(w, http.StatusServiceUnavailable, SnapshotResponse{Success: false, Error: err.Error()})
-				return
-			}
-
-			writeJSON(w, http.StatusBadRequest, SnapshotResponse{Success: false, Error: "semantic error: " + err.Error()})
-			return
-		}
-
 		cacheKey := fmt.Sprintf("code:%s:max_elements:%d:max_steps:%d", req.Code, cfg.MaxAllocatedElements, cfg.MaxSteps)
 
 		var steps []eventdispatcher.Step
@@ -96,6 +79,23 @@ func NewSnapshotHandler(oneCompilerConfigPath string, cacher cache.Cacher) http.
 		}
 
 		if steps == nil && execErr == nil {
+			program, parseErr := conv.ParseToAST(req.Code)
+			if parseErr != nil {
+				writeJSON(w, http.StatusBadRequest, SnapshotResponse{Success: false, Error: "parse error: " + parseErr.Error()})
+				return
+			}
+
+			if err := val.ValidateProgram(program, req.Code); err != nil {
+				var unavailableErr validator.CompileUnavailableError
+				if errors.As(err, &unavailableErr) {
+					writeJSON(w, http.StatusServiceUnavailable, SnapshotResponse{Success: false, Error: err.Error()})
+					return
+				}
+
+				writeJSON(w, http.StatusBadRequest, SnapshotResponse{Success: false, Error: "semantic error: " + err.Error()})
+				return
+			}
+
 			runner := interpreter.NewInterpreterWithLimits(cfg.MaxAllocatedElements, cfg.MaxSteps)
 			result, steps, stepBegin, execErr = runner.ExecuteProgram(program)
 			if execErr != nil && steps == nil {
