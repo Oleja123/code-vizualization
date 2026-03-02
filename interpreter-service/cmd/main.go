@@ -50,7 +50,7 @@ func main() {
 		}
 	}
 
-	http.Handle("/snapshot", handler.NewSnapshotHandler(*configPath, cacher))
+	http.Handle("/snapshot", handler.NewSnapshotHandler(cfg, cacher))
 
 	address := fmt.Sprintf(":%d", listenPort)
 	log.Printf("interpreter-service listening on %s", address)

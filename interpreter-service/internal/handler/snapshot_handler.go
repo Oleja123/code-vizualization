@@ -33,9 +33,8 @@ type SnapshotResponse struct {
 	Snapshot    *snapshot.Snapshot `json:"snapshot,omitempty"`
 }
 
-func NewSnapshotHandler(oneCompilerConfigPath string, cacher cache.Cacher) http.HandlerFunc {
+func NewSnapshotHandler(cfg *configinfra.Config, cacher cache.Cacher) http.HandlerFunc {
 	conv := converter.New()
-	cfg := configinfra.LoadOrDefault(oneCompilerConfigPath)
 	val := buildValidator(cfg)
 
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -71,7 +70,7 @@ func NewSnapshotHandler(oneCompilerConfigPath string, cacher cache.Cacher) http.
 
 		if cacher != nil {
 			cachedInfo, err := cacher.Get(r.Context(), cacheKey)
-			if err == nil && cachedInfo.Value != nil {
+			if err == nil && (cachedInfo.Value != nil || cachedInfo.Err != nil) {
 				steps = cachedInfo.Value
 				stepBegin = cachedInfo.StepBegin
 				result = cachedInfo.Result
