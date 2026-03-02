@@ -1,0 +1,19 @@
+server:
+  port: 8080
+
+onecompiler:
+  api_url: "https://api.onecompiler.com/api/v1"
+  api_key: "oc_44f56cbmw_44f56cbne_6fffa8296d99846a423510c98b43b42ebbe7915750c0c3b8"
+  enabled: true
+  timeout_seconds: 10
+
+limitations:
+  max_allocated_elements: 100
+  max_steps: 1000
+
+redis:
+  host: "redis"
+  port: 6379
+  password: ""
+  db: 0
+  expiration: 24h
