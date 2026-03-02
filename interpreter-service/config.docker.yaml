@@ -17,3 +17,4 @@ redis:
   password: ""
   db: 0
   expiration: 24h
+  ping_attempts: 5

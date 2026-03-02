@@ -30,8 +30,7 @@ func main() {
 			DB:       cfg.RedisConfig.DB,
 		})
 
-		const maxRedisPingAttempts = 5
-		for attempt := 1; attempt <= maxRedisPingAttempts; attempt++ {
+		for attempt := 1; attempt <= cfg.PingAttempts; attempt++ {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			err := redisClient.Ping(ctx).Err()
 			cancel()
@@ -41,8 +40,8 @@ func main() {
 				break
 			}
 
-			if attempt == maxRedisPingAttempts {
-				log.Printf("redis disabled after %d attempts: %v", maxRedisPingAttempts, err)
+			if attempt == cfg.PingAttempts {
+				log.Printf("redis disabled after %d attempts: %v", cfg.PingAttempts, err)
 				cacher = nil
 				break
 			}

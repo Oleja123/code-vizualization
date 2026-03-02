@@ -33,11 +33,12 @@ type LimitationsConfig struct {
 }
 
 type RedisConfig struct {
-	Host       string        `yaml:"host"`
-	Port       int           `yaml:"port"`
-	Password   string        `yaml:"password"`
-	DB         int           `yaml:"db"`
-	Expiration time.Duration `yaml:"expiration"`
+	Host         string        `yaml:"host"`
+	Port         int           `yaml:"port"`
+	Password     string        `yaml:"password"`
+	DB           int           `yaml:"db"`
+	Expiration   time.Duration `yaml:"expiration"`
+	PingAttempts int           `yaml:"ping_attempts"`
 }
 
 func Default() *Config {
@@ -55,11 +56,12 @@ func Default() *Config {
 			MaxSteps:             1000,
 		},
 		RedisConfig: RedisConfig{
-			Host:       "localhost",
-			Port:       6379,
-			Password:   "",
-			DB:         0,
-			Expiration: 24 * time.Hour,
+			Host:         "localhost",
+			Port:         6379,
+			Password:     "",
+			DB:           0,
+			Expiration:   24 * time.Hour,
+			PingAttempts: 3,
 		},
 	}
 }
