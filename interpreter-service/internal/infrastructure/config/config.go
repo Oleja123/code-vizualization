@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"gopkg.in/yaml.v3"
 )
@@ -12,6 +13,7 @@ type Config struct {
 	ServerConfig      `yaml:"server"`
 	OneCompilerConfig `yaml:"onecompiler"`
 	LimitationsConfig `yaml:"limitations"`
+	RedisConfig       `yaml:"redis"`
 }
 
 type ServerConfig struct {
@@ -30,6 +32,14 @@ type LimitationsConfig struct {
 	MaxSteps             int `yaml:"max_steps"`
 }
 
+type RedisConfig struct {
+	Host       string        `yaml:"host"`
+	Port       int           `yaml:"port"`
+	Password   string        `yaml:"password"`
+	DB         int           `yaml:"db"`
+	Expiration time.Duration `yaml:"expiration"`
+}
+
 func Default() *Config {
 	return &Config{
 		ServerConfig: ServerConfig{
@@ -43,6 +53,13 @@ func Default() *Config {
 		LimitationsConfig: LimitationsConfig{
 			MaxAllocatedElements: 100,
 			MaxSteps:             1000,
+		},
+		RedisConfig: RedisConfig{
+			Host:       "localhost",
+			Port:       6379,
+			Password:   "",
+			DB:         0,
+			Expiration: 24 * time.Hour,
 		},
 	}
 }
