@@ -1,0 +1,196 @@
+package snapshot
+
+import (
+	"fmt"
+
+	"github.com/Oleja123/code-vizualization/interpreter-service/internal/domain/events"
+	"github.com/Oleja123/code-vizualization/interpreter-service/internal/domain/runtime"
+	runtimeerrors "github.com/Oleja123/code-vizualization/interpreter-service/internal/domain/runtime/errors"
+)
+
+type Snapshot struct {
+	CallStack    *runtime.CallStack `json:"call_stack"`
+	GlobalScope  *runtime.Scope     `json:"global_scope"`
+	Line         int                `json:"line"`
+	Error        string             `json:"error"`
+	FunctionName string             `json:"function_name"`
+	ReturnValue  *int               `json:"return_value"`
+}
+
+func NewSnapshot() *Snapshot {
+	globalScope := runtime.NewScope(nil)
+	return &Snapshot{
+		CallStack:   runtime.NewCallStack(globalScope),
+		GlobalScope: globalScope,
+		Line:        0,
+	}
+}
+
+func (sn *Snapshot) NewStep() {
+	sn.FunctionName = ""
+	sn.ReturnValue = nil
+}
+
+func (sn *Snapshot) Apply(event events.Event, step int) error {
+	switch e := event.(type) {
+	case events.EnterScope:
+		return sn.applyEnterScope()
+	case events.ExitScope:
+		return sn.applyExitScope()
+	case events.DeclareVar:
+		return sn.applyDeclareVar(e, step)
+	case events.DeclareArray:
+		return sn.applyDeclareArray(e, step)
+	case events.DeclareArray2D:
+		return sn.applyDeclareArray2D(e, step)
+	case events.VarChanged:
+		return sn.applyVarChanged(e, step)
+	case events.ArrayElementChanged:
+		return sn.applyArrayElementChanged(e, step)
+	case events.Array2DElementChanged:
+		return sn.applyArray2DElementChanged(e, step)
+	case events.FunctionCall:
+		return sn.applyFunctionCall(e)
+	case events.FunctionReturn:
+		return sn.applyFunctionReturn(e)
+	case events.LineChanged:
+		return sn.applyLineChanged(e)
+	case events.UndefinedBehavior:
+		return sn.applyUndefinedBehavior(e, step)
+	case events.RuntimeError:
+		return sn.applyRuntimeError(e, step)
+	default:
+		return runtimeerrors.NewErrUndefinedBehavior(fmt.Sprintf("unknown event type: %T", e))
+	}
+}
+
+func (sn *Snapshot) applyUndefinedBehavior(e events.UndefinedBehavior, step int) error {
+	sn.Error = e.Message
+	return nil
+}
+
+func (sn *Snapshot) applyRuntimeError(e events.RuntimeError, step int) error {
+	sn.Error = e.Message
+	return nil
+}
+
+func (sn *Snapshot) applyEnterScope() error {
+	frame := sn.CallStack.GetCurrentFrame()
+	if frame == nil {
+		return runtimeerrors.NewErrUnexpectedInternalError("no current frame for enter scope")
+	}
+	frame.EnterScope()
+	return nil
+}
+
+func (sn *Snapshot) applyExitScope() error {
+	frame := sn.CallStack.GetCurrentFrame()
+	if frame == nil {
+		return runtimeerrors.NewErrUnexpectedInternalError("no current frame for exit scope")
+	}
+	return frame.ExitScope()
+}
+
+func (sn *Snapshot) applyDeclareVar(e events.DeclareVar, step int) error {
+	variable := runtime.NewVariable(e.Name, e.Value, step, e.IsGlobal)
+	sn.CallStack.DeclareInCurrentFrame(variable)
+	return nil
+}
+
+func (sn *Snapshot) applyDeclareArray(e events.DeclareArray, step int) error {
+	arr := runtime.NewArray(e.Name, e.Size, e.Value, step, e.IsGlobal)
+	sn.CallStack.DeclareInCurrentFrame(arr)
+	return nil
+}
+
+func (sn *Snapshot) applyDeclareArray2D(e events.DeclareArray2D, step int) error {
+	arr := runtime.NewArray2D(e.Name, e.Size1, e.Size2, e.Value, step, e.IsGlobal)
+	sn.CallStack.DeclareInCurrentFrame(arr)
+	return nil
+}
+
+func (sn *Snapshot) applyVarChanged(e events.VarChanged, step int) error {
+	variable, ok := sn.CallStack.GetVariableInCurrentFrame(e.Name)
+	if !ok {
+		return runtimeerrors.NewErrUndefinedBehavior(fmt.Sprintf("variable %s not found", e.Name))
+	}
+	variable.ChangeValue(e.Value, step)
+	return nil
+}
+
+func (sn *Snapshot) applyArrayElementChanged(e events.ArrayElementChanged, step int) error {
+	arr, ok := sn.CallStack.GetArrayInCurrentFrame(e.Name)
+	if !ok {
+		return runtimeerrors.NewErrUndefinedBehavior(fmt.Sprintf("array %s not found", e.Name))
+	}
+	return arr.ChangeElement(e.Ind, e.Value, step)
+}
+
+func (sn *Snapshot) applyArray2DElementChanged(e events.Array2DElementChanged, step int) error {
+	arr, ok := sn.CallStack.GetArray2DInCurrentFrame(e.Name)
+	if !ok {
+		return runtimeerrors.NewErrUndefinedBehavior(fmt.Sprintf("array2d %s not found", e.Name))
+	}
+	return arr.ChangeElement(e.Ind1, e.Ind2, e.Value, step)
+}
+
+func (sn *Snapshot) applyFunctionCall(e events.FunctionCall) error {
+	if len(sn.CallStack.Frames) == 0 {
+		return runtimeerrors.NewErrUnexpectedInternalError("no frames in call stack")
+	}
+	globalScope := sn.CallStack.Frames[0].Scopes[0]
+	newFrame := runtime.NewStackFrame(e.Name, globalScope)
+	sn.CallStack.PushFrame(newFrame)
+	return nil
+}
+
+func (sn *Snapshot) applyFunctionReturn(e events.FunctionReturn) error {
+	frame := sn.CallStack.GetCurrentFrame()
+	if frame == nil {
+		return runtimeerrors.NewErrUnexpectedInternalError("no current frame for function return")
+	}
+	sn.FunctionName = e.Name
+	sn.ReturnValue = e.ReturnValue
+	if e.ReturnValue != nil {
+		frame.SetReturnValue(*e.ReturnValue)
+	}
+	return sn.CallStack.PopFrame()
+}
+
+func (sn *Snapshot) applyLineChanged(e events.LineChanged) error {
+	sn.Line = e.Line
+	return nil
+}
+
+func (sn *Snapshot) Reset() {
+	sn.GlobalScope = runtime.NewScope(nil)
+	sn.CallStack = runtime.NewCallStack(sn.GlobalScope)
+	sn.Line = -1
+	sn.Error = ""
+}
+
+// Методы для чтения текущего состояния
+
+func (sn *Snapshot) GetVariable(name string) (*runtime.Variable, bool) {
+	return sn.CallStack.GetVariableInCurrentFrame(name)
+}
+
+func (sn *Snapshot) GetArray(name string) (*runtime.Array, bool) {
+	return sn.CallStack.GetArrayInCurrentFrame(name)
+}
+
+func (sn *Snapshot) GetArray2D(name string) (*runtime.Array2D, bool) {
+	return sn.CallStack.GetArray2DInCurrentFrame(name)
+}
+
+func (sn *Snapshot) GetCurrentLine() int {
+	return sn.Line
+}
+
+func (sn *Snapshot) GetCurrentFrame() *runtime.StackFrame {
+	return sn.CallStack.GetCurrentFrame()
+}
+
+func (sn *Snapshot) GetFramesCount() int {
+	return sn.CallStack.FramesCount()
+}
