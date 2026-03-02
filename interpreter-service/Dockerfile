@@ -1,34 +1,26 @@
-FROM golang:1.25-alpine AS builder
+FROM golang:1.25.6-alpine AS builder
 
-WORKDIR /workspace
-
-RUN apk add --no-cache ca-certificates
-RUN apk add --no-cache build-base
-
-COPY go.work go.work.sum ./
-COPY cst-to-ast-service ./cst-to-ast-service
-COPY semantic-analyzer-service ./semantic-analyzer-service
-COPY interpreter-service ./interpreter-service
-
-WORKDIR /workspace/interpreter-service
-
-RUN go mod download
-
-RUN go build -o /out/interpreter-service ./cmd/main.go
-
-FROM alpine:3.21
+RUN apk add --no-cache gcc musl-dev git
 
 WORKDIR /app
 
-RUN apk add --no-cache ca-certificates && adduser -D -g '' appuser
+# Копируем go.work чтобы Go понял что это воркспейс
+COPY go.work go.work.sum ./
 
-COPY --from=builder /out/interpreter-service /app/interpreter-service
-COPY interpreter-service/config.yaml /app/config.yaml
-COPY interpreter-service/config.docker.yaml /app/config.docker.yaml
+# Копируем все модули которые нужны interpreter-service
+COPY cst-to-ast-service/ ./cst-to-ast-service/
+COPY interpreter-service/ ./interpreter-service/
+COPY semantic-analyzer-service/ ./semantic-analyzer-service/
 
-USER appuser
+WORKDIR /app/interpreter-service
 
-EXPOSE 8080
+RUN go build -o interpreter ./cmd/main.go
 
-ENTRYPOINT ["/app/interpreter-service"]
-CMD ["-config", "/app/config.yaml"]
+FROM alpine:latest
+RUN apk add --no-cache ca-certificates
+WORKDIR /app
+COPY --from=builder /app/interpreter-service/interpreter .
+COPY --from=builder /app/interpreter-service/config.yaml .
+
+EXPOSE 8084
+CMD ["./interpreter", "-config", "config.yaml"]
