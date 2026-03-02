@@ -4,11 +4,11 @@ import (
 	"fmt"
 
 	"github.com/Oleja123/code-vizualization/cst-to-ast-service/pkg/converter"
-	"github.com/Oleja123/code-vizualization/interpreter-service/internal/application/eventdispatcher"
 	"github.com/Oleja123/code-vizualization/interpreter-service/internal/domain/events"
 	"github.com/Oleja123/code-vizualization/interpreter-service/internal/domain/limitations"
 	"github.com/Oleja123/code-vizualization/interpreter-service/internal/domain/runtime"
 	runtimeerrors "github.com/Oleja123/code-vizualization/interpreter-service/internal/domain/runtime/errors"
+	"github.com/Oleja123/code-vizualization/interpreter-service/internal/domain/step"
 )
 
 const (
@@ -23,8 +23,8 @@ type Interpreter struct {
 	LimitManager      limitations.LimitManager
 	currentStepNumber int
 	currentLine       int
-	CurrentStep       eventdispatcher.Step
-	Steps             []eventdispatcher.Step
+	CurrentStep       step.Step
+	Steps             []step.Step
 	maxAllocated      int
 	maxSteps          int
 }
@@ -88,7 +88,7 @@ func (i *Interpreter) addStep() error {
 
 	defer i.incrementStep()
 	i.Steps = append(i.Steps, i.CurrentStep)
-	i.CurrentStep = eventdispatcher.Step{}
+	i.CurrentStep = step.Step{}
 
 	return nil
 }
@@ -106,7 +106,7 @@ func (i *Interpreter) resetExecutionState() {
 	i.Functions = make(map[string]*converter.FunctionDecl)
 	i.currentStepNumber = 0
 	i.currentLine = -1
-	i.CurrentStep = eventdispatcher.Step{}
+	i.CurrentStep = step.Step{}
 	i.Steps = nil
 	i.resetLimitManager()
 }

@@ -85,6 +85,22 @@ func Load(path string) (*Config, error) {
 		cfg.TimeoutSeconds = 10
 	}
 
+	if cfg.PingAttempts <= 0 {
+		cfg.PingAttempts = 3
+	}
+
+	if cfg.MaxAllocatedElements <= 0 {
+		cfg.MaxAllocatedElements = 100
+	}
+
+	if cfg.MaxSteps <= 0 {
+		cfg.MaxSteps = 1000
+	}
+
+	if cfg.Expiration <= 0 {
+		cfg.Expiration = 24 * time.Hour
+	}
+
 	return cfg, nil
 }
 

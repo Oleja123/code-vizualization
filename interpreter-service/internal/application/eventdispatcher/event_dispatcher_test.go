@@ -12,6 +12,7 @@ import (
 	"github.com/Oleja123/code-vizualization/interpreter-service/internal/application/interpreter"
 	"github.com/Oleja123/code-vizualization/interpreter-service/internal/domain/events"
 	runtimeerrors "github.com/Oleja123/code-vizualization/interpreter-service/internal/domain/runtime/errors"
+	"github.com/Oleja123/code-vizualization/interpreter-service/internal/domain/step"
 )
 
 type expectedVariable struct {
@@ -133,12 +134,12 @@ func runDispatcherForCode(t *testing.T, code string) (*eventdispatcher.EventDisp
 	return ed, stepBegin
 }
 
-func compactDuplicateLineChangedSteps(steps []eventdispatcher.Step, stepBegin int) ([]eventdispatcher.Step, int) {
+func compactDuplicateLineChangedSteps(steps []step.Step, stepBegin int) ([]step.Step, int) {
 	if len(steps) == 0 {
 		return steps, stepBegin
 	}
 
-	compacted := make([]eventdispatcher.Step, 0, len(steps))
+	compacted := make([]step.Step, 0, len(steps))
 
 	for i, step := range steps {
 		line, singleLineChanged := extractSingleLineChanged(step)
@@ -161,7 +162,7 @@ func compactDuplicateLineChangedSteps(steps []eventdispatcher.Step, stepBegin in
 	return compacted, stepBegin
 }
 
-func extractSingleLineChanged(step eventdispatcher.Step) (int, bool) {
+func extractSingleLineChanged(step step.Step) (int, bool) {
 	if len(step.Events) != 1 {
 		return 0, false
 	}
@@ -174,7 +175,7 @@ func extractSingleLineChanged(step eventdispatcher.Step) (int, bool) {
 	return lineChanged.Line, true
 }
 
-func stepContainsLineChanged(step eventdispatcher.Step, line int) bool {
+func stepContainsLineChanged(step step.Step, line int) bool {
 	for _, event := range step.Events {
 		lineChanged, ok := event.(events.LineChanged)
 		if ok && lineChanged.Line == line {
@@ -870,7 +871,7 @@ func TestEventDispatcher_RollbackArray2D(t *testing.T) {
 
 func TestEventDispatcher_ApplyStepOutOfRange(t *testing.T) {
 	ed := eventdispatcher.NewEventDispatcher(0)
-	ed.Steps = []eventdispatcher.Step{}
+	ed.Steps = []step.Step{}
 
 	err := ed.ApplyStep(0)
 	assert.Error(t, err)
@@ -983,7 +984,7 @@ func TestEventDispatcher_ApplyStepStopsOnError(t *testing.T) {
 
 	baseStepsCount := len(ed.Steps)
 	badStepIndex := baseStepsCount - stepBegin
-	ed.Steps = append(ed.Steps, eventdispatcher.Step{Events: []events.Event{
+	ed.Steps = append(ed.Steps, step.Step{Events: []events.Event{
 		events.VarChanged{Name: "missing", Value: 1},
 	}})
 
@@ -1086,7 +1087,7 @@ func TestEventDispatcher_StepBeginRollback(t *testing.T) {
 
 func TestEventDispatcher_GetStep(t *testing.T) {
 	ed := eventdispatcher.NewEventDispatcher(0)
-	ed.Steps = []eventdispatcher.Step{
+	ed.Steps = []step.Step{
 		{StepNumber: 10, Events: []events.Event{events.LineChanged{Line: 1}}},
 	}
 
@@ -1107,7 +1108,7 @@ func TestEventDispatcher_GetStep(t *testing.T) {
 func TestEventDispatcher_ApplyStepIdempotent(t *testing.T) {
 	value := 10
 	ed := eventdispatcher.NewEventDispatcher(0)
-	ed.Steps = []eventdispatcher.Step{
+	ed.Steps = []step.Step{
 		{Events: []events.Event{events.LineChanged{Line: 1}}},
 		{Events: []events.Event{events.DeclareVar{Name: "x", Value: &value}, events.LineChanged{Line: 2}}},
 	}
@@ -1137,7 +1138,7 @@ func TestEventDispatcher_ApplyStepIdempotent(t *testing.T) {
 
 func TestEventDispatcher_ApplyStepEmptyStepAdvancesIndex(t *testing.T) {
 	ed := eventdispatcher.NewEventDispatcher(0)
-	ed.Steps = []eventdispatcher.Step{
+	ed.Steps = []step.Step{
 		{Events: []events.Event{events.LineChanged{Line: 7}}},
 		{Events: nil},
 	}
@@ -1162,7 +1163,7 @@ func TestEventDispatcher_ApplyStepEmptyStepAdvancesIndex(t *testing.T) {
 func TestEventDispatcher_ApplyStepPartialFailureAndRollbackRecovery(t *testing.T) {
 	initial := 1
 	ed := eventdispatcher.NewEventDispatcher(0)
-	ed.Steps = []eventdispatcher.Step{
+	ed.Steps = []step.Step{
 		{Events: []events.Event{events.DeclareVar{Name: "x", Value: &initial}, events.LineChanged{Line: 1}}},
 		{Events: []events.Event{events.LineChanged{Line: 2}}},
 		{Events: []events.Event{events.VarChanged{Name: "x", Value: 5}, events.VarChanged{Name: "missing", Value: 1}}},
@@ -1207,7 +1208,7 @@ func TestEventDispatcher_ApplyStepPartialFailureAndRollbackRecovery(t *testing.T
 
 func TestEventDispatcher_StepBeginNegativeExternalIndex(t *testing.T) {
 	ed := eventdispatcher.NewEventDispatcher(2)
-	ed.Steps = []eventdispatcher.Step{
+	ed.Steps = []step.Step{
 		{Events: []events.Event{events.LineChanged{Line: 10}}},
 		{Events: []events.Event{events.LineChanged{Line: 11}}},
 		{Events: []events.Event{events.LineChanged{Line: 12}}},

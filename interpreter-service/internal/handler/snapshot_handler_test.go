@@ -9,8 +9,9 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/Oleja123/code-vizualization/interpreter-service/internal/application/eventdispatcher"
+	"github.com/Oleja123/code-vizualization/interpreter-service/internal/domain/step"
 	"github.com/Oleja123/code-vizualization/interpreter-service/internal/infrastructure/cache"
+	"github.com/Oleja123/code-vizualization/interpreter-service/internal/infrastructure/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -52,7 +53,7 @@ func (m *MockCacher) Reset() {
 }
 
 func TestNewSnapshotHandler_MethodNotAllowed(t *testing.T) {
-	h := NewSnapshotHandler("", nil)
+	h := NewSnapshotHandler(nil, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/snapshot", nil)
 	rr := httptest.NewRecorder()
@@ -68,7 +69,7 @@ func TestNewSnapshotHandler_MethodNotAllowed(t *testing.T) {
 }
 
 func TestNewSnapshotHandler_InvalidBody(t *testing.T) {
-	h := NewSnapshotHandler("", nil)
+	h := NewSnapshotHandler(nil, nil)
 
 	req := httptest.NewRequest(http.MethodPost, "/snapshot", bytes.NewBufferString("{"))
 	rr := httptest.NewRecorder()
@@ -84,7 +85,7 @@ func TestNewSnapshotHandler_InvalidBody(t *testing.T) {
 }
 
 func TestNewSnapshotHandler_InvalidStep(t *testing.T) {
-	h := NewSnapshotHandler("", nil)
+	h := NewSnapshotHandler(nil, nil)
 
 	body := SnapshotRequest{Code: "int main(){ return 0; }", Step: -1}
 	payload, err := json.Marshal(body)
@@ -104,7 +105,9 @@ func TestNewSnapshotHandler_InvalidStep(t *testing.T) {
 }
 
 func TestNewSnapshotHandler_Success(t *testing.T) {
-	h := NewSnapshotHandler("", nil)
+	cfg := config.Default()
+
+	h := NewSnapshotHandler(cfg, nil)
 
 	body := SnapshotRequest{
 		Code: `int main() {
@@ -134,7 +137,9 @@ func TestNewSnapshotHandler_Success(t *testing.T) {
 }
 
 func TestNewSnapshotHandler_StepOutOfRange(t *testing.T) {
-	h := NewSnapshotHandler("", nil)
+	cfg := config.Default()
+
+	h := NewSnapshotHandler(cfg, nil)
 
 	body := SnapshotRequest{Code: "int main(){ return 0; }", Step: 100}
 	payload, err := json.Marshal(body)
@@ -159,7 +164,7 @@ func TestNewSnapshotHandler_WithCacher_CacheHit(t *testing.T) {
 	// Prepare cached data
 	result := 42
 	mockCacher.returnValue = cache.CachedInfo{
-		Value: []eventdispatcher.Step{
+		Value: []step.Step{
 			{StepNumber: 0, Events: nil},
 			{StepNumber: 1, Events: nil},
 			{StepNumber: 2, Events: nil},
@@ -170,7 +175,9 @@ func TestNewSnapshotHandler_WithCacher_CacheHit(t *testing.T) {
 	}
 	mockCacher.returnGetErr = nil
 
-	h := NewSnapshotHandler("", mockCacher)
+	cfg := config.Default()
+
+	h := NewSnapshotHandler(cfg, mockCacher)
 
 	body := SnapshotRequest{
 		Code: `int main() { return 42; }`,
@@ -205,7 +212,9 @@ func TestNewSnapshotHandler_WithCacher_CacheMiss(t *testing.T) {
 	mockCacher.returnValue = cache.CachedInfo{}
 	mockCacher.returnGetErr = nil
 
-	h := NewSnapshotHandler("", mockCacher)
+	cfg := config.Default()
+
+	h := NewSnapshotHandler(cfg, mockCacher)
 
 	body := SnapshotRequest{
 		Code: `int main() {
@@ -245,7 +254,9 @@ func TestNewSnapshotHandler_WithCacher_GetError(t *testing.T) {
 	mockCacher.returnValue = cache.CachedInfo{}
 	mockCacher.returnGetErr = errors.New("redis connection error")
 
-	h := NewSnapshotHandler("", mockCacher)
+	cfg := config.Default()
+
+	h := NewSnapshotHandler(cfg, mockCacher)
 
 	body := SnapshotRequest{
 		Code: `int main() {
@@ -284,7 +295,9 @@ func TestNewSnapshotHandler_WithCacher_SetError(t *testing.T) {
 	mockCacher.returnGetErr = nil
 	mockCacher.returnSetErr = errors.New("redis write error")
 
-	h := NewSnapshotHandler("", mockCacher)
+	cfg := config.Default()
+
+	h := NewSnapshotHandler(cfg, mockCacher)
 
 	body := SnapshotRequest{
 		Code: `int main() {
@@ -315,7 +328,9 @@ func TestNewSnapshotHandler_WithCacher_CacheKeyFormat(t *testing.T) {
 	mockCacher := &MockCacher{}
 	mockCacher.returnValue = cache.CachedInfo{}
 
-	h := NewSnapshotHandler("", mockCacher)
+	cfg := config.Default()
+
+	h := NewSnapshotHandler(cfg, mockCacher)
 
 	code := `int main() { return 1; }`
 	body := SnapshotRequest{
@@ -340,7 +355,9 @@ func TestNewSnapshotHandler_WithCacher_CacheKeyFormat(t *testing.T) {
 
 func TestNewSnapshotHandler_NoCacher(t *testing.T) {
 	// Test without cacher (nil)
-	h := NewSnapshotHandler("", nil)
+	cfg := config.Default()
+
+	h := NewSnapshotHandler(cfg, nil)
 
 	body := SnapshotRequest{
 		Code: `int main() {

@@ -3,20 +3,20 @@ package cache
 import (
 	"fmt"
 
-	"github.com/Oleja123/code-vizualization/interpreter-service/internal/application/eventdispatcher"
+	"github.com/Oleja123/code-vizualization/interpreter-service/internal/domain/step"
 )
 
 type CachedInfoDTO struct {
-	Value     []eventdispatcher.StepDTO `json:"value"`
-	StepBegin int                       `json:"stepBegin"`
-	Result    *int                      `json:"result"`
-	Err       string                    `json:"err,omitempty"`
+	Value     []step.StepDTO `json:"value"`
+	StepBegin int            `json:"stepBegin"`
+	Result    *int           `json:"result"`
+	Err       string         `json:"err,omitempty"`
 }
 
 func MarshalCachedInfo(c CachedInfo) (CachedInfoDTO, error) {
-	stepDTOs := make([]eventdispatcher.StepDTO, len(c.Value))
+	stepDTOs := make([]step.StepDTO, len(c.Value))
 	for i, s := range c.Value {
-		dto, err := eventdispatcher.MarshalStep(s)
+		dto, err := step.MarshalStep(s)
 		if err != nil {
 			return CachedInfoDTO{}, err
 		}
@@ -37,9 +37,9 @@ func MarshalCachedInfo(c CachedInfo) (CachedInfoDTO, error) {
 }
 
 func UnmarshalCachedInfo(dto CachedInfoDTO) (CachedInfo, error) {
-	steps := make([]eventdispatcher.Step, len(dto.Value))
+	steps := make([]step.Step, len(dto.Value))
 	for i, stepDTO := range dto.Value {
-		s, err := eventdispatcher.UnmarshalStep(stepDTO)
+		s, err := step.UnmarshalStep(stepDTO)
 		if err != nil {
 			return CachedInfo{}, err
 		}
