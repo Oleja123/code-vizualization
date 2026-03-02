@@ -1,21 +1,26 @@
-FROM golang:1.23-alpine AS builder
+FROM golang:1.25.6-alpine AS builder
 
 RUN apk add --no-cache gcc musl-dev git
 
 WORKDIR /app
 
+# Копируем go.work чтобы Go понял что это воркспейс
+COPY go.work go.work.sum ./
+
+# Копируем все модули которые нужны interpreter-service
 COPY cst-to-ast-service/ ./cst-to-ast-service/
+COPY interpreter-service/ ./interpreter-service/
 COPY semantic-analyzer-service/ ./semantic-analyzer-service/
 
-WORKDIR /app/semantic-analyzer-service
+WORKDIR /app/interpreter-service
 
-RUN go build -o semantic-analyzer ./cmd/server/main.go
+RUN go build -o interpreter ./cmd/main.go
 
 FROM alpine:latest
 RUN apk add --no-cache ca-certificates
 WORKDIR /app
-COPY --from=builder /app/semantic-analyzer-service/semantic-analyzer .
-COPY --from=builder /app/semantic-analyzer-service/config.yaml .
+COPY --from=builder /app/interpreter-service/interpreter .
+COPY --from=builder /app/interpreter-service/config.yaml .
 
-EXPOSE 8082
-CMD ["./semantic-analyzer"]
+EXPOSE 8084
+CMD ["./interpreter", "-config", "config.yaml"]
