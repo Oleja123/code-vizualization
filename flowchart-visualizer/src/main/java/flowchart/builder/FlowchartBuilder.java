@@ -8,8 +8,19 @@ public class FlowchartBuilder {
 
     private Map<String, FunctionDecl> functions = new HashMap<>();
 
+    /**
+     * Builds from program using "main" if available, otherwise the first declared function.
+     */
     public FlowchartNode buildFromProgram(Program program) {
-        return buildFromProgram(program, "main");
+        // Collect all function names first to pick a sensible default
+        List<String> names = new ArrayList<>();
+        for (Statement stmt : program.getDeclarations()) {
+            if (stmt instanceof FunctionDecl func) {
+                names.add(func.getName());
+            }
+        }
+        String defaultName = names.contains("main") ? "main" : (names.isEmpty() ? "main" : names.get(0));
+        return buildFromProgram(program, defaultName);
     }
 
     public FlowchartNode buildFromProgram(Program program, String functionName) {
@@ -58,7 +69,7 @@ public class FlowchartBuilder {
     }
 
     private FlowchartNode buildFunction(FunctionDecl func) {
-        TerminalNode start = new TerminalNode(func.getName(), true);
+        TerminalNode start = new TerminalNode(funcSignature(func), true);
         start.setAstLocation(toLocation(func.getLocation()));
 
         TerminalNode end = new TerminalNode("конец", false);
@@ -73,6 +84,29 @@ public class FlowchartBuilder {
         }
 
         return start;
+    }
+
+
+    private String funcSignature(FunctionDecl func) {
+        StringBuilder sb = new StringBuilder(func.getName());
+        sb.append("(");
+        List<Parameter> params = func.getParameters();
+        if (params != null) {
+            for (int i = 0; i < params.size(); i++) {
+                if (i > 0) sb.append(", ");
+                Parameter p = params.get(i);
+                if (p.getType() != null) {
+                    sb.append(p.getType().getBaseType());
+                    if (p.getType().getArraySizes() != null) {
+                        for (Integer s : p.getType().getArraySizes()) sb.append("[").append(s == 0 ? "" : s).append("]");
+                    }
+                    sb.append(" ");
+                }
+                sb.append(p.getName());
+            }
+        }
+        sb.append(")");
+        return sb.toString();
     }
 
     private void attachEnd(FlowchartNode node, TerminalNode end, Set<FlowchartNode> visited) {
@@ -380,6 +414,8 @@ public class FlowchartBuilder {
         if (e instanceof BinaryExpr b)
             return expr(b.getLeft()) + " " + b.getOp() + " " + expr(b.getRight());
         if (e instanceof UnaryExpr u)
+            // isPostfix=true → operand first, then operator (i++)
+            // isPostfix=false → operator first, then operand (++i)
             return u.isPostfix()
                     ? expr(u.getOperand()) + u.getOp()
                     : u.getOp() + expr(u.getOperand());
