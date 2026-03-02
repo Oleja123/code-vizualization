@@ -1,6 +1,6 @@
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
-import { generateFromCode } from '../api/flowchart.js'
+import { generateFromCode, generateAllFunctions } from '../api/flowchart.js'
 
 const codeInput = ref(`int main() {
     int x = 10;
@@ -12,58 +12,70 @@ const codeInput = ref(`int main() {
 const loading = ref(false)
 const error = ref('')
 const success = ref(false)
-const svgResult = ref('')
+
+// Данные по функциям: { name: string, svg: string }[]
+const functionTabs = ref([])
+const activeTab = ref('')
+
+// Вычисляем текущий SVG по активному табу
+const svgResult = computed(() => {
+  const tab = functionTabs.value.find(t => t.name === activeTab.value)
+  return tab ? tab.svg : ''
+})
+
 const currentZoom = ref(1)
 const lineNumbers = ref('')
 
 // Примеры кода
-// Примеры кода
 const EXAMPLES = {
-  dowhile: `void main() {
-    int year = 2014;
-    int population = 650;
-    do {
-        population = (population * 103) / 100;
-        year = year + 1;
-    } while (year <= 2040);
+  if: `int main() {
+    int x = 10;
+    if (x > 5) {
+        x = x - 1;
+    }
+    return 0;
 }`,
-
-  minmax: `void main() {
-    int a, b, min, max;
-
-    if (a < b) {
-        min = a;
-        max = b;
+  ifelse: `int main() {
+    int x = 10;
+    if (x > 5) {
+        x = x - 1;
     } else {
-        min = b;
-        max = a;
+        x = x + 1;
     }
+    return 0;
 }`,
-
-  whilecontinue: `void main() {
-    int a = 1999;
-    while (a < 2030) {
-        a = a + 1;
-        if (a % 4 == 0)
-            continue;
+  while: `int main() {
+    int i = 0;
+    int sum = 0;
+    while (i < 10) {
+        sum = sum + i;
+        i = i + 1;
     }
+    return 0;
 }`,
-
-  arrayfor: `int a1[5] = {1, 2, 3, 7, 8};
-
-void main() {
-    int i, s;
-
-    for (i = 0; i < 5; i++)
-        if (a1[i] % 2 == 1)
-            a1[i] = 1;
-
-    s = 1;
-    for (i = 1; i < 5; i++)
-        s += a1[i];
+  for: `int main() {
+    int sum = 0;
+    int i;
+    for (i = 0; i < 5; i = i + 1) {
+        sum = sum + i;
+    }
+    return 0;
 }`,
-
-  prime: `int isPrime(int num) {
+  nested: `int main() {
+    int x = 15;
+    int result = 0;
+    if (x > 10) {
+        int i = 0;
+        while (i < x) {
+            result = result + 1;
+            i = i + 1;
+        }
+    } else {
+        result = x;
+    }
+    return 0;
+}`,
+  multifunc: `int isPrime(int num) {
     int del = 2;
     while (del < num) {
         if (num % del == 0) {
@@ -76,7 +88,6 @@ void main() {
 
 void main() {
     int num = 20;
-
     while (1) {
         if (isPrime(num)) {
             break;
@@ -88,7 +99,6 @@ void main() {
 
 const showExamples = ref(false)
 
-// Обновление номеров строк
 function updateLineNumbers() {
   const lines = codeInput.value.split('\n').length
   lineNumbers.value = Array.from({length: lines}, (_, i) => i + 1).join('\n')
@@ -97,12 +107,13 @@ function updateLineNumbers() {
 watch(codeInput, updateLineNumbers)
 onMounted(updateLineNumbers)
 
-// Загрузка примера
 function loadExample(key) {
   codeInput.value = EXAMPLES[key]
   showExamples.value = false
   error.value = ''
   success.value = false
+  functionTabs.value = []
+  activeTab.value = ''
 }
 
 // Генерация блок-схемы
@@ -114,12 +125,32 @@ async function generate() {
 
   error.value = ''
   success.value = false
-  svgResult.value = ''
+  functionTabs.value = []
+  activeTab.value = ''
   loading.value = true
 
   try {
-    const data = await generateFromCode(codeInput.value)
-    svgResult.value = data.svg
+    // Сначала пробуем эндпоинт с несколькими функциями
+    let allData = await generateAllFunctions(codeInput.value)
+
+    if (allData && allData.functions && Object.keys(allData.functions).length > 0) {
+      // Бэкенд вернул карту функций
+      const tabs = Object.entries(allData.functions).map(([name, svg]) => ({ name, svg }))
+      // main первым, остальные по алфавиту
+      tabs.sort((a, b) => {
+        if (a.name === 'main') return -1
+        if (b.name === 'main') return 1
+        return a.name.localeCompare(b.name)
+      })
+      functionTabs.value = tabs
+      activeTab.value = tabs[0].name
+    } else {
+      // Fallback: старый эндпоинт — один SVG
+      const data = await generateFromCode(codeInput.value)
+      functionTabs.value = [{ name: 'main', svg: data.svg }]
+      activeTab.value = 'main'
+    }
+
     success.value = true
     currentZoom.value = 1
   } catch (e) {
@@ -127,6 +158,11 @@ async function generate() {
   } finally {
     loading.value = false
   }
+}
+
+function setTab(name) {
+  activeTab.value = name
+  currentZoom.value = 1
 }
 
 // Zoom
@@ -147,7 +183,7 @@ function downloadSVG() {
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
-  a.download = 'flowchart.svg'
+  a.download = `flowchart-${activeTab.value}.svg`
   a.click()
   URL.revokeObjectURL(url)
 }
@@ -179,11 +215,12 @@ function handleTab(e) {
             📚 Примеры
           </button>
           <div v-if="showExamples" class="examples-dropdown">
-  <div class="example-item" @click="loadExample('dowhile')">Do-While population</div>
-<div class="example-item" @click="loadExample('minmax')">Min / Max</div>
-<div class="example-item" @click="loadExample('whilecontinue')">While + Continue</div>
-<div class="example-item" @click="loadExample('arrayfor')">Array + For</div>
-<div class="example-item" @click="loadExample('prime')">Prime finder</div>
+            <div class="example-item" @click="loadExample('if')">If</div>
+            <div class="example-item" @click="loadExample('ifelse')">If-Else</div>
+            <div class="example-item" @click="loadExample('while')">While</div>
+            <div class="example-item" @click="loadExample('for')">For</div>
+            <div class="example-item" @click="loadExample('nested')">Nested</div>
+            <div class="example-item" @click="loadExample('multifunc')">Multi-Function</div>
           </div>
         </div>
       </div>
@@ -213,12 +250,27 @@ function handleTab(e) {
 
     <!-- ═══ ПРАВАЯ ПАНЕЛЬ - РЕЗУЛЬТАТ ═══ -->
     <div class="output-panel">
-      <!-- Заголовок -->
+      <!-- Заголовок с табами функций -->
       <div class="panel-header">
-        <div class="panel-label">
+        <!-- Табы функций (если есть результат) -->
+        <div v-if="functionTabs.length > 0" class="function-tabs">
+          <button
+            v-for="tab in functionTabs"
+            :key="tab.name"
+            class="func-tab"
+            :class="{ active: activeTab === tab.name }"
+            @click="setTab(tab.name)"
+          >
+            {{ tab.name }}
+          </button>
+        </div>
+        <!-- Заглушка заголовка когда нет результата -->
+        <div v-else class="panel-label">
           <span class="panel-dot"></span>
           Блок-схема (ГОСТ 19.701-90)
         </div>
+
+        <!-- Контролы зума -->
         <div class="controls-right" v-if="svgResult">
           <button class="icon-btn" @click="zoom(-0.1)" title="Уменьшить">−</button>
           <span class="zoom-label">{{ zoomLabel }}</span>
@@ -245,8 +297,8 @@ function handleTab(e) {
 
         <!-- SVG -->
         <div v-if="svgResult && !loading" class="svg-container">
-          <div 
-            class="svg-wrapper" 
+          <div
+            class="svg-wrapper"
             :style="{ transform: `scale(${currentZoom})` }"
             v-html="svgResult"
           ></div>
@@ -286,6 +338,7 @@ function handleTab(e) {
   border-bottom: 1px solid #e2e8f0;
   background: #fafafa;
   flex-shrink: 0;
+  gap: 8px;
 }
 
 .panel-label {
@@ -302,6 +355,61 @@ function handleTab(e) {
   width: 8px;
   height: 8px;
   border-radius: 50%;
+  background: #4f46e5;
+}
+
+/* ═══ ТАБЫ ФУНКЦИЙ ═══ */
+.function-tabs {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  height: 40px;
+  flex: 1;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.function-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.func-tab {
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  height: 100%;
+  border: none;
+  border-right: 1px solid #e2e8f0;
+  background: transparent;
+  color: #64748b;
+  font-family: 'Courier New', monospace;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all .15s;
+  white-space: nowrap;
+  position: relative;
+}
+
+.func-tab:hover {
+  background: #f1f5f9;
+  color: #4f46e5;
+}
+
+.func-tab.active {
+  background: white;
+  color: #4f46e5;
+  font-weight: 700;
+}
+
+/* Нижняя линия активного таба */
+.func-tab.active::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
   background: #4f46e5;
 }
 
@@ -335,7 +443,7 @@ function handleTab(e) {
   border: 1px solid #e2e8f0;
   border-radius: 6px;
   box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-  min-width: 140px;
+  min-width: 160px;
   z-index: 100;
 }
 
@@ -470,6 +578,7 @@ function handleTab(e) {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-shrink: 0;
 }
 
 .icon-btn {
