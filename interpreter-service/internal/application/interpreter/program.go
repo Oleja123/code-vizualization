@@ -5,12 +5,12 @@ import (
 	"fmt"
 
 	"github.com/Oleja123/code-vizualization/cst-to-ast-service/pkg/converter"
-	"github.com/Oleja123/code-vizualization/interpreter-service/internal/application/eventdispatcher"
 	"github.com/Oleja123/code-vizualization/interpreter-service/internal/domain/events"
 	runtimeerrors "github.com/Oleja123/code-vizualization/interpreter-service/internal/domain/runtime/errors"
+	"github.com/Oleja123/code-vizualization/interpreter-service/internal/domain/step"
 )
 
-func (i *Interpreter) ExecuteProgram(program *converter.Program) (*int, []eventdispatcher.Step, int, error) {
+func (i *Interpreter) ExecuteProgram(program *converter.Program) (*int, []step.Step, int, error) {
 	if program == nil {
 		return nil, nil, 0, runtimeerrors.NewErrUnexpectedInternalError("program is nil")
 	}

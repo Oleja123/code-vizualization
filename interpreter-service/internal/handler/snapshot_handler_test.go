@@ -9,7 +9,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/Oleja123/code-vizualization/interpreter-service/internal/application/eventdispatcher"
+	"github.com/Oleja123/code-vizualization/interpreter-service/internal/domain/step"
 	"github.com/Oleja123/code-vizualization/interpreter-service/internal/infrastructure/cache"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -159,7 +159,7 @@ func TestNewSnapshotHandler_WithCacher_CacheHit(t *testing.T) {
 	// Prepare cached data
 	result := 42
 	mockCacher.returnValue = cache.CachedInfo{
-		Value: []eventdispatcher.Step{
+		Value: []step.Step{
 			{StepNumber: 0, Events: nil},
 			{StepNumber: 1, Events: nil},
 			{StepNumber: 2, Events: nil},

@@ -1,8 +1,6 @@
-package eventdispatcher
+package step
 
-import (
-	"github.com/Oleja123/code-vizualization/interpreter-service/internal/domain/events"
-)
+import "github.com/Oleja123/code-vizualization/interpreter-service/internal/domain/events"
 
 type StepDTO struct {
 	Events     []events.EventDTO `json:"events"`

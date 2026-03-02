@@ -8,15 +8,15 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/Oleja123/code-vizualization/cst-to-ast-service/pkg/converter"
-	"github.com/Oleja123/code-vizualization/interpreter-service/internal/application/eventdispatcher"
 	"github.com/Oleja123/code-vizualization/interpreter-service/internal/domain/events"
+	"github.com/Oleja123/code-vizualization/interpreter-service/internal/domain/step"
 )
 
 type normalizedStep struct {
 	Events []string
 }
 
-func runCodeWithSteps(t *testing.T, code string) (*int, []eventdispatcher.Step, int) {
+func runCodeWithSteps(t *testing.T, code string) (*int, []step.Step, int) {
 	t.Helper()
 
 	conv := converter.New()
@@ -37,7 +37,7 @@ func runCodeWithSteps(t *testing.T, code string) (*int, []eventdispatcher.Step, 
 	return result, steps, stepBegin
 }
 
-func runCodeWithStepsAllowError(t *testing.T, code string) (*int, []eventdispatcher.Step, int, error) {
+func runCodeWithStepsAllowError(t *testing.T, code string) (*int, []step.Step, int, error) {
 	t.Helper()
 
 	conv := converter.New()
@@ -53,12 +53,12 @@ func runCodeWithStepsAllowError(t *testing.T, code string) (*int, []eventdispatc
 	return result, steps, stepBegin, err
 }
 
-func compactDuplicateLineChangedSteps(steps []eventdispatcher.Step, stepBegin int) ([]eventdispatcher.Step, int) {
+func compactDuplicateLineChangedSteps(steps []step.Step, stepBegin int) ([]step.Step, int) {
 	if len(steps) == 0 {
 		return steps, stepBegin
 	}
 
-	compacted := make([]eventdispatcher.Step, 0, len(steps))
+	compacted := make([]step.Step, 0, len(steps))
 
 	for i, step := range steps {
 		line, singleLineChanged := extractSingleLineChanged(step)
@@ -81,7 +81,7 @@ func compactDuplicateLineChangedSteps(steps []eventdispatcher.Step, stepBegin in
 	return compacted, stepBegin
 }
 
-func extractSingleLineChanged(step eventdispatcher.Step) (int, bool) {
+func extractSingleLineChanged(step step.Step) (int, bool) {
 	if len(step.Events) != 1 {
 		return 0, false
 	}
@@ -94,7 +94,7 @@ func extractSingleLineChanged(step eventdispatcher.Step) (int, bool) {
 	return lineChanged.Line, true
 }
 
-func stepContainsLineChanged(step eventdispatcher.Step, line int) bool {
+func stepContainsLineChanged(step step.Step, line int) bool {
 	for _, event := range step.Events {
 		lineChanged, ok := event.(events.LineChanged)
 		if ok && lineChanged.Line == line {
@@ -140,7 +140,7 @@ func normalizeEvent(event events.Event) string {
 	}
 }
 
-func normalizeSteps(steps []eventdispatcher.Step) []normalizedStep {
+func normalizeSteps(steps []step.Step) []normalizedStep {
 	normalized := make([]normalizedStep, 0, len(steps))
 	for _, step := range steps {
 		normalizedEvents := make([]string, 0, len(step.Events))

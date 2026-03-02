@@ -11,6 +11,7 @@ import (
 	"github.com/Oleja123/code-vizualization/interpreter-service/internal/application/eventdispatcher"
 	"github.com/Oleja123/code-vizualization/interpreter-service/internal/application/interpreter"
 	"github.com/Oleja123/code-vizualization/interpreter-service/internal/domain/snapshot"
+	"github.com/Oleja123/code-vizualization/interpreter-service/internal/domain/step"
 	"github.com/Oleja123/code-vizualization/interpreter-service/internal/infrastructure/cache"
 	configinfra "github.com/Oleja123/code-vizualization/interpreter-service/internal/infrastructure/config"
 	"github.com/Oleja123/code-vizualization/semantic-analyzer-service/pkg/onecompiler"
@@ -63,7 +64,7 @@ func NewSnapshotHandler(oneCompilerConfigPath string, cacher cache.Cacher) http.
 
 		cacheKey := fmt.Sprintf("code:%s:max_elements:%d:max_steps:%d", req.Code, cfg.MaxAllocatedElements, cfg.MaxSteps)
 
-		var steps []eventdispatcher.Step
+		var steps []step.Step
 		var stepBegin int
 		var result *int
 		var execErr error
