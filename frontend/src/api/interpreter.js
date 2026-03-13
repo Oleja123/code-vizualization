@@ -1,5 +1,4 @@
 export async function getSnapshot(code, step) {
-  console.log('API call: getSnapshot', { code: code.substring(0, 50) + '...', step })
   const response = await fetch('/api/snapshot', {
     method: 'POST',
     headers: {
