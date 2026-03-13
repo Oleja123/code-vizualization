@@ -40,6 +40,20 @@ const tracing      = ref(false)
 
 const svgContainers = {}
 
+// ──────────── Точка останова ────────────
+const breakpointLine = ref(null)   // номер строки или null
+
+
+
+// ──────────── Точка останова ────────────
+function toggleBreakpoint(line) {
+  if (breakpointLine.value === line) {
+    breakpointLine.value = null
+  } else {
+    breakpointLine.value = line
+  }
+}
+
 // ──────────── Примеры ────────────
 const EXAMPLES = {
   simple:    { label: 'Простой',     code: `int main() {\n    int x = 5;\n    int y = 10;\n    int sum = x + y;\n    return sum;\n}` },
@@ -122,10 +136,31 @@ async function startTracing() {
   currentStep.value = 0
   snapshot.value = null
   try {
-    const data = await getSnapshot(codeInput.value, 0)
+    // Сначала загружаем шаг 0 чтобы узнать stepsCount
+    const data0 = await getSnapshot(codeInput.value, 0)
+    const total = data0.steps_count ?? 0
+    stepsCount.value = total
+
+    // Если задана точка останова — ищем первый шаг с нужной строкой
+    let startStep = 0
+    if (breakpointLine.value && total > 0) {
+      // Бинарный поиск: ищем первый шаг где line === breakpointLine
+      let lo = 0, hi = total - 1, found = -1
+      // Сначала ищем левую границу через линейный поиск по ключевым точкам
+      // Используем линейный поиск с шагом — эффективно для малых программ
+      for (let s = 0; s < total; s++) {
+        const d = await getSnapshot(codeInput.value, s)
+        if (d.snapshot?.line === breakpointLine.value) {
+          found = s; break
+        }
+      }
+      if (found >= 0) startStep = found
+    }
+
+    const data = startStep === 0 ? data0 : await getSnapshot(codeInput.value, startStep)
     snapshot.value = data.snapshot
-    currentStep.value = data.current_step ?? 0
-    stepsCount.value  = data.steps_count  ?? 0
+    currentStep.value = data.current_step ?? startStep
+    stepsCount.value  = data.steps_count ?? total
     tracing.value = true
   } catch (e) {
     error.value = e.message
@@ -366,7 +401,16 @@ function onKeydown(e) {
 
       <div class="editor-area">
         <div class="line-numbers" ref="lineNumbersEl">
-          <div v-for="n in lineNumbers" :key="n" class="ln" :class="{ 'ln-active': n === currentLine }">{{ n }}</div>
+          <div
+            v-for="n in lineNumbers" :key="n"
+            class="ln"
+            :class="{ 'ln-active': n === currentLine, 'ln-bp': n === breakpointLine }"
+            @click="toggleBreakpoint(n)"
+            title="Нажмите чтобы поставить/убрать точку останова"
+          >
+            <span v-if="n === breakpointLine" class="bp-dot">●</span>
+            <span v-else>{{ n }}</span>
+          </div>
         </div>
         <textarea
           ref="editorEl"
@@ -383,6 +427,12 @@ function onKeydown(e) {
 
       <div class="col-footer">
         <div class="msg error-msg" v-if="error">✗ {{ error }}</div>
+        <!-- Индикатор активной точки останова -->
+        <div v-if="breakpointLine" class="bp-info">
+          <span class="bp-badge">⬤ Точка останова: строка {{ breakpointLine }}</span>
+          <button class="bp-clear" @click="breakpointLine = null" title="Убрать">✕</button>
+        </div>
+
         <template v-if="phase === 'idle'">
           <button class="btn btn-generate" :disabled="loading" @click="generate">
             <span v-if="loading">⟳</span><span v-else>▶</span>
@@ -479,7 +529,7 @@ function onKeydown(e) {
           <div class="ph-icon" style="font-size:32px">🖥️</div>
           <div class="ph-text" style="font-size:12px">Состояние переменных и стек вызовов<br>отобразятся во время трассировки</div>
         </div>
-        <RuntimeVisualization v-else-if="snapshot" :snapshot="snapshot" :current-step="currentStep" />
+        <RuntimeVisualization v-if="snapshot" :snapshot="snapshot" :current-step="currentStep" />
       </div>
     </div>
 
@@ -699,4 +749,40 @@ function onKeydown(e) {
   animation: spin .7s linear infinite;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Точки останова ── */
+.ln {
+  cursor: pointer;
+  position: relative;
+  user-select: none;
+}
+.ln:hover { background: #fee2e2; color: #dc2626; }
+.ln-bp {
+  background: #fee2e2 !important;
+  color: #dc2626 !important;
+  font-weight: bold;
+}
+.bp-dot {
+  color: #dc2626;
+  font-size: 14px;
+  line-height: 22px;
+  display: flex;
+  justify-content: center;
+}
+
+/* Индикатор BP в футере */
+.bp-info {
+  display: flex; align-items: center; justify-content: space-between;
+  background: #fef2f2; border: 1px solid #fecaca; border-radius: 4px;
+  padding: 4px 8px; margin-bottom: 6px; gap: 6px;
+}
+.bp-badge {
+  font-size: 11px; color: #dc2626; font-family: monospace; font-weight: 600;
+}
+.bp-clear {
+  background: none; border: none; color: #dc2626; cursor: pointer;
+  font-size: 12px; padding: 0 2px; line-height: 1;
+}
+.bp-clear:hover { color: #991b1b; }
+
 </style>

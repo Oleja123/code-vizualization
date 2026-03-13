@@ -7,7 +7,9 @@
       </div>
     </div>
     <div v-if="hasFunctionReturn" class="function-return">
-      возврат из функции {{ snapshot.function_name }}: {{ snapshot.return_value }}
+      <span class="ret-icon">↩</span>
+      возврат из <strong>{{ snapshot.function_name }}()</strong>:
+      <span class="ret-val">{{ snapshot.return_value }}</span>
     </div>
     <div class="call-stack" v-if="snapshot && snapshot.call_stack">
       <StackFrame
@@ -263,4 +265,26 @@ export default {
 .error-button:hover {
   background-color: #c0392b;
 }
+.function-return {
+  margin: 0.75rem 1rem 0;
+  padding: 7px 12px;
+  border-radius: 6px;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  color: #15803d;
+  font-size: 12px;
+  font-family: monospace;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.ret-icon { font-size: 15px; }
+.ret-val {
+  font-weight: 700;
+  background: #dcfce7;
+  padding: 1px 6px;
+  border-radius: 3px;
+  margin-left: 2px;
+}
+
 </style>
