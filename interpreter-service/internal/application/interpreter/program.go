@@ -5,15 +5,17 @@ import (
 	"fmt"
 
 	"github.com/Oleja123/code-vizualization/cst-to-ast-service/pkg/converter"
-	"github.com/Oleja123/code-vizualization/interpreter-service/internal/application/eventdispatcher"
 	"github.com/Oleja123/code-vizualization/interpreter-service/internal/domain/events"
 	runtimeerrors "github.com/Oleja123/code-vizualization/interpreter-service/internal/domain/runtime/errors"
+	"github.com/Oleja123/code-vizualization/interpreter-service/internal/domain/step"
 )
 
-func (i *Interpreter) ExecuteProgram(program *converter.Program) (*int, []eventdispatcher.Step, int, error) {
+func (i *Interpreter) ExecuteProgram(program *converter.Program) (*int, []step.Step, int, error) {
 	if program == nil {
 		return nil, nil, 0, runtimeerrors.NewErrUnexpectedInternalError("program is nil")
 	}
+
+	i.resetExecutionState()
 
 	for _, decl := range program.Declarations {
 		switch d := decl.(type) {
@@ -47,19 +49,20 @@ func (i *Interpreter) ExecuteProgram(program *converter.Program) (*int, []eventd
 
 		if errors.As(err, &unfErr) {
 			i.addEvents(events.UndefinedBehavior{Message: err.Error()})
-			i.addStep()
+			if stepErr := i.addStep(); stepErr != nil {
+				return nil, nil, 0, stepErr
+			}
 			return nil, i.Steps, stepBegin, err
 		} else if errors.As(err, &runErr) {
 			i.addEvents(events.RuntimeError{Message: err.Error()})
-			i.addStep()
+			if stepErr := i.addStep(); stepErr != nil {
+				return nil, nil, 0, stepErr
+			}
 			return nil, i.Steps, stepBegin, err
 		} else {
 			return nil, nil, 0, err
 		}
 	}
-
-	i.addEvents(events.LineChanged{Line: -1})
-	i.addStep()
 
 	switch v := value.(type) {
 	case nil:

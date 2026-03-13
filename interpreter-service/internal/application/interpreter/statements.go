@@ -43,7 +43,9 @@ func (i *Interpreter) executeStatement(stmt converter.Stmt) (ExecResult, error) 
 
 func (i *Interpreter) executeNonFunctionDecl(v *VariableDecl) (ExecResult, error) {
 	i.addEvents(events.LineChanged{Line: int(v.Loc.Line)})
-	i.addStep()
+	if err := i.addStep(); err != nil {
+		return NormalResult(), err
+	}
 
 	switch len(v.VarType.ArraySizes) {
 	case 0:
@@ -58,6 +60,10 @@ func (i *Interpreter) executeNonFunctionDecl(v *VariableDecl) (ExecResult, error
 }
 
 func (i *Interpreter) executeVariableDecl(v VariableDecl) (ExecResult, error) {
+	if err := i.LimitManager.AllocateVariable(); err != nil {
+		return NormalResult(), err
+	}
+
 	var value *int
 	if v.InitExpr != nil {
 		val, err := i.executeExpression(v.InitExpr)
@@ -83,6 +89,10 @@ func (i *Interpreter) executeVariableDecl(v VariableDecl) (ExecResult, error) {
 }
 
 func (i *Interpreter) executeArrayDecl(v VariableDecl) (ExecResult, error) {
+	if err := i.LimitManager.AllocateArray(v.VarType.ArraySizes[0]); err != nil {
+		return NormalResult(), err
+	}
+
 	var value []runtime.ArrayElement
 	if v.InitExpr != nil {
 		val, err := i.executeExpression(v.InitExpr)
@@ -108,6 +118,10 @@ func (i *Interpreter) executeArrayDecl(v VariableDecl) (ExecResult, error) {
 }
 
 func (i *Interpreter) executeArray2DDecl(v VariableDecl) (ExecResult, error) {
+	if err := i.LimitManager.AllocateArray2D(v.VarType.ArraySizes[0], v.VarType.ArraySizes[1]); err != nil {
+		return NormalResult(), err
+	}
+
 	var value []runtime.Array
 	if v.InitExpr != nil {
 		val, err := i.executeExpression(v.InitExpr)
@@ -136,10 +150,6 @@ func (i *Interpreter) executeBlockStmt(b *converter.BlockStmt) (ExecResult, erro
 	frame := i.CallStack.GetCurrentFrame()
 	frame.EnterScope()
 	i.addEvents(events.EnterScope{})
-	defer func() {
-		frame.ExitScope()
-		i.addEvents(events.ExitScope{})
-	}()
 
 	for _, stmt := range b.Statements {
 		res, err := i.executeStatement(stmt)
@@ -147,16 +157,25 @@ func (i *Interpreter) executeBlockStmt(b *converter.BlockStmt) (ExecResult, erro
 			return res, err
 		}
 		if res.Signal != SignalNormal {
+			if res.Signal != SignalReturn {
+				frame.ExitScope()
+				i.addEvents(events.ExitScope{})
+			}
 			return res, nil
 		}
 	}
+
+	frame.ExitScope()
+	i.addEvents(events.ExitScope{})
 
 	return NormalResult(), nil
 }
 
 func (i *Interpreter) executeIfStmt(ifStmt *converter.IfStmt) (ExecResult, error) {
 	i.addEvents(events.LineChanged{Line: int(ifStmt.Loc.Line)})
-	i.addStep()
+	if err := i.addStep(); err != nil {
+		return NormalResult(), err
+	}
 
 	cond, err := i.executeExpression(ifStmt.Condition)
 	if err != nil {
@@ -179,7 +198,9 @@ func (i *Interpreter) executeIfStmt(ifStmt *converter.IfStmt) (ExecResult, error
 
 func (i *Interpreter) executeReturnStmt(r *converter.ReturnStmt) (ExecResult, error) {
 	i.addEvents(events.LineChanged{Line: int(r.Loc.Line)})
-	i.addStep()
+	if err := i.addStep(); err != nil {
+		return NormalResult(), err
+	}
 
 	var val *int
 	if r.Value != nil {
@@ -194,17 +215,16 @@ func (i *Interpreter) executeReturnStmt(r *converter.ReturnStmt) (ExecResult, er
 		val = &t
 	}
 
-	defer func() {
-		i.addEvents(events.LineChanged{Line: int(r.Loc.Line)})
-		i.addStep()
-	}()
+	i.addEvents(events.FunctionReturn{Name: i.CallStack.GetCurrentFrame().FuncName, ReturnValue: val})
 
 	return ReturnResult(val), nil
 }
 
 func (i *Interpreter) executeExprStmt(e *converter.ExprStmt) (ExecResult, error) {
 	i.addEvents(events.LineChanged{Line: int(e.Loc.Line)})
-	i.addStep()
+	if err := i.addStep(); err != nil {
+		return NormalResult(), err
+	}
 
 	if e.Expression == nil {
 		return NormalResult(), nil
@@ -221,7 +241,9 @@ func (i *Interpreter) executeExprStmt(e *converter.ExprStmt) (ExecResult, error)
 func (i *Interpreter) executeWhileStmt(loop *converter.WhileStmt) (ExecResult, error) {
 	for {
 		i.addEvents(events.LineChanged{Line: int(loop.Loc.Line)})
-		i.addStep()
+		if err := i.addStep(); err != nil {
+			return NormalResult(), err
+		}
 
 		condVal, err := i.executeExpression(loop.Condition)
 		if err != nil {
@@ -272,7 +294,9 @@ func (i *Interpreter) executeDoWhileStmt(loop *converter.DoWhileStmt) (ExecResul
 		}
 
 		i.addEvents(events.LineChanged{Line: int(loop.Condition.GetLocation().Line)})
-		i.addStep()
+		if err := i.addStep(); err != nil {
+			return NormalResult(), err
+		}
 
 		condVal, err := i.executeExpression(loop.Condition)
 		if err != nil {
@@ -294,16 +318,14 @@ func (i *Interpreter) executeDoWhileStmt(loop *converter.DoWhileStmt) (ExecResul
 
 func (i *Interpreter) executeForStmt(loop *converter.ForStmt) (ExecResult, error) {
 	i.addEvents(events.LineChanged{Line: int(loop.Loc.Line)})
-	i.addStep()
+	if err := i.addStep(); err != nil {
+		return NormalResult(), err
+	}
 
 	frame := i.CallStack.GetCurrentFrame()
 
 	frame.EnterScope()
 	i.addEvents(events.EnterScope{})
-	defer func() {
-		frame.ExitScope()
-		i.addEvents(events.ExitScope{})
-	}()
 
 	if loop.Init != nil {
 		_, err := i.executeStatement(loop.Init)
@@ -350,18 +372,25 @@ func (i *Interpreter) executeForStmt(loop *converter.ForStmt) (ExecResult, error
 		}
 	}
 
+	frame.ExitScope()
+	i.addEvents(events.ExitScope{})
+
 	return NormalResult(), nil
 }
 
 func (i *Interpreter) executeBreakStmt(b *converter.BreakStmt) (ExecResult, error) {
 	i.addEvents(events.LineChanged{Line: int(b.Loc.Line)})
-	i.addStep()
+	if err := i.addStep(); err != nil {
+		return NormalResult(), err
+	}
 	return BreakResult(), nil
 }
 
 func (i *Interpreter) executeContinueStmt(c *converter.ContinueStmt) (ExecResult, error) {
 	i.addEvents(events.LineChanged{Line: int(c.Loc.Line)})
-	i.addStep()
+	if err := i.addStep(); err != nil {
+		return NormalResult(), err
+	}
 	return ContinueResult(), nil
 }
 
