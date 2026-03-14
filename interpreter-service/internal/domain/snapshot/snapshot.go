@@ -9,10 +9,12 @@ import (
 )
 
 type Snapshot struct {
-	CallStack   *runtime.CallStack `json:"call_stack"`
-	GlobalScope *runtime.Scope     `json:"global_scope"`
-	Line        int                `json:"line"`
-	Error       string             `json:"error"`
+	CallStack    *runtime.CallStack `json:"call_stack"`
+	GlobalScope  *runtime.Scope     `json:"global_scope"`
+	Line         int                `json:"line"`
+	Error        string             `json:"error"`
+	FunctionName string             `json:"function_name"`
+	ReturnValue  *int               `json:"return_value"`
 }
 
 func NewSnapshot() *Snapshot {
@@ -22,6 +24,11 @@ func NewSnapshot() *Snapshot {
 		GlobalScope: globalScope,
 		Line:        0,
 	}
+}
+
+func (sn *Snapshot) NewStep() {
+	sn.FunctionName = ""
+	sn.ReturnValue = nil
 }
 
 func (sn *Snapshot) Apply(event events.Event, step int) error {
@@ -142,6 +149,8 @@ func (sn *Snapshot) applyFunctionReturn(e events.FunctionReturn) error {
 	if frame == nil {
 		return runtimeerrors.NewErrUnexpectedInternalError("no current frame for function return")
 	}
+	sn.FunctionName = e.Name
+	sn.ReturnValue = e.ReturnValue
 	if e.ReturnValue != nil {
 		frame.SetReturnValue(*e.ReturnValue)
 	}

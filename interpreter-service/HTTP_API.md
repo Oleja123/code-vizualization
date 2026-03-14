@@ -1,35 +1,20 @@
-# Interpreter Service - HTTP API
+# interpreter-service HTTP API
 
-## Обзор
+## Base URL
 
-`interpreter-service` предоставляет HTTP API для пошагового выполнения C-программы и получения снимка состояния интерпретатора на указанном шаге.
+По умолчанию:
 
-Сервис выполняет:
-1. Парсинг C-кода в AST.
-2. Семантическую валидацию (и опционально compile-check через OneCompiler).
-3. Интерпретацию программы с построением шагов.
-4. Возврат snapshot состояния по шагу `step`.
-
-## Конфигурация и запуск
-
-Сервис запускается из `cmd/main.go` и регистрирует endpoint:
-- `POST /snapshot`
-
-Флаги запуска:
-- `-port` (по умолчанию `8080`) — HTTP порт.
-- `-onecompiler-config` (по умолчанию `config.yaml`) — путь к YAML-конфигу OneCompiler.
-
-Пример:
-
-```bash
-go run ./cmd/main.go -port 8080 -onecompiler-config ./config.yaml
+```text
+http://localhost:8080
 ```
+
+Порт задаётся в `config.yaml` (`server.port`).
 
 ## Endpoint
 
-### POST /snapshot
+### `POST /snapshot`
 
-Возвращает snapshot состояния выполнения программы для заданного шага.
+Выполняет C-программу, строит список шагов интерпретации и возвращает snapshot для запрошенного шага.
 
 ### Request
 
@@ -43,10 +28,11 @@ go run ./cmd/main.go -port 8080 -onecompiler-config ./config.yaml
 ```
 
 Поля:
-- `code` (string, required) — исходный C-код.
-- `step` (int, required) — неотрицательный индекс внешнего шага.
 
-### Response (200 OK)
+- `code` (string, required) — исходный C-код.
+- `step` (int, required) — индекс шага (должен быть `>= 0`).
+
+### Success — `200 OK`
 
 ```json
 {
@@ -57,90 +43,31 @@ go run ./cmd/main.go -port 8080 -onecompiler-config ./config.yaml
   "result": 1,
   "snapshot": {
     "call_stack": {
-      "frames": [
-        {
-          "func_name": "global",
-          "scopes": [
-            {
-              "declarations": {
-                "declarations": []
-              }
-            }
-          ]
-        },
-        {
-          "func_name": "main",
-          "scopes": [
-            {
-              "declarations": {
-                "declarations": []
-              }
-            },
-            {
-              "declarations": {
-                "declarations": [
-                  {
-                    "name": "x",
-                    "value": 1,
-                    "step_changed": 1
-                  }
-                ]
-              }
-            }
-          ]
-        }
-      ]
+      "frames": []
     },
     "global_scope": {
       "declarations": {
         "declarations": []
       }
     },
-    "line": 2,
+    "line": 1,
     "error": ""
   }
 }
 ```
 
-Поля верхнего уровня:
-- `success` (bool) — признак успешного запроса.
-- `step` (int) — шаг, который запрошен клиентом.
-- `current_step` (int) — текущий применённый шаг (внешняя нумерация).
+Поля ответа:
+
+- `success` (bool)
+- `step` (int) — шаг из запроса.
+- `current_step` (int) — реально применённый шаг (внешняя нумерация относительно начала `main`).
 - `steps_count` (int) — количество доступных внешних шагов.
-- `result` (int|null) — итоговый `return` из `main`, если вычислен.
-- `snapshot` (object) — снимок runtime-состояния.
+- `result` (*int, optional) — значение `return` из `main`, если вычислено.
+- `snapshot` (object) — снимок runtime-состояния после применения шага.
 
-### Snapshot structure
+### Error format
 
-`snapshot`:
-- `call_stack.frames[]`
-  - `func_name` (string)
-  - `scopes[]`
-    - `parent` **не сериализуется** и отсутствует в JSON-ответе.
-    - `declarations.declarations[]` — массив деклараций в текущем scope.
-      - Возможные элементы:
-        1. Variable:
-           - `name` (string)
-           - `value` (int|null)
-           - `step_changed` (int)
-        2. Array:
-           - `name` (string)
-           - `size` (int)
-           - `values[]`:
-             - `value` (int|null)
-             - `step_changed` (int)
-        3. Array2D:
-           - `name` (string)
-           - `size1` (int)
-           - `size2` (int)
-           - `values[]` (массив строк, каждая как `Array`)
-- `global_scope` — глобальный scope.
-- `line` (int) — текущая строка выполнения.
-- `error` (string) — runtime/undefined behavior ошибка в контексте snapshot (если была).
-
-## Ошибки
-
-Все ошибки возвращаются в формате:
+Все ошибки возвращаются в JSON:
 
 ```json
 {
@@ -149,77 +76,71 @@ go run ./cmd/main.go -port 8080 -onecompiler-config ./config.yaml
 }
 ```
 
-Коды и причины:
+### Errors
+
 - `400 Bad Request`
-  - невалидный JSON body;
-  - `code` пустой;
-  - `step < 0`;
-  - parse error;
-  - semantic error;
-  - ошибка интерпретации;
-  - шаг вне диапазона.
+  - невалидный JSON (`invalid request body: ...`),
+  - неизвестные поля в JSON,
+  - пустой `code` (`code is required`),
+  - `step < 0` (`step must be non-negative`),
+  - parse error,
+  - semantic error,
+  - ошибка выполнения интерпретатора,
+  - шаг вне диапазона (`invalid step index: ...`).
 - `405 Method Not Allowed`
-  - используется метод, отличный от `POST`.
+  - метод отличен от `POST`.
 - `503 Service Unavailable`
-  - compile-check включён, но OneCompiler недоступен (`CompileUnavailableError`).
+  - включён compile-check и OneCompiler недоступен (`compilation check unavailable: ...`).
 
-## Примеры
+## Snapshot model (кратко)
 
-### Успешный запрос
+- `snapshot.call_stack.frames[]`
+  - `func_name`
+  - `scopes[]`
+    - `declarations.declarations[]` — переменные/массивы/2D-массивы.
+- `snapshot.global_scope` — глобальный scope.
+- `snapshot.line` — текущая строка интерпретации.
+- `snapshot.error` — runtime/undefined behavior ошибка на текущем состоянии (если есть).
+
+`parent`-ссылки scope не сериализуются в JSON.
+
+## Examples
+
+### Success
 
 ```bash
 curl -X POST http://localhost:8080/snapshot \
   -H "Content-Type: application/json" \
   -d '{
-    "code":"int main(){ int x=1; x=2; return x; }",
+    "code": "int main(){ int x = 1; x = 2; return x; }",
     "step": 2
   }'
 ```
 
-### Ошибка валидации
+### Step out of range
 
 ```bash
 curl -X POST http://localhost:8080/snapshot \
   -H "Content-Type: application/json" \
   -d '{
-    "code":"float main(){ return 0; }",
-    "step": 0
-  }'
-```
-
-Пример ответа:
-
-```json
-{
-  "success": false,
-  "error": "semantic error: ..."
-}
-```
-
-### Неверный шаг
-
-```bash
-curl -X POST http://localhost:8080/snapshot \
-  -H "Content-Type: application/json" \
-  -d '{
-    "code":"int main(){ return 0; }",
+    "code": "int main(){ return 0; }",
     "step": 999
   }'
 ```
 
-Пример ответа:
+### Method not allowed
 
-```json
-{
-  "success": false,
-  "error": "step 999 out of range [0, N]"
-}
+```bash
+curl -X GET http://localhost:8080/snapshot
 ```
 
-## Примечания
+## Execution pipeline
 
-- API использует **внешнюю нумерацию шагов** (`step`, `current_step`, `steps_count`) с учётом внутреннего `step_begin`.
-- `result` может быть `null`, если вычисление завершилось ошибкой до возврата из `main`.
-- Поле `error` внутри `snapshot` используется для отображения runtime/undefined behavior ошибок на шаге.
-- Поле `scope.parent` намеренно скрыто из JSON (`json:"-"`), чтобы не отдавать внутренние ссылки между scope.
-- Не храните реальные секреты (например, API-ключи) в репозитории; используйте переменные окружения/секрет-хранилище.
+`/snapshot` обрабатывается по этапам:
+
+1. Parse C-кода в AST (`cst-to-ast-service/pkg/converter`).
+2. Семантическая валидация (`semantic-analyzer-service/pkg/validator`).
+3. Интерпретация (`internal/application/interpreter`) с лимитами:
+   - `limitations.max_allocated_elements`,
+   - `limitations.max_steps`.
+4. Применение шагов в `eventdispatcher` и возврат snapshot.

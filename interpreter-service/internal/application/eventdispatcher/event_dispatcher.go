@@ -3,18 +3,13 @@ package eventdispatcher
 import (
 	"fmt"
 
-	"github.com/Oleja123/code-vizualization/interpreter-service/internal/domain/events"
 	"github.com/Oleja123/code-vizualization/interpreter-service/internal/domain/snapshot"
+	"github.com/Oleja123/code-vizualization/interpreter-service/internal/domain/step"
 )
-
-type Step struct {
-	Events     []events.Event
-	StepNumber int
-}
 
 type EventDispatcher struct {
 	Snapshot         *snapshot.Snapshot
-	Steps            []Step
+	Steps            []step.Step
 	currentStepIndex int
 	stepBegin        int
 }
@@ -22,7 +17,7 @@ type EventDispatcher struct {
 func NewEventDispatcher(stepBegin int) *EventDispatcher {
 	return &EventDispatcher{
 		Snapshot:         snapshot.NewSnapshot(),
-		Steps:            make([]Step, 0),
+		Steps:            make([]step.Step, 0),
 		currentStepIndex: -1,
 		stepBegin:        stepBegin,
 	}
@@ -42,6 +37,7 @@ func (ed *EventDispatcher) ApplyStep(stepIndex int) error {
 
 	startIndex := ed.currentStepIndex + 1
 	for i := startIndex; i <= stepIndex; i++ {
+		ed.Snapshot.NewStep()
 		for _, event := range ed.Steps[i].Events {
 			if err := ed.Snapshot.Apply(event, i-ed.stepBegin); err != nil {
 				return err
@@ -65,9 +61,9 @@ func (ed *EventDispatcher) GetSnapshot() *snapshot.Snapshot {
 	return ed.Snapshot
 }
 
-func (ed *EventDispatcher) GetStep(index int) (Step, error) {
+func (ed *EventDispatcher) GetStep(index int) (step.Step, error) {
 	if index < 0 || index >= len(ed.Steps) {
-		return Step{}, fmt.Errorf("invalid step index: %d", index)
+		return step.Step{}, fmt.Errorf("invalid step index: %d", index)
 	}
 	return ed.Steps[index], nil
 }
