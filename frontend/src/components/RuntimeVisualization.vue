@@ -131,6 +131,15 @@ export default {
   gap: 1rem;
 }
 
+.function-return {
+  margin: 1rem 1rem 0;
+  padding: 0.5rem 0.75rem;
+  border-radius: 4px;
+  background-color: #e8f5e9;
+  color: #2e7d32;
+  font-weight: 500;
+}
+
 .empty-state {
   flex: 1;
   display: flex;
