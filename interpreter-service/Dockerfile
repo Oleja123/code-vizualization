@@ -20,7 +20,7 @@ FROM alpine:latest
 RUN apk add --no-cache ca-certificates
 WORKDIR /app
 COPY --from=builder /app/interpreter-service/interpreter .
-COPY --from=builder /app/interpreter-service/config.yaml .
+COPY --from=builder /app/interpreter-service/config.docker.yaml .
 
 EXPOSE 8084
-CMD ["./interpreter", "-config", "config.yaml"]
+CMD ["./interpreter", "-config", "config.docker.yaml"]
