@@ -5,6 +5,7 @@ Vue 3 приложение для:
 - пошаговой трассировки выполнения C-кода,
 - визуализации runtime-состояния,
 - генерации блок-схем,
+- статического анализа C-кода через cppcheck,
 - авторизации пользователя (или dev-режима без auth).
 
 ## Основные возможности
@@ -27,6 +28,13 @@ Vue 3 приложение для:
 - Экран входа/регистрации в приложении.
 - Проверка сессии, login/register/logout.
 - Поддержка dev-режима без реального auth backend.
+
+### 4) Анализ кода (cppcheck)
+
+- Отдельная вкладка «Анализ кода».
+- Отправка C-кода в `cppcheck-analyzer-service` (`POST /api/analyze`).
+- Список найденных issues c сообщением и строкой.
+- Подсветка строк с проблемами и фокус по клику на issue.
 
 ## Установка и запуск
 
@@ -59,6 +67,7 @@ VITE_FLOWCHART_SERVICE_URL=http://localhost:8081
 `vite.config.js` проксирует:
 
 - `/api/snapshot` → `http://localhost:8080/snapshot`
+- `/api/analyze` → `http://localhost:8086/analyze`
 - `/api/auth/*` → `http://localhost:8083/api/auth/*`
 - `/api/flowchart/*` → `http://localhost:8081/api/flowchart/*`
 
@@ -69,6 +78,7 @@ frontend/
 ├── src/
 │   ├── api/
 │   │   ├── interpreter.js
+│   │   ├── cppcheck.js
 │   │   ├── auth.js
 │   │   └── flowchart.js
 │   ├── components/
@@ -81,7 +91,8 @@ frontend/
 │   │   ├── Array.vue
 │   │   └── Array2D.vue
 │   ├── views/
-│   │   └── VisualizationView.vue
+│   │   ├── VisualizationView.vue
+│   │   └── CodeAnalysisView.vue
 │   ├── App.vue
 │   ├── main.js
 │   └── style.css
