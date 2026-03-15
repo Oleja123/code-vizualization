@@ -9,6 +9,7 @@ COPY go.work go.work.sum ./
 
 # Копируем все модули которые нужны interpreter-service
 COPY cst-to-ast-service/ ./cst-to-ast-service/
+COPY cppcheck-analyzer-service/ ./cppcheck-analyzer-service/
 COPY interpreter-service/ ./interpreter-service/
 COPY semantic-analyzer-service/ ./semantic-analyzer-service/
 
