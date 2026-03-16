@@ -40,6 +40,9 @@ const tracing      = ref(false)
 
 const svgContainers = {}
 
+// ──────────── Панель состояния ────────────
+const varsExpanded = ref(false)
+
 // ──────────── Точка останова ────────────
 const breakpointLine = ref(null)   // номер строки или null
 
@@ -385,7 +388,7 @@ function onKeydown(e) {
 </script>
 
 <template>
-  <div class="tracer-root" @keydown="onKeydown" tabindex="0">
+  <div class="tracer-root" :style="{ gridTemplateColumns: `680px 1fr ${varsExpanded ? '300px' : '36px'}` }" @keydown="onKeydown" tabindex="0">
 
     <!-- ══════ КОЛОНКА 1: Редактор ══════ -->
     <div class="col col-editor">
@@ -519,18 +522,34 @@ function onKeydown(e) {
     </div>
 
     <!-- ══════ КОЛОНКА 3: Переменные ══════ -->
-    <div class="col col-vars">
-      <div class="col-header">
-        <span class="panel-label"><span class="dot dot-green"></span>Состояние программы</span>
-        <span v-if="tracing" class="step-badge">Шаг {{ currentStep }}</span>
-      </div>
-      <div class="vars-body">
-        <div v-if="!tracing" class="placeholder small">
-          <div class="ph-icon" style="font-size:32px">🖥️</div>
-          <div class="ph-text" style="font-size:12px">Состояние переменных и стек вызовов<br>отобразятся во время трассировки</div>
+    <div class="col col-vars" :class="{ collapsed: !varsExpanded }">
+
+      <!-- Свёрнутое состояние: вертикальная полоска с кнопкой -->
+      <template v-if="!varsExpanded">
+        <button class="vars-toggle-btn" @click="varsExpanded = true" title="Показать состояние программы">
+          <span class="toggle-icon">◀</span>
+          <span class="toggle-label">Состояние</span>
+        </button>
+      </template>
+
+      <!-- Развёрнутое состояние -->
+      <template v-else>
+        <div class="col-header">
+          <span class="panel-label"><span class="dot dot-green"></span>Состояние программы</span>
+          <div style="display:flex;align-items:center;gap:6px">
+            <span v-if="tracing" class="step-badge">Шаг {{ currentStep }}</span>
+            <button class="vars-collapse-btn" @click="varsExpanded = false" title="Свернуть">▶</button>
+          </div>
         </div>
-        <RuntimeVisualization v-if="snapshot" :snapshot="snapshot" :current-step="currentStep" />
-      </div>
+        <div class="vars-body">
+          <div v-if="!tracing" class="placeholder small">
+            <div class="ph-icon" style="font-size:32px">🖥️</div>
+            <div class="ph-text" style="font-size:12px">Состояние переменных и стек вызовов<br>отобразятся во время трассировки</div>
+          </div>
+          <RuntimeVisualization v-if="snapshot" :snapshot="snapshot" :current-step="currentStep" />
+        </div>
+      </template>
+
     </div>
 
   </div>
@@ -539,7 +558,8 @@ function onKeydown(e) {
 <style scoped>
 .tracer-root {
   display: grid;
-  grid-template-columns: 680px 1fr 300px;
+  grid-template-columns: 680px 1fr 36px; /* fallback, управляется inline style */
+  transition: grid-template-columns .25s ease;
   height: 100%;
   overflow: hidden;
   outline: none;
@@ -726,8 +746,47 @@ function onKeydown(e) {
 .svg-inner :deep(.node-active > text) { font-weight: bold; }
 
 /* ── Переменные ── */
-.col-vars { background: #fafafa; }
+.col-vars { background: #fafafa; transition: width .2s; }
+.col-vars.collapsed { border-left: 1px solid #e2e8f0; }
 .vars-body { flex: 1; overflow-y: auto; overflow-x: hidden; }
+
+/* Кнопка раскрытия (свёрнутая панель) */
+.vars-toggle-btn {
+  flex: 1;
+  width: 100%;
+  border: none;
+  background: #f8fafc;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 16px 0;
+  transition: background .15s;
+  color: #64748b;
+}
+.vars-toggle-btn:hover { background: #f1f5f9; color: #4f46e5; }
+.toggle-icon { font-size: 12px; }
+.toggle-label {
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  font-size: 11px;
+  font-weight: 600;
+  font-family: 'Courier New', monospace;
+  letter-spacing: 0.05em;
+  user-select: none;
+}
+
+/* Кнопка сворачивания (развёрнутая панель) */
+.vars-collapse-btn {
+  width: 20px; height: 20px;
+  border: 1px solid #e2e8f0; background: white; color: #64748b;
+  border-radius: 3px; cursor: pointer; font-size: 10px;
+  display: flex; align-items: center; justify-content: center;
+  transition: all .15s; flex-shrink: 0;
+}
+.vars-collapse-btn:hover { border-color: #4f46e5; color: #4f46e5; }
 
 /* ── Заглушки ── */
 .placeholder {
