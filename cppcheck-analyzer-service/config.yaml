@@ -1,0 +1,10 @@
+server:
+  port: 8086
+
+cppcheck:
+  path: "cppcheck"
+  std: "c11"
+  enable: "warning,style,performance,portability,information"
+  timeout_seconds: 15
+  inconclusive: false
+  max_issues: 100

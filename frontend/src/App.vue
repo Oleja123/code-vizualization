@@ -77,6 +77,12 @@
           >
             ⚡ Трассировка кода
           </button>
+          <button
+            :class="['nav-button', { active: activeView === 'analysis' }]"
+            @click="activeView = 'analysis'"
+          >
+            🛡 Анализ кода
+          </button>
         </nav>
         <div class="user-info">
           <span class="username">👤 {{ user.username }}</span>
@@ -86,6 +92,7 @@
       <main class="app-main">
         <FlowchartTracer   v-if="activeView === 'tracer'" />
         <VisualizationView v-if="activeView === 'visualization'" />
+        <CodeAnalysisView  v-if="activeView === 'analysis'" />
       </main>
     </template>
   </div>
@@ -94,6 +101,7 @@
 <script>
 import { ref, onMounted } from 'vue'
 import VisualizationView from './views/VisualizationView.vue'
+import CodeAnalysisView from './views/CodeAnalysisView.vue'
 import FlowchartTracer from './components/FlowchartTracer.vue'
 import { checkSession, login, register, logout } from './api/auth.js'
 
@@ -101,6 +109,7 @@ export default {
   name: 'App',
   components: {
     VisualizationView,
+    CodeAnalysisView,
     FlowchartTracer
   },
   setup() {

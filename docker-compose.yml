@@ -46,9 +46,17 @@ services:
     depends_on:
       redis:
         condition: service_healthy
-    command: ["-config", "/app/config.docker.yaml"]
     ports:
       - "8084:8084"
+
+  cppcheck-analyzer:
+    build:
+      context: .
+      dockerfile: cppcheck-analyzer-service/Dockerfile
+    container_name: codeviz-cppcheck-analyzer
+    restart: unless-stopped
+    ports:
+      - "8086:8086"
 
   # ── Java services ───────────────────────────────────────────────
   auth-service:
@@ -97,6 +105,7 @@ services:
       - auth-service
       - flowchart-visualizer
       - interpreter
+      - cppcheck-analyzer
 
 volumes:
   pg_data:

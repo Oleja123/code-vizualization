@@ -6,6 +6,7 @@ WORKDIR /app
 
 COPY go.work go.work.sum ./
 COPY cst-to-ast-service/ ./cst-to-ast-service/
+COPY cppcheck-analyzer-service/ ./cppcheck-analyzer-service/
 COPY semantic-analyzer-service/ ./semantic-analyzer-service/
 COPY interpreter-service/ ./interpreter-service/
 

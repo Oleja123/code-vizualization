@@ -12,6 +12,12 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api/, '')
       },
+      // Cppcheck analyzer - порт 8086
+      '/api/analyze': {
+        target: 'http://localhost:8086',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api/, '')
+      },
       // Auth service - порт 8083
       '/api/auth': {
         target: 'http://localhost:8083',
