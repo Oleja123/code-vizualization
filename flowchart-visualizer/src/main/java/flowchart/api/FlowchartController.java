@@ -26,7 +26,7 @@ import java.util.Map;
  */
 @RestController
 @RequestMapping("/api/flowchart")
-@CrossOrigin(origins = "*")
+
 public class FlowchartController {
 
     private final FlowchartGenerator generator;

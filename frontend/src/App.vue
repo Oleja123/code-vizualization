@@ -83,6 +83,12 @@
           >
             🛡 Анализ кода
           </button>
+          <button
+            :class="['nav-button', { active: activeView === 'metrics' }]"
+            @click="activeView = 'metrics'"
+          >
+            📈 Метрики
+          </button>
         </nav>
         <div class="user-info">
           <span class="username">👤 {{ user.username }}</span>
@@ -93,6 +99,7 @@
         <FlowchartTracer   v-if="activeView === 'tracer'" />
         <VisualizationView v-if="activeView === 'visualization'" />
         <CodeAnalysisView  v-if="activeView === 'analysis'" />
+        <MetricsView       v-if="activeView === 'metrics'" />
       </main>
     </template>
   </div>
@@ -104,13 +111,15 @@ import VisualizationView from './views/VisualizationView.vue'
 import CodeAnalysisView from './views/CodeAnalysisView.vue'
 import FlowchartTracer from './components/FlowchartTracer.vue'
 import { checkSession, login, register, logout } from './api/auth.js'
+import MetricsView from './views/MetricsView.vue'
 
 export default {
   name: 'App',
   components: {
     VisualizationView,
     CodeAnalysisView,
-    FlowchartTracer
+    FlowchartTracer,
+    MetricsView
   },
   setup() {
     const activeView = ref('tracer')
