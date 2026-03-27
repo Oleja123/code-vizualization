@@ -7,7 +7,9 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
  * Главный класс Spring Boot приложения
  * Запускает REST API сервер на порту 8080
  */
-@SpringBootApplication
+@SpringBootApplication(exclude = {
+    org.springframework.boot.autoconfigure.security.servlet.UserDetailsServiceAutoConfiguration.class
+})
 public class FlowchartVisualizerApplication {
     
     public static void main(String[] args) {

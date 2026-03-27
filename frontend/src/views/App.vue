@@ -67,21 +67,27 @@
         <nav>
           <button
             :class="['nav-button', { active: activeView === 'tracer' }]"
-            @click="activeView = 'tracer'"
+            @click="activeView = 'tracer'; localStorage.setItem('activeView', 'tracer')"
           >
-            🔍 Трассировка схемы
+            📊 Трассировка схемы
           </button>
           <button
             :class="['nav-button', { active: activeView === 'visualization' }]"
-            @click="activeView = 'visualization'"
+            @click="activeView = 'visualization'; localStorage.setItem('activeView', 'visualization')"
           >
             ⚡ Трассировка кода
           </button>
           <button
-            :class="['nav-button', { active: activeView === 'flowchart' }]"
-            @click="activeView = 'flowchart'"
+            :class="['nav-button', { active: activeView === 'analysis' }]"
+            @click="activeView = 'analysis'; localStorage.setItem('activeView', 'analysis')"
           >
-            📊 Блок-схема
+            🛡 Анализ кода
+          </button>
+          <button
+            :class="['nav-button', { active: activeView === 'metrics' }]"
+            @click="activeView = 'metrics'; localStorage.setItem('activeView', 'metrics')"
+          >
+            📈 Метрики
           </button>
         </nav>
         <div class="user-info">
@@ -90,9 +96,10 @@
         </div>
       </header>
       <main class="app-main">
-        <FlowchartTracer    v-if="activeView === 'tracer'" />
-        <VisualizationView  v-if="activeView === 'visualization'" />
-        <FlowchartBuilder   v-if="activeView === 'flowchart'" />
+        <FlowchartTracer   v-if="activeView === 'tracer'" />
+        <VisualizationView v-if="activeView === 'visualization'" />
+        <CodeAnalysisView  v-if="activeView === 'analysis'" />
+        <MetricsView       v-if="activeView === 'metrics'" />
       </main>
     </template>
   </div>
@@ -101,19 +108,23 @@
 <script>
 import { ref, onMounted } from 'vue'
 import VisualizationView from './views/VisualizationView.vue'
-import FlowchartBuilder from './components/FlowchartBuilder.vue'
+import CodeAnalysisView from './views/CodeAnalysisView.vue'
 import FlowchartTracer from './components/FlowchartTracer.vue'
-import { checkSession, login, register, logout } from '../api/auth.js'
+import { checkSession, login, register, logout } from './api/auth.js'
+import MetricsView from './views/MetricsView.vue'
 
 export default {
   name: 'App',
   components: {
     VisualizationView,
-    FlowchartBuilder,
-    FlowchartTracer
+    CodeAnalysisView,
+    FlowchartTracer,
+    MetricsView
   },
   setup() {
-    const activeView = ref('tracer')
+    const VALID_VIEWS = ['tracer', 'visualization', 'analysis', 'metrics']
+    const savedView = localStorage.getItem('activeView')
+    const activeView = ref(VALID_VIEWS.includes(savedView) ? savedView : 'tracer')
 
     // Auth
     const user = ref(null)

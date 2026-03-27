@@ -65,8 +65,6 @@ services:
       dockerfile: Dockerfile
     container_name: codeviz-auth
     restart: unless-stopped
-    ports:
-      - "8083:8083"
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/server_code_visualization
       SPRING_DATASOURCE_USERNAME: postgres
@@ -81,12 +79,32 @@ services:
       dockerfile: Dockerfile
     container_name: codeviz-flowchart
     restart: unless-stopped
-    ports:
-      - "8081:8081"
     environment:
       AST_SERVICE_URL: http://semantic-analyzer:8082
+      AUTH_SERVICE_URL: http://auth-service:8083
     depends_on:
       - semantic-analyzer
+      - auth-service
+
+  metrics-service:
+    build:
+      context: ./metrics-service
+      dockerfile: Dockerfile
+    container_name: codeviz-metrics
+    restart: unless-stopped
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/server_code_visualization
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: postgres
+      AST_SERVICE_URL: http://semantic-analyzer:8082
+      AUTH_SERVICE_URL: http://auth-service:8083
+    depends_on:
+      postgres:
+        condition: service_healthy
+      semantic-analyzer:
+        condition: service_started
+      auth-service:
+        condition: service_started
 
   # ── Frontend ────────────────────────────────────────────────────
   frontend:
@@ -95,17 +113,32 @@ services:
       dockerfile: Dockerfile
       args:
         VITE_AUTH_ENABLED: "true"
-        VITE_AUTH_SERVICE_URL: "http://localhost:8083"
-        VITE_FLOWCHART_SERVICE_URL: "http://localhost:8081"
+        VITE_AUTH_SERVICE_URL: "http://localhost:3000"
+        VITE_FLOWCHART_SERVICE_URL: "http://localhost:3000"
+        VITE_METRICS_SERVICE_URL: "http://localhost:3000"
     container_name: codeviz-frontend
     restart: unless-stopped
-    ports:
-      - "3000:80"
     depends_on:
       - auth-service
       - flowchart-visualizer
+      - metrics-service
       - interpreter
       - cppcheck-analyzer
+
+  # ── Nginx reverse proxy ─────────────────────────────────────────
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: codeviz-nginx
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - auth-service
+      - flowchart-visualizer
+      - metrics-service
+      - frontend
 
 volumes:
   pg_data:
