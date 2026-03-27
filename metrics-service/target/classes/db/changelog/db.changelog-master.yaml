@@ -1,0 +1,58 @@
+databaseChangeLog:
+  - changeSet:
+      id: create-function-metrics-table
+      author: student
+      changes:
+        - createTable:
+            tableName: function_metrics
+            columns:
+              - column:
+                  name: id
+                  type: BIGINT
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: username
+                  type: VARCHAR(255)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: function_name
+                  type: VARCHAR(255)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: loc
+                  type: INT
+              - column:
+                  name: cyclomatic_complexity
+                  type: INT
+              - column:
+                  name: parameter_count
+                  type: INT
+              - column:
+                  name: max_nesting_depth
+                  type: INT
+              - column:
+                  name: call_count
+                  type: INT
+              - column:
+                  name: return_count
+                  type: INT
+              - column:
+                  name: goto_count
+                  type: INT
+              - column:
+                  name: created_at
+                  type: TIMESTAMP
+                  constraints:
+                    nullable: false
+
+        - createIndex:
+            tableName: function_metrics
+            indexName: idx_function_metrics_username
+            columns:
+              - column:
+                  name: username
