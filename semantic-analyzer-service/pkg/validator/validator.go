@@ -319,12 +319,6 @@ func (v *SemanticValidator) validateStmt(stmt interface{}) error {
 				return err
 			}
 		}
-	case *converter.LabelStmt:
-		if s.Statement != nil {
-			if err := v.validateStmt(s.Statement); err != nil {
-				return err
-			}
-		}
 	}
 
 	return nil

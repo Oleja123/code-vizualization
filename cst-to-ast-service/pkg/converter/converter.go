@@ -32,8 +32,6 @@ type (
 	ExprStmt     = structs.ExprStmt
 	BreakStmt    = structs.BreakStmt
 	ContinueStmt = structs.ContinueStmt
-	GotoStmt     = structs.GotoStmt
-	LabelStmt    = structs.LabelStmt
 
 	// Выражения
 	VariableExpr    = structs.VariableExpr
@@ -208,10 +206,6 @@ func (c *CConverter) ConvertStmt(node *sitter.Node, sourceCode []byte) (interfac
 		return &structs.BreakStmt{Type: "BreakStmt", Loc: c.getLocation(node)}, nil
 	case "continue_statement":
 		return &structs.ContinueStmt{Type: "ContinueStmt", Loc: c.getLocation(node)}, nil
-	case "goto_statement":
-		return c.convertGotoStatement(node, sourceCode)
-	case "labeled_statement":
-		return c.convertLabeledStatement(node, sourceCode)
 	case "comment":
 		// Пропускаем комментарии - они не являются AST узлами
 		return nil, nil
@@ -1415,67 +1409,6 @@ func (c *CConverter) convertArrayInitExpression(node *sitter.Node, sourceCode []
 		Type:     "ArrayInitExpr",
 		Elements: elements,
 		Loc:      c.getLocation(node),
-	}, nil
-}
-
-func (c *CConverter) convertGotoStatement(node *sitter.Node, sourceCode []byte) (interfaces.Stmt, error) {
-	// goto_statement: "goto" statement_identifier ";"
-	var label string
-
-	for i := 0; i < int(node.ChildCount()); i++ {
-		child := node.Child(i)
-		childType := child.Type()
-
-		if childType == "statement_identifier" {
-			label = c.getNodeText(child, sourceCode)
-			break
-		}
-	}
-
-	if label == "" {
-		return nil, newConverterError(ErrStmtConversion, "goto statement without label", node, nil)
-	}
-
-	return &structs.GotoStmt{
-		Type:  "GotoStmt",
-		Label: label,
-		Loc:   c.getLocation(node),
-	}, nil
-}
-
-func (c *CConverter) convertLabeledStatement(node *sitter.Node, sourceCode []byte) (interfaces.Stmt, error) {
-	// labeled_statement: statement_identifier ":" statement
-	var label string
-	var statement interfaces.Stmt
-
-	for i := 0; i < int(node.ChildCount()); i++ {
-		child := node.Child(i)
-		childType := child.Type()
-
-		if childType == "statement_identifier" {
-			label = c.getNodeText(child, sourceCode)
-		} else if childType == ":" {
-			// Пропускаем двоеточие
-			continue
-		} else if childType != "statement_identifier" && childType != ":" && statement == nil {
-			// Это оператор после метки
-			stmt, err := c.ConvertStmt(child, sourceCode)
-			if err != nil {
-				return nil, err
-			}
-			statement = stmt
-		}
-	}
-
-	if label == "" {
-		return nil, newConverterError(ErrStmtConversion, "labeled statement without label", node, nil)
-	}
-
-	return &structs.LabelStmt{
-		Type:      "LabelStmt",
-		Label:     label,
-		Statement: statement,
-		Loc:       c.getLocation(node),
 	}, nil
 }
 

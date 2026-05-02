@@ -160,29 +160,6 @@ func (c *ContinueStmt) StmtNode()                        {}
 func (c *ContinueStmt) NodeType() string                 { return "ContinueStmt" }
 func (c *ContinueStmt) GetLocation() interfaces.Location { return c.Loc }
 
-// GotoStmt представляет оператор goto
-type GotoStmt struct {
-	Type  string              `json:"type"`  // всегда "GotoStmt"
-	Label string              `json:"label"` // имя метки
-	Loc   interfaces.Location `json:"location"`
-}
-
-func (g *GotoStmt) StmtNode()                        {}
-func (g *GotoStmt) NodeType() string                 { return "GotoStmt" }
-func (g *GotoStmt) GetLocation() interfaces.Location { return g.Loc }
-
-// LabelStmt представляет метку (label: statement)
-type LabelStmt struct {
-	Type      string              `json:"type"`      // всегда "LabelStmt"
-	Label     string              `json:"label"`     // имя метки
-	Statement interfaces.Stmt     `json:"statement"` // оператор после метки (может быть nil)
-	Loc       interfaces.Location `json:"location"`
-}
-
-func (l *LabelStmt) StmtNode()                        {}
-func (l *LabelStmt) NodeType() string                 { return "LabelStmt" }
-func (l *LabelStmt) GetLocation() interfaces.Location { return l.Loc }
-
 // ============= Expressions =============
 
 // Identifier представляет идентификатор (имя переменной/функции)
