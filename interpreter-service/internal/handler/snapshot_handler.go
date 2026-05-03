@@ -34,7 +34,6 @@ type SnapshotResponse struct {
 }
 
 func NewSnapshotHandler(cfg *configinfra.Config, cacher cache.Cacher) http.HandlerFunc {
-	conv := converter.New()
 	val := buildValidator(cfg)
 
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -79,6 +78,7 @@ func NewSnapshotHandler(cfg *configinfra.Config, cacher cache.Cacher) http.Handl
 		}
 
 		if steps == nil && execErr == nil {
+			conv := converter.New()
 			program, parseErr := conv.ParseToAST(req.Code)
 			if parseErr != nil {
 				writeJSON(w, http.StatusBadRequest, SnapshotResponse{Success: false, Error: "parse error: " + parseErr.Error()})
