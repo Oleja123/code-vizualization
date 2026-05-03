@@ -26,7 +26,6 @@ type ValidateResponse struct {
 }
 
 var (
-	conv     *converter.CConverter
 	val      *validator.SemanticValidator
 	ocClient *onecompiler.Client
 	cfg      *config.Config
@@ -34,7 +33,6 @@ var (
 )
 
 func init() {
-	conv = converter.NewCConverter()
 	logger = slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
 		Level: slog.LevelInfo,
 	}))
@@ -57,6 +55,8 @@ func handleValidate(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+
+	conv := converter.NewCConverter()
 
 	// Парсим код
 	tree, err := conv.Parse([]byte(req.Code))
