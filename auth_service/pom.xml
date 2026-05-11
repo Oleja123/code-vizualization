@@ -21,6 +21,7 @@
 
     <properties>
         <java.version>21</java.version>
+        <lombok.version>1.18.36</lombok.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     </properties>
 
@@ -147,6 +148,84 @@
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
+                <configuration>
+                    <excludes>
+                        <exclude>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                        </exclude>
+                    </excludes>
+                </configuration>
+            </plugin>
+
+            <!-- Явная настройка компилятора с Lombok annotationProcessor -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <release>21</release>
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                            <version>${lombok.version}</version>
+                        </path>
+                    </annotationProcessorPaths>
+                </configuration>
+            </plugin>
+
+            <!-- Surefire — передаём bytebuddy флаг для Mockito + Java 21 -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>3.2.5</version>
+                <configuration>
+                    <argLine>-Dnet.bytebuddy.experimental=true</argLine>
+                </configuration>
+            </plugin>
+        
+            <!-- ===== Мутационное тестирование — PIT ===== -->
+            <plugin>
+                <groupId>org.pitest</groupId>
+                <artifactId>pitest-maven</artifactId>
+                <version>1.17.0</version>
+                <dependencies>
+                    <dependency>
+                        <groupId>org.pitest</groupId>
+                        <artifactId>pitest-junit5-plugin</artifactId>
+                        <version>1.2.2</version>
+                    </dependency>
+                </dependencies>
+                <configuration>
+                    <targetClasses>
+                        <param>codeVisualization.server.service.*</param>
+                    </targetClasses>
+                    <targetTests>
+                        <param>codeVisualization.server.service.*</param>
+                    </targetTests>
+                    <mutators>
+                        <mutator>CONDITIONALS_BOUNDARY</mutator>
+                        <mutator>NEGATE_CONDITIONALS</mutator>
+                        <mutator>MATH</mutator>
+                        <mutator>INCREMENTS</mutator>
+                        <mutator>EMPTY_RETURNS</mutator>
+                        <mutator>FALSE_RETURNS</mutator>
+                        <mutator>TRUE_RETURNS</mutator>
+                        <mutator>NULL_RETURNS</mutator>
+                        <mutator>PRIMITIVE_RETURNS</mutator>
+                    </mutators>
+                    <outputFormats>
+                        <outputFormat>HTML</outputFormat>
+                        <outputFormat>XML</outputFormat>
+                    </outputFormats>
+                    <!-- bytebuddy нужен Mockito под Java 21+ -->
+                    <jvmArgs>
+                        <jvmArg>-Dnet.bytebuddy.experimental=true</jvmArg>
+                    </jvmArgs>
+                    <mutationThreshold>50</mutationThreshold>
+                    <withHistory>true</withHistory>
+                    <timeoutConstant>8000</timeoutConstant>
+                </configuration>
             </plugin>
         </plugins>
     </build>

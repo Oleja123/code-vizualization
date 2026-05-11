@@ -128,7 +128,7 @@
                     </annotationProcessorPaths>
                 </configuration>
             </plugin>
-
+            <!-- Мутационное тестирование — PIT -->
             <!-- FIX для Java 23 + Mockito -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
@@ -150,6 +150,50 @@
                             <artifactId>lombok</artifactId>
                         </exclude>
                     </excludes>
+                </configuration>
+            </plugin>
+        
+            <!-- ===== Мутационное тестирование — PIT ===== -->
+            <plugin>
+                <groupId>org.pitest</groupId>
+                <artifactId>pitest-maven</artifactId>
+                <version>1.17.0</version>
+                <dependencies>
+                    <dependency>
+                        <groupId>org.pitest</groupId>
+                        <artifactId>pitest-junit5-plugin</artifactId>
+                        <version>1.2.2</version>
+                    </dependency>
+                </dependencies>
+                <configuration>
+                    <targetClasses>
+                        <param>com.metrics.calculator.*</param>
+                    </targetClasses>
+                    <targetTests>
+                        <param>com.metrics.calculator.*</param>
+                    </targetTests>
+                    <mutators>
+                        <mutator>CONDITIONALS_BOUNDARY</mutator>
+                        <mutator>NEGATE_CONDITIONALS</mutator>
+                        <mutator>MATH</mutator>
+                        <mutator>INCREMENTS</mutator>
+                        <mutator>EMPTY_RETURNS</mutator>
+                        <mutator>FALSE_RETURNS</mutator>
+                        <mutator>TRUE_RETURNS</mutator>
+                        <mutator>NULL_RETURNS</mutator>
+                        <mutator>PRIMITIVE_RETURNS</mutator>
+                    </mutators>
+                    <!-- Передаём bytebuddy флаг — нужен для Mockito в Java 23 -->
+                    <jvmArgs>
+                        <jvmArg>-Dnet.bytebuddy.experimental=true</jvmArg>
+                    </jvmArgs>
+                    <outputFormats>
+                        <outputFormat>HTML</outputFormat>
+                        <outputFormat>XML</outputFormat>
+                    </outputFormats>
+                    <mutationThreshold>60</mutationThreshold>
+                    <withHistory>true</withHistory>
+                    <timeoutConstant>8000</timeoutConstant>
                 </configuration>
             </plugin>
         </plugins>
