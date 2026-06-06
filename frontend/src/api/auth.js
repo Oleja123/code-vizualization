@@ -7,6 +7,19 @@ const AUTH_ENABLED = import.meta.env.VITE_AUTH_ENABLED !== 'false'
 const AUTH_URL = import.meta.env.VITE_AUTH_SERVICE_URL || 'http://localhost:8083'
 
 /**
+ * Возвращает человекочитаемое сообщение об ошибке по HTTP-статусу.
+ */
+function httpErrorMessage(status) {
+  if (status === 500 || status === 502 || status === 503 || status === 504) {
+    return 'Сервис авторизации временно недоступен. Попробуйте позже.'
+  }
+  if (status === 401) return 'Неверный логин или пароль'
+  if (status === 409) return 'Пользователь с таким именем уже существует'
+  if (status === 400) return 'Некорректные данные. Проверьте логин и пароль.'
+  return `Ошибка сервера (${status})`
+}
+
+/**
  * Проверяет текущую сессию пользователя.
  * Возвращает объект пользователя или null если не авторизован.
  */
@@ -50,10 +63,15 @@ export async function register(username, password) {
     if (res.ok) {
       return { ok: true }
     }
-    const message = await res.text().catch(() => 'Ошибка регистрации')
-    return { ok: false, message }
+    // При недоступном сервисе (500/502/503/504) не читаем тело — там может быть HTML
+    if (res.status === 500 || (res.status >= 502 && res.status <= 504)) {
+      return { ok: false, message: httpErrorMessage(res.status) }
+    }
+    const message = await res.text().catch(() => httpErrorMessage(res.status))
+    return { ok: false, message: message || httpErrorMessage(res.status) }
   } catch {
-    return { ok: false, message: 'Сервис авторизации недоступен' }
+    // fetch кидает исключение только при сетевом обрыве (офлайн, CORS, DNS)
+    return { ok: false, message: 'Нет соединения с сервером. Проверьте подключение.' }
   }
 }
 
@@ -78,10 +96,15 @@ export async function login(username, password) {
     if (res.ok) {
       return { ok: true }
     }
-    const message = await res.text().catch(() => 'Неверный логин или пароль')
-    return { ok: false, message }
+    // При недоступном сервисе (500/502/503/504) не читаем тело — там может быть HTML
+    if (res.status === 500 || (res.status >= 502 && res.status <= 504)) {
+      return { ok: false, message: httpErrorMessage(res.status) }
+    }
+    const message = await res.text().catch(() => httpErrorMessage(res.status))
+    return { ok: false, message: message || httpErrorMessage(res.status) }
   } catch {
-    return { ok: false, message: 'Сервис авторизации недоступен' }
+    // fetch кидает исключение только при сетевом обрыве (офлайн, CORS, DNS)
+    return { ok: false, message: 'Нет соединения с сервером. Проверьте подключение.' }
   }
 }
 
