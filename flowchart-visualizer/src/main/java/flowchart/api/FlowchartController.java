@@ -33,7 +33,7 @@ public class FlowchartController {
     private final SemanticAnalyzerClient astClient;
 
     public FlowchartController(
-            @Value("${ast.service.url:http://localhost:8080}") String astServiceUrl) {
+            @Value("${ast.service.url:http://localhost:8082}") String astServiceUrl) {
         this.generator = new FlowchartGenerator();
         this.astClient = new SemanticAnalyzerClient(astServiceUrl);
     }

@@ -1,12 +1,21 @@
 spring:
   datasource:
-    url: jdbc:postgresql://localhost:5432/server_code_visualization
-    username: postgres
-    password: postgres
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/server_code_visualization}
+    username: ${SPRING_DATASOURCE_USERNAME:postgres}
+    password: ${SPRING_DATASOURCE_PASSWORD:postgres}
     driver-class-name: org.postgresql.Driver
+
   security:
     session:
       creation-policy: IF_REQUIRED
+
+  session:
+    store-type: redis
+
+  data:
+    redis:
+      host: ${SPRING_DATA_REDIS_HOST:localhost}
+      port: ${SPRING_DATA_REDIS_PORT:6379}
 
   jpa:
     hibernate:
@@ -19,8 +28,16 @@ spring:
 
   liquibase:
     enabled: true
+
 server:
   port: 8083
+  servlet:
+    session:
+      cookie:
+        name: CODEVIZ_SESSION
+        same-site: lax
+        http-only: true
+        secure: false
 
 logging:
   level:
