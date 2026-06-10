@@ -9,14 +9,6 @@ spring:
     session:
       creation-policy: IF_REQUIRED
 
-  session:
-    store-type: redis
-
-  data:
-    redis:
-      host: ${SPRING_DATA_REDIS_HOST:localhost}
-      port: ${SPRING_DATA_REDIS_PORT:6379}
-
   jpa:
     hibernate:
       ddl-auto: update
@@ -34,7 +26,7 @@ server:
   servlet:
     session:
       cookie:
-        name: CODEVIZ_SESSION
+        name: JSESSIONID
         same-site: lax
         http-only: true
         secure: false

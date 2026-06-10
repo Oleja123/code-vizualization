@@ -3,6 +3,7 @@ import { ref, watch, computed, nextTick } from 'vue'
 import { generateAllFunctions } from '../api/flowchart.js'
 import { getSnapshot } from '../api/interpreter.js'
 import RuntimeVisualization from './RuntimeVisualization.vue'
+import ServiceError from './ServiceError.vue'
 
 // ──────────── Константы ────────────
 const LINE_H    = 22
@@ -125,7 +126,9 @@ async function generate() {
     activeTab.value = tabs[0].name
     phase.value = 'ready'
   } catch (e) {
-    error.value = e.message
+    error.value = e.message === 'AUTH_REQUIRED' ? 'AUTH_REQUIRED'
+      : e.message === 'SERVICE_UNAVAILABLE' ? 'SERVICE_UNAVAILABLE'
+      : e.message
     phase.value = 'idle'
   } finally {
     loading.value = false
@@ -465,7 +468,12 @@ function onKeydown(e) {
 
     <!-- ══════ КОЛОНКА 2: Блок-схема ══════ -->
     <div class="col col-flowchart">
-      <div v-if="functionTabs.length === 0 && !loading" class="placeholder">
+      <ServiceError
+        v-if="functionTabs.length === 0 && !loading && (error === 'AUTH_REQUIRED' || error === 'SERVICE_UNAVAILABLE')"
+        :message="error"
+        @retry="generate"
+      />
+      <div v-else-if="functionTabs.length === 0 && !loading" class="placeholder">
         <div class="ph-icon">📊</div>
         <div class="ph-text">Блок-схема появится здесь</div>
         <div class="ph-hint">Введите C-код и нажмите «Сгенерировать схему»</div>

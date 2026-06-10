@@ -22,9 +22,9 @@
         </select>
       </div>
 
-      <p v-if="error" class="error-message">{{ error }}</p>
+      <ServiceError v-if="error" :message="error" @retry="runAnalysis" style="flex:1" />
 
-      <div class="code-container">
+      <div v-if="!error" class="code-container">
         <div class="line-numbers" ref="lineNumbersRef">
           <div
             v-for="lineNumber in lineCount"
@@ -82,9 +82,11 @@
 <script>
 import { computed, ref } from 'vue'
 import { analyzeCode } from '../api/cppcheck.js'
+import ServiceError from '../components/ServiceError.vue'
 
 export default {
   name: 'CodeAnalysisView',
+  components: { ServiceError },
   setup() {
     const examples = [
       {

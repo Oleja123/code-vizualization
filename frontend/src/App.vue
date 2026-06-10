@@ -8,6 +8,29 @@
       </div>
     </div>
 
+    <div v-else-if="authUnavailable" class="auth-overlay">
+      <div class="auth-card">
+        <div class="auth-header">
+          <div class="logo">⚠️</div>
+          <div>
+            <h2>Сервис недоступен</h2>
+            <p class="subtitle">Не удалось подключиться к серверу авторизации</p>
+          </div>
+        </div>
+        <div class="auth-body">
+          <p style="color:#6b7280; font-size:13px; line-height:1.6; margin-bottom:16px">
+            Сервис авторизации не отвечает. Убедитесь что все контейнеры запущены,
+            затем нажмите «Повторить».
+          </p>
+          <div class="auth-actions" style="justify-content:center">
+            <button class="btn-primary" :disabled="authLoading" @click="retryAuth">
+              {{ authLoading ? 'Проверяем…' : '↻ Повторить' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div v-else-if="!user" class="auth-overlay">
       <div class="auth-card">
         <div class="auth-header">
@@ -127,6 +150,7 @@ export default {
     // Auth
     const user = ref(null)
     const authLoading = ref(true)
+    const authUnavailable = ref(false)
     const loginLoading = ref(false)
     const usernameInput = ref('')
     const passwordInput = ref('')
@@ -134,9 +158,41 @@ export default {
     const showRegister = ref(false)
 
     onMounted(async () => {
-      user.value = await checkSession()
+      const result = await checkSession()
+      if (result === null) {
+        // null может означать «не залогинен» или «сервис недоступен»
+        // Пробуем ещё раз с коротким fetch чтобы отличить одно от другого
+        authUnavailable.value = await isAuthUnavailable()
+      }
+      user.value = result
       authLoading.value = false
     })
+
+    async function isAuthUnavailable() {
+      try {
+        const res = await fetch(`${import.meta.env.VITE_AUTH_SERVICE_URL || 'http://localhost:8083'}/api/auth/me`, {
+          credentials: 'include',
+          signal: AbortSignal.timeout(3000),
+        })
+        // 401 = сервис работает, просто не залогинен
+        return res.status !== 401 && !res.ok
+      } catch {
+        return true
+      }
+    }
+
+    async function retryAuth() {
+      authLoading.value = true
+      authUnavailable.value = false
+      const unavailable = await isAuthUnavailable()
+      if (unavailable) {
+        authUnavailable.value = true
+        authLoading.value = false
+        return
+      }
+      user.value = await checkSession()
+      authLoading.value = false
+    }
 
     async function submitLogin() {
       authError.value = ''
@@ -193,6 +249,8 @@ export default {
       activeView,
       user,
       authLoading,
+      authUnavailable,
+      retryAuth,
       loginLoading,
       usernameInput,
       passwordInput,

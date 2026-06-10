@@ -22,7 +22,8 @@
       />
     </div>
     <div class="right-panel">
-      <RuntimeVisualization
+      <ServiceError v-if="error === 'AUTH_REQUIRED' || error === 'SERVICE_UNAVAILABLE'" :message="error" @retry="executeCode" />
+      <RuntimeVisualization v-else
         :snapshot="snapshot"
         :current-step="currentStep"
       />
@@ -35,12 +36,14 @@ import { ref } from 'vue'
 import CodeEditor from '../components/CodeEditor.vue'
 import RuntimeVisualization from '../components/RuntimeVisualization.vue'
 import { getSnapshot } from '../api/interpreter.js'
+import ServiceError from '../components/ServiceError.vue'
 
 export default {
   name: 'VisualizationView',
   components: {
     CodeEditor,
-    RuntimeVisualization
+    RuntimeVisualization,
+    ServiceError
   },
   setup() {
     const examples = [

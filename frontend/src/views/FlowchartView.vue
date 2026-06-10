@@ -1,863 +1,854 @@
 <script setup>
-import { ref, computed, onMounted, watch, nextTick } from 'vue'
-import { generateFromCode } from '../api/flowchart.js'
+import { ref, watch, computed, nextTick } from 'vue'
+import { generateAllFunctions } from '../api/flowchart.js'
 import { getSnapshot } from '../api/interpreter.js'
+import RuntimeVisualization from './RuntimeVisualization.vue'
 
-// ─── КОД ───────────────────────────────────────────────────────────
-const EXAMPLES = {
-  simple_if: {
-    label: 'if / else',
-    code: `int main() {
-    int x = 10;
-    if (x > 5) {
-        x = x - 1;
-    } else {
-        x = x + 1;
+// ──────────── Константы ────────────
+const LINE_H    = 22
+const EDITOR_PT = 14
+const OVERLAY_H = 36  // высота floating overlay в px
+
+// ──────────── Состояние ────────────
+const codeInput = ref(`int factorial(int n) {
+    int result = 1;
+    int i = 1;
+    while (i <= n) {
+        result = result * i;
+        i = i + 1;
     }
-    return 0;
-}`
-  },
-  dowhile: {
-    label: 'Do-While',
-    code: `void main() {
-    int year = 2014;
-    int population = 650;
-    do {
-        population = (population * 103) / 100;
-        year = year + 1;
-    } while (year <= 2040);
-}`
-  },
-  minmax: {
-    label: 'Min / Max',
-    code: `void main() {
-    int a, b, min, max;
-
-    if (a < b) {
-        min = a;
-        max = b;
-    } else {
-        min = b;
-        max = a;
-    }
-}`
-  },
-  whilecontinue: {
-    label: 'While + Continue',
-    code: `void main() {
-    int a = 1999;
-    while (a < 2030) {
-        a = a + 1;
-        if (a % 4 == 0)
-            continue;
-    }
-}`
-  },
-  arrayfor: {
-    label: 'Array + For',
-    code: `int a1[5] = {1, 2, 3, 7, 8};
-
-void main() {
-    int i, s;
-
-    for (i = 0; i < 5; i++)
-        if (a1[i] % 2 == 1)
-            a1[i] = 1;
-
-    s = 1;
-    for (i = 1; i < 5; i++)
-        s += a1[i];
-}`
-  },
-  prime: {
-    label: 'Простые числа',
-    code: `int isPrime(int num) {
-    int del = 2;
-    while (del < num) {
-        if (num % del == 0) {
-            return 0;
-        }
-        del++;
-    }
-    return 1;
-}
-
-void main() {
-    int num = 20;
-
-    while (1) {
-        if (isPrime(num)) {
-            break;
-        }
-        num++;
-    }
-}`
-  },
-  factorial: {
-    label: 'Факториал',
-    code: `int factorial(int n) {
-  if(n <= 1) {
-    return 1;
-  }
-  return factorial(n - 1) * n;
+    return result;
 }
 
 int main() {
-  int res = factorial(4);
-  return 0;
-}`
-  },
-  bubble: {
-    label: 'Пузырьковая сортировка',
-    code: `int main() {
-  int arr[5] = {5, 1, 4, 2, 8};
-  int i = 0;
-  while (i < 4) {
-    int j = 0;
-    while (j < 4 - i) {
-      if (arr[j] > arr[j + 1]) {
-        int temp = arr[j];
-        arr[j] = arr[j + 1];
-        arr[j + 1] = temp;
-      }
-      j++;
-    }
-    i++;
-  }
-  return arr[4];
-}`
+    int x = factorial(5);
+    return x;
+}`)
+
+const loading      = ref(false)
+const error        = ref('')
+const phase        = ref('idle')
+
+const functionSvgs = ref({})
+const functionTabs = ref([])
+const activeTab    = ref('')
+
+const snapshot     = ref(null)
+const currentStep  = ref(0)
+const stepsCount   = ref(0)
+const tracing      = ref(false)
+
+const svgContainers = {}
+
+// ──────────── Панель состояния ────────────
+const varsExpanded = ref(false)
+
+// ──────────── Точка останова ────────────
+const breakpointLine = ref(null)   // номер строки или null
+
+
+
+// ──────────── Точка останова ────────────
+function toggleBreakpoint(line) {
+  if (breakpointLine.value === line) {
+    breakpointLine.value = null
+  } else {
+    breakpointLine.value = line
   }
 }
 
-const codeInput = ref(EXAMPLES.simple_if.code)
-const selectedExample = ref('simple_if')
-const lineNumbers = ref('')
-const textareaRef = ref(null)
-
-function updateLineNumbers() {
-  const lines = codeInput.value.split('\n').length
-  lineNumbers.value = Array.from({ length: lines }, (_, i) => i + 1).join('\n')
+// ──────────── Примеры ────────────
+const EXAMPLES = {
+  simple:    { label: 'Простой',     code: `int main() {\n    int x = 5;\n    int y = 10;\n    int sum = x + y;\n    return sum;\n}` },
+  if:        { label: 'If',          code: `int main() {\n    int x = 10;\n    if (x > 5) {\n        x = x - 1;\n    }\n    return 0;\n}` },
+  ifelse:    { label: 'If-Else',     code: `int main() {\n    int x = 10;\n    if (x > 5) {\n        x = x - 1;\n    } else {\n        x = x + 1;\n    }\n    return x;\n}` },
+  while:     { label: 'While',       code: `int main() {\n    int i = 0;\n    int sum = 0;\n    while (i < 5) {\n        sum = sum + i;\n        i = i + 1;\n    }\n    return sum;\n}` },
+  for:       { label: 'For',         code: `int main() {\n    int sum = 0;\n    int i;\n    for (i = 0; i < 5; i = i + 1) {\n        sum = sum + i;\n    }\n    return 0;\n}` },
+  nested:    { label: 'Вложенный',   code: `int main() {\n    int x = 15;\n    int result = 0;\n    if (x > 10) {\n        int i = 0;\n        while (i < x) {\n            result = result + 1;\n            i = i + 1;\n        }\n    } else {\n        result = x;\n    }\n    return 0;\n}` },
+  multifunc: { label: 'Две функции', code: `int isPrime(int num) {\n    int del = 2;\n    while (del < num) {\n        if (num % del == 0) {\n            return 0;\n        }\n        del++;\n    }\n    return 1;\n}\n\nint main() {\n    int result = isPrime(7);\n    return result;\n}` },
+  factorial: { label: 'Факториал',   code: `int factorial(int n) {\n    int result = 1;\n    int i = 1;\n    while (i <= n) {\n        result = result * i;\n        i = i + 1;\n    }\n    return result;\n}\n\nint main() {\n    int x = factorial(5);\n    return x;\n}` },
 }
-watch(codeInput, updateLineNumbers)
-onMounted(updateLineNumbers)
-
+const showExamples = ref(false)
 function loadExample(key) {
-  selectedExample.value = key
   codeInput.value = EXAMPLES[key].code
+  showExamples.value = false
   resetAll()
+}
+
+// ──────────── Линейные номера ────────────
+const lineNumbers = computed(() => {
+  const count = codeInput.value.split('\n').length
+  return Array.from({ length: count }, (_, i) => i + 1)
+})
+const currentLine = computed(() => snapshot.value?.line ?? null)
+
+const editorEl = ref(null)
+const lineNumbersEl = ref(null)
+
+watch(currentLine, async (line) => {
+  if (!line || !editorEl.value) return
+  await nextTick()
+  const scrollTo = Math.max(0, (line - 1) * LINE_H - editorEl.value.clientHeight / 2)
+  editorEl.value.scrollTop = scrollTo
+  if (lineNumbersEl.value) lineNumbersEl.value.scrollTop = scrollTo
+})
+
+function syncScroll(e) {
+  if (lineNumbersEl.value) lineNumbersEl.value.scrollTop = e.target.scrollTop
 }
 
 function handleTab(e) {
   if (e.key === 'Tab') {
     e.preventDefault()
-    const start = e.target.selectionStart
+    const s = e.target.selectionStart
     const end = e.target.selectionEnd
-    codeInput.value = codeInput.value.substring(0, start) + '    ' + codeInput.value.substring(end)
-    nextTick(() => {
-      e.target.selectionStart = e.target.selectionEnd = start + 4
-    })
+    codeInput.value = codeInput.value.substring(0, s) + '    ' + codeInput.value.substring(end)
+    nextTick(() => { e.target.selectionStart = e.target.selectionEnd = s + 4 })
   }
 }
 
-function handleScroll(e) {
-  const lineEl = document.querySelector('.line-nums')
-  if (lineEl) lineEl.scrollTop = e.target.scrollTop
-}
-
-// ─── БЛОК-СХЕМА ────────────────────────────────────────────────────
-const svgResult = ref('')
-const zoom = ref(1)
-const flowLoading = ref(false)
-const flowError = ref('')
-const flowSuccess = ref(false)
-
-const zoomLabel = computed(() => Math.round(zoom.value * 100) + '%')
-
-async function generateFlowchart() {
-  if (!codeInput.value.trim()) return
-  flowError.value = ''
-  flowSuccess.value = false
-  svgResult.value = ''
-  flowLoading.value = true
+// ──────────── Генерация ────────────
+async function generate() {
+  if (!codeInput.value.trim()) { error.value = 'Введите C-код'; return }
+  resetAll()
+  loading.value = true
+  error.value = ''
+  phase.value = 'generating'
   try {
-    const data = await generateFromCode(codeInput.value)
-    svgResult.value = data.svg
-    flowSuccess.value = true
-    zoom.value = 1
+    const data = await generateAllFunctions(codeInput.value)
+    if (!data?.functions || Object.keys(data.functions).length === 0)
+      throw new Error('Блок-схема не сгенерирована')
+    const tabs = Object.entries(data.functions).map(([name, svg]) => ({ name, svg }))
+    tabs.sort((a, b) => a.name === 'main' ? -1 : b.name === 'main' ? 1 : a.name.localeCompare(b.name))
+    functionTabs.value = tabs
+    functionSvgs.value = Object.fromEntries(tabs.map(t => [t.name, t.svg]))
+    activeTab.value = tabs[0].name
+    phase.value = 'ready'
   } catch (e) {
-    flowError.value = e.message
+    error.value = e.message === 'AUTH_REQUIRED' ? 'AUTH_REQUIRED'
+      : e.message === 'SERVICE_UNAVAILABLE' ? 'SERVICE_UNAVAILABLE'
+      : e.message
+    phase.value = 'idle'
   } finally {
-    flowLoading.value = false
+    loading.value = false
   }
 }
 
-function zoomBy(delta) {
-  if (delta === 0) { zoom.value = 1; return }
-  zoom.value = Math.max(0.25, Math.min(4, zoom.value + delta))
+// ──────────── Трассировка ────────────
+async function startTracing() {
+  error.value = ''
+  loading.value = true
+  currentStep.value = 0
+  snapshot.value = null
+  try {
+    // Сначала загружаем шаг 0 чтобы узнать stepsCount
+    const data0 = await getSnapshot(codeInput.value, 0)
+    const total = data0.steps_count ?? 0
+    stepsCount.value = total
+
+    // Если задана точка останова — ищем первый шаг с нужной строкой
+    let startStep = 0
+    if (breakpointLine.value && total > 0) {
+      // Бинарный поиск: ищем первый шаг где line === breakpointLine
+      let lo = 0, hi = total - 1, found = -1
+      // Сначала ищем левую границу через линейный поиск по ключевым точкам
+      // Используем линейный поиск с шагом — эффективно для малых программ
+      for (let s = 0; s < total; s++) {
+        const d = await getSnapshot(codeInput.value, s)
+        if (d.snapshot?.line === breakpointLine.value) {
+          found = s; break
+        }
+      }
+      if (found >= 0) startStep = found
+    }
+
+    const data = startStep === 0 ? data0 : await getSnapshot(codeInput.value, startStep)
+    snapshot.value = data.snapshot
+    currentStep.value = data.current_step ?? startStep
+    stepsCount.value  = data.steps_count ?? total
+    tracing.value = true
+  } catch (e) {
+    error.value = e.message
+  } finally {
+    loading.value = false
+  }
 }
 
-function downloadSVG() {
-  if (!svgResult.value) return
-  const blob = new Blob([svgResult.value], { type: 'image/svg+xml' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url; a.download = 'flowchart.svg'; a.click()
-  URL.revokeObjectURL(url)
+function stopTracing() {
+  tracing.value = false
+  snapshot.value = null
+  currentStep.value = 0
+  clearHighlight()
 }
 
-// ─── ТРАССИРОВКА ───────────────────────────────────────────────────
-const snapshot = ref(null)
-const currentStep = ref(0)
-const stepsCount = ref(0)
-const traceLoading = ref(false)
-const traceError = ref(null)
-const isExecuted = ref(false)
+async function stepForward() {
+  if (currentStep.value >= stepsCount.value - 1 || loading.value) return
+  await loadStep(currentStep.value + 1)
+}
 
-async function loadSnapshot(step) {
-  traceLoading.value = true
-  traceError.value = null
+async function stepBackward() {
+  if (currentStep.value <= 0 || loading.value) return
+  await loadStep(currentStep.value - 1)
+}
+
+async function loadStep(step) {
+  loading.value = true
   try {
     const data = await getSnapshot(codeInput.value, step)
     snapshot.value = data.snapshot
     currentStep.value = data.current_step ?? step
-    stepsCount.value = data.steps_count ?? 0
-  } catch (err) {
-    traceError.value = err.message
-    snapshot.value = null
-    isExecuted.value = false
+    stepsCount.value  = data.steps_count  ?? stepsCount.value
+  } catch (e) {
+    error.value = e.message
   } finally {
-    traceLoading.value = false
+    loading.value = false
   }
-}
-
-async function executeTrace() {
-  isExecuted.value = false
-  currentStep.value = 0
-  await loadSnapshot(0)
-  if (!traceError.value) isExecuted.value = true
-}
-
-function editTrace() {
-  isExecuted.value = false
-  currentStep.value = 0
-  stepsCount.value = 0
-  snapshot.value = null
-  traceError.value = null
-}
-
-async function stepForward() {
-  if (currentStep.value < stepsCount.value - 1)
-    await loadSnapshot(currentStep.value + 1)
-}
-async function stepBackward() {
-  if (currentStep.value > 0) await loadSnapshot(currentStep.value - 1)
-}
-async function stepFirst() {
-  if (currentStep.value > 0) await loadSnapshot(0)
-}
-async function stepLast() {
-  const last = stepsCount.value - 1
-  if (last >= 0 && currentStep.value < last) await loadSnapshot(last)
 }
 
 function resetAll() {
-  svgResult.value = ''
-  flowError.value = ''
-  flowSuccess.value = false
-  editTrace()
+  tracing.value = false
+  snapshot.value = null
+  currentStep.value = 0
+  stepsCount.value = 0
+  functionTabs.value = []
+  functionSvgs.value = {}
+  activeTab.value = ''
+  phase.value = 'idle'
+  clearHighlight()
 }
 
-// Авто-подсветка текущей строки в редакторе
-watch(() => snapshot.value?.line, async (line) => {
-  if (line && textareaRef.value) {
-    await nextTick()
-    const lineHeight = 21
-    const scrollTop = (line - 1) * lineHeight - textareaRef.value.clientHeight / 2
-    textareaRef.value.scrollTop = Math.max(0, scrollTop)
+function editCode() { resetAll() }
+
+// ──────────── Подсветка SVG ────────────
+function clearHighlight() {
+  for (const el of Object.values(svgContainers)) {
+    if (!el) continue
+    el.querySelectorAll('.node-active').forEach(n => n.classList.remove('node-active'))
   }
+}
+
+function highlightNodeInSvg(containerEl, line) {
+  if (!containerEl || !line) return
+  containerEl.querySelectorAll('.node-active').forEach(n => n.classList.remove('node-active'))
+  const nodes = containerEl.querySelectorAll('[data-line]')
+  let best = null, bestSpan = Infinity
+  for (const node of nodes) {
+    const start = parseInt(node.dataset.line)
+    const end   = parseInt(node.dataset.lineEnd)
+    if (line >= start && line <= end) {
+      const span = end - start
+      if (span < bestSpan) { bestSpan = span; best = node }
+    }
+  }
+  if (best) {
+    best.classList.add('node-active')
+    best.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+  }
+}
+
+watch(snapshot, async (snap) => {
+  if (!snap) return
+  await nextTick()
+  const line = snap.line
+  const frames = snap.call_stack?.frames ?? []
+  const activeFuncFrame = [...frames].reverse().find(f => f.func_name !== 'global')
+  const activeFunc = activeFuncFrame?.func_name ?? null
+  if (activeFunc && functionSvgs.value[activeFunc] && activeTab.value !== activeFunc)
+    activeTab.value = activeFunc
+  await nextTick()
+  const containerEl = svgContainers[activeTab.value]
+  if (containerEl && line) highlightNodeInSvg(containerEl, line)
 })
 
-const displayStep = computed(() => stepsCount.value <= 0 ? 0 : Math.min(currentStep.value + 1, stepsCount.value))
-const currentLine = computed(() => snapshot.value?.line ?? null)
+const progressPct = computed(() => {
+  if (!stepsCount.value) return 0
+  return Math.round((currentStep.value / (stepsCount.value - 1)) * 100)
+})
 
-// Сгруппировать переменные из снимка
-const globalVars = computed(() => {
-  if (!snapshot.value?.call_stack?.frames) return []
-  const g = snapshot.value.call_stack.frames.find(f => f.func_name === 'global')
-  return g?.variables ?? []
+// ──────────── Зум ────────────
+const zoom      = ref({})
+const autoScale = ref({})
+
+function getZoom(name) { return zoom.value[name] ?? null }
+
+function setZoom(name, delta) {
+  if (delta === 0) {
+    const z = { ...zoom.value }
+    delete z[name]
+    zoom.value = z
+    pan.value = { ...pan.value, [name]: { x: 0, y: 0 } }
+    nextTick(() => autoFitSvg(name))
+    return
+  }
+  const cur = zoom.value[name] ?? autoScale.value[name] ?? 1
+  zoom.value = { ...zoom.value, [name]: Math.max(0.2, Math.min(5, cur + delta)) }
+}
+
+const zoomDisplayLabel = computed(() => (name) => {
+  const z = zoom.value[name]
+  return z != null ? Math.round(z * 100) + '%' : 'Авто'
 })
-const localFrames = computed(() => {
-  if (!snapshot.value?.call_stack?.frames) return []
-  return snapshot.value.call_stack.frames.filter(f => f.func_name !== 'global')
+
+// ──────────── Авто-масштаб ────────────
+let svgScrollEl = null
+function onSvgScrollMount(el) { svgScrollEl = el || null }
+
+async function autoFitSvg(name) {
+  await nextTick()
+  await nextTick()
+  const scrollEl    = svgScrollEl
+  const containerEl = svgContainers[name]
+  if (!scrollEl || !containerEl) return
+  const svgEl = containerEl.querySelector('svg')
+  if (!svgEl) return
+
+  const vb   = svgEl.viewBox?.baseVal
+  const svgW = (vb && vb.width)  ? vb.width  : (parseFloat(svgEl.getAttribute('width'))  || svgEl.clientWidth  || 0)
+  const svgH = (vb && vb.height) ? vb.height : (parseFloat(svgEl.getAttribute('height')) || svgEl.clientHeight || 0)
+  if (!svgW || !svgH) return
+
+  // Доступная область: вся высота контейнера минус overlay и небольшой отступ снизу
+  const availW = Math.max(scrollEl.clientWidth  - 32, 100)
+  const availH = Math.max(scrollEl.clientHeight - OVERLAY_H - 12, 100)
+
+  const scaleH   = availH / svgH
+  const scaleW   = availW / svgW
+  const fitScale = Math.min(scaleH, scaleW)
+  const scale    = Math.min(Math.max(fitScale, 1.4), 3.0)
+
+  autoScale.value = { ...autoScale.value, [name]: scale }
+  if (zoom.value[name] == null)
+    zoom.value = { ...zoom.value, [name]: scale }
+}
+
+watch(activeTab, async (name) => {
+  if (!name) return
+  await autoFitSvg(name)
 })
+
+watch(functionTabs, async (tabs) => {
+  if (!tabs.length) return
+  zoom.value = {}
+  autoScale.value = {}
+  await nextTick()
+  await nextTick()
+  for (const tab of tabs) await autoFitSvg(tab.name)
+}, { flush: 'post' })
+
+// ──────────── Скачивание ────────────
+function downloadSvg(name) {
+  const tab = functionTabs.value.find(t => t.name === name)
+  if (!tab) return
+  const blob = new Blob([tab.svg], { type: 'image/svg+xml' })
+  const url  = URL.createObjectURL(blob)
+  const a    = document.createElement('a')
+  a.href = url; a.download = `flowchart_${name}.svg`; a.click()
+  URL.revokeObjectURL(url)
+}
+
+// ──────────── Pan ────────────
+const pan      = ref({})
+const isPanning = ref(false)
+let panStart = { mx: 0, my: 0, px: 0, py: 0 }
+
+function getPan(name) { return pan.value[name] ?? { x: 0, y: 0 } }
+
+function onSvgWheel(e, name) {
+  e.preventDefault()
+  const delta = e.deltaY > 0 ? -0.1 : 0.1
+  const cur = zoom.value[name] ?? autoScale.value[name] ?? 1
+  zoom.value = { ...zoom.value, [name]: Math.max(0.1, Math.min(5, cur + delta)) }
+}
+
+function onSvgMousedown(e, name) {
+  if (e.button !== 0) return
+  e.preventDefault()
+  isPanning.value = true
+  const p = getPan(name)
+  panStart = { mx: e.clientX, my: e.clientY, px: p.x, py: p.y }
+  function onMove(ev) {
+    if (!isPanning.value) return
+    pan.value = { ...pan.value, [name]: { x: panStart.px + ev.clientX - panStart.mx, y: panStart.py + ev.clientY - panStart.my } }
+  }
+  function onUp() {
+    isPanning.value = false
+    window.removeEventListener('mousemove', onMove)
+    window.removeEventListener('mouseup', onUp)
+  }
+  window.addEventListener('mousemove', onMove)
+  window.addEventListener('mouseup', onUp)
+}
+
+watch(functionTabs, () => { pan.value = {} })
+
+// ──────────── Клавиатура ────────────
+function onKeydown(e) {
+  if (!tracing.value) return
+  if (e.key === 'ArrowRight' || e.key === 'ArrowDown') { e.preventDefault(); stepForward() }
+  if (e.key === 'ArrowLeft'  || e.key === 'ArrowUp')   { e.preventDefault(); stepBackward() }
+}
 </script>
 
 <template>
-  <div class="fv-root">
-    <!-- ══════════════════ ЛЕВАЯ КОЛОНКА: РЕДАКТОР ══════════════════ -->
+  <div class="tracer-root" :style="{ gridTemplateColumns: `680px 1fr ${varsExpanded ? '300px' : '36px'}` }" @keydown="onKeydown" tabindex="0">
+
+    <!-- ══════ КОЛОНКА 1: Редактор ══════ -->
     <div class="col col-editor">
-      <div class="panel-head">
-        <span class="head-title">
-          <span class="dot dot-blue"></span>
-          Редактор C
-        </span>
+      <div class="col-header">
+        <span class="panel-label"><span class="dot dot-blue"></span>C Code Editor</span>
         <div class="examples-wrap">
-          <select class="ex-select" :value="selectedExample" @change="e => loadExample(e.target.value)">
-            <option v-for="(ex, key) in EXAMPLES" :key="key" :value="key">{{ ex.label }}</option>
-          </select>
+          <button class="btn-sm" @click="showExamples = !showExamples">📚 Примеры</button>
+          <div v-if="showExamples" class="dropdown">
+            <div v-for="(ex, key) in EXAMPLES" :key="key" class="dropdown-item" @click="loadExample(key)">{{ ex.label }}</div>
+          </div>
         </div>
       </div>
 
       <div class="editor-area">
-        <div class="line-nums">{{ lineNumbers }}</div>
+        <div class="line-numbers" ref="lineNumbersEl">
+          <div
+            v-for="n in lineNumbers" :key="n"
+            class="ln"
+            :class="{ 'ln-active': n === currentLine, 'ln-bp': n === breakpointLine }"
+            @click="toggleBreakpoint(n)"
+            title="Нажмите чтобы поставить/убрать точку останова"
+          >
+            <span v-if="n === breakpointLine" class="bp-dot">●</span>
+            <span v-else>{{ n }}</span>
+          </div>
+        </div>
         <textarea
-          ref="textareaRef"
-          class="code-ta"
-          :class="{ 'ta-readonly': isExecuted }"
+          ref="editorEl"
+          class="code-editor"
+          :class="{ 'code-readonly': phase !== 'idle' }"
           v-model="codeInput"
           spellcheck="false"
-          :readonly="isExecuted"
+          :readonly="phase !== 'idle'"
+          @scroll="syncScroll"
           @keydown="handleTab"
-          @scroll="handleScroll"
         ></textarea>
-        <div
-          v-if="isExecuted && currentLine"
-          class="line-highlight"
-          :style="{ top: (currentLine - 1) * 21 + 16 + 'px' }"
-        ></div>
+        <div v-if="currentLine" class="line-highlight" :style="{ top: (EDITOR_PT + (currentLine - 1) * LINE_H) + 'px' }"></div>
       </div>
 
-      <div class="panel-foot">
-        <div class="msg err" v-if="flowError || traceError">✗ {{ flowError || traceError }}</div>
-        <div class="msg ok" v-else-if="flowSuccess">✓ Блок-схема построена</div>
-        <div class="foot-btns">
-          <button class="btn btn-schema" :disabled="flowLoading" @click="generateFlowchart">
-            <span>{{ flowLoading ? '⟳' : '▶' }}</span>
-            {{ flowLoading ? 'Строю…' : 'Блок-схема' }}
+      <div class="col-footer">
+        <div class="msg error-msg" v-if="error">✗ {{ error }}</div>
+        <!-- Индикатор активной точки останова -->
+        <div v-if="breakpointLine" class="bp-info">
+          <span class="bp-badge">⬤ Точка останова: строка {{ breakpointLine }}</span>
+          <button class="bp-clear" @click="breakpointLine = null" title="Убрать">✕</button>
+        </div>
+
+        <template v-if="phase === 'idle'">
+          <button class="btn btn-generate" :disabled="loading" @click="generate">
+            <span v-if="loading">⟳</span><span v-else>▶</span>
+            {{ loading ? 'Генерация…' : 'Сгенерировать схему' }}
           </button>
-          <button
-            v-if="!isExecuted"
-            class="btn btn-trace"
-            :disabled="traceLoading"
-            @click="executeTrace"
-          >▶ Трассировка</button>
-          <template v-else>
-            <button class="btn btn-edit" @click="editTrace">✏ Редактировать</button>
-          </template>
-        </div>
-      </div>
-    </div>
-
-    <!-- ══════════════════ ЦЕНТРАЛЬНАЯ КОЛОНКА: БЛОК-СХЕМА ══════════════════ -->
-    <div class="col col-schema">
-      <div class="panel-head">
-        <span class="head-title">
-          <span class="dot dot-violet"></span>
-          Блок-схема (ГОСТ 19.701-90)
-        </span>
-        <div v-if="svgResult" class="zoom-row">
-          <button class="zbtn" @click="zoomBy(-0.15)">−</button>
-          <span class="zlabel">{{ zoomLabel }}</span>
-          <button class="zbtn" @click="zoomBy(0.15)">+</button>
-          <button class="zbtn" @click="zoomBy(0)" title="Сбросить">↻</button>
-          <button class="zbtn dl" @click="downloadSVG" title="Скачать SVG">⬇</button>
-        </div>
-      </div>
-
-      <div class="schema-body">
-        <div v-if="!svgResult && !flowLoading" class="placeholder">
-          <div class="ph-icon">📊</div>
-          <div class="ph-text">Нажмите «Блок-схема» чтобы построить</div>
-        </div>
-        <div v-if="flowLoading" class="spinner-wrap">
-          <div class="spinner"></div>
-          <div class="spin-text">Генерация…</div>
-        </div>
-        <div v-if="svgResult && !flowLoading" class="svg-scroll">
-          <div class="svg-inner" :style="{ transform: `scale(${zoom})` }" v-html="svgResult"></div>
-        </div>
-      </div>
-    </div>
-
-    <!-- ══════════════════ ПРАВАЯ КОЛОНКА: ТРАССИРОВКА ══════════════════ -->
-    <div class="col col-trace">
-      <div class="panel-head">
-        <span class="head-title">
-          <span class="dot dot-green"></span>
-          Трассировка
-        </span>
-        <span v-if="isExecuted" class="step-badge">
-          {{ displayStep }} / {{ stepsCount }}
-        </span>
-      </div>
-
-      <!-- Шаги управления -->
-      <div v-if="isExecuted" class="step-controls">
-        <button class="sbtn" :disabled="traceLoading || currentStep === 0" @click="stepFirst" title="В начало">⏮</button>
-        <button class="sbtn" :disabled="traceLoading || currentStep === 0" @click="stepBackward" title="Назад">‹</button>
-        <div class="step-bar">
-          <div class="step-fill" :style="{ width: stepsCount > 1 ? (currentStep / (stepsCount-1) * 100) + '%' : '0%' }"></div>
-        </div>
-        <button class="sbtn" :disabled="traceLoading || currentStep >= stepsCount - 1" @click="stepForward" title="Вперёд">›</button>
-        <button class="sbtn" :disabled="traceLoading || currentStep >= stepsCount - 1" @click="stepLast" title="В конец">⏭</button>
-      </div>
-
-      <div class="trace-body">
-        <!-- Пустое состояние -->
-        <div v-if="!isExecuted && !traceLoading && !traceError" class="placeholder">
-          <div class="ph-icon">🔍</div>
-          <div class="ph-text">Нажмите «Трассировка» чтобы запустить пошаговое выполнение</div>
-        </div>
-
-        <div v-if="traceLoading" class="spinner-wrap">
-          <div class="spinner"></div>
-        </div>
-
-        <div v-if="traceError" class="trace-err">
-          <div class="err-title">Ошибка</div>
-          <div class="err-body">{{ traceError }}</div>
-        </div>
-
-        <template v-if="isExecuted && snapshot">
-          <!-- Текущая строка -->
-          <div class="info-row" v-if="snapshot.line">
-            <span class="info-label">Строка</span>
-            <span class="info-val line-val">{{ snapshot.line }}</span>
-          </div>
-
-          <!-- Возврат из функции -->
-          <div class="ret-banner" v-if="snapshot.function_name && snapshot.return_value !== undefined">
-            ↩ return из <strong>{{ snapshot.function_name }}</strong>: {{ snapshot.return_value }}
-          </div>
-
-          <!-- Стек вызовов -->
-          <div v-if="localFrames.length" class="section">
-            <div class="sec-title">Стек вызовов</div>
-            <div class="frames">
-              <div v-for="(frame, fi) in localFrames" :key="fi" class="frame" :class="{ 'frame-top': fi === localFrames.length - 1 }">
-                <div class="frame-name">{{ frame.func_name }}()</div>
-                <div v-if="frame.variables && frame.variables.length" class="vars">
-                  <div v-for="v in frame.variables" :key="v.name" class="var-row">
-                    <span class="vname">{{ v.name }}</span>
-                    <span class="vtype">{{ v.type }}</span>
-                    <span class="vval" :class="{ uninit: v.value === null || v.value === undefined }">
-                      {{ v.value !== null && v.value !== undefined ? v.value : '?' }}
-                    </span>
-                  </div>
-                </div>
-                <div v-else class="no-vars">нет локальных переменных</div>
-              </div>
+        </template>
+        <template v-else-if="phase === 'ready' && !tracing">
+          <button class="btn btn-trace" :disabled="loading" @click="startTracing">{{ loading ? '⟳' : '⚡' }} Начать трассировку</button>
+          <button class="btn btn-secondary" @click="editCode">✏️ Редактировать</button>
+        </template>
+        <template v-else-if="tracing">
+          <div class="trace-controls">
+            <div class="progress-row">
+              <div class="progress-wrap"><div class="progress-bar" :style="{ width: progressPct + '%' }"></div></div>
+              <span class="step-label">{{ currentStep }} / {{ stepsCount - 1 }}</span>
             </div>
-          </div>
-
-          <!-- Глобальные переменные -->
-          <div v-if="globalVars.length" class="section">
-            <div class="sec-title">Глобальные</div>
-            <div class="vars">
-              <div v-for="v in globalVars" :key="v.name" class="var-row">
-                <span class="vname">{{ v.name }}</span>
-                <span class="vtype">{{ v.type }}</span>
-                <span class="vval" :class="{ uninit: v.value === null || v.value === undefined }">
-                  {{ v.value !== null && v.value !== undefined ? v.value : '?' }}
-                </span>
-              </div>
+            <div class="btn-row">
+              <button class="btn btn-step" :disabled="loading || currentStep <= 0" @click="stepBackward">← Назад</button>
+              <button class="btn btn-step" :disabled="loading || currentStep >= stepsCount - 1" @click="stepForward">Вперёд →</button>
+              <button class="btn btn-secondary icon-btn" @click="() => { currentStep = 0; loadStep(0) }" :disabled="loading" title="В начало">↺</button>
+              <button class="btn btn-stop" @click="stopTracing">■ Стоп</button>
             </div>
           </div>
         </template>
       </div>
     </div>
+
+    <!-- ══════ КОЛОНКА 2: Блок-схема ══════ -->
+    <div class="col col-flowchart">
+      <ServiceError
+        v-if="functionTabs.length === 0 && !loading && (error === 'AUTH_REQUIRED' || error === 'SERVICE_UNAVAILABLE')"
+        :message="error"
+        @retry="generate"
+      />
+      <div v-else-if="functionTabs.length === 0 && !loading" class="placeholder">
+        <div class="ph-icon">📊</div>
+        <div class="ph-text">Блок-схема появится здесь</div>
+        <div class="ph-hint">Введите C-код и нажмите «Сгенерировать схему»</div>
+      </div>
+      <div v-if="loading && functionTabs.length === 0" class="spinner-wrap">
+        <div class="spinner"></div>
+        <div>Генерация блок-схемы…</div>
+      </div>
+
+      <template v-if="functionTabs.length > 0">
+        <!-- svg-scroll занимает ВСЮ колонку -->
+        <div class="svg-scroll" :ref="el => onSvgScrollMount(el)">
+
+          <!-- Overlay поверх схемы: тонкая полоска с табами и зумом -->
+          <div class="svg-overlay">
+            <div class="overlay-tabs">
+              <button
+                v-for="tab in functionTabs" :key="tab.name"
+                class="otab"
+                :class="{ active: activeTab === tab.name }"
+                @click="activeTab = tab.name"
+              >ƒ {{ tab.name }}</button>
+            </div>
+            <div class="overlay-zoom">
+              <button class="zoom-btn" @click="setZoom(activeTab, -0.15)">−</button>
+              <span class="zoom-label">{{ zoomDisplayLabel(activeTab) }}</span>
+              <button class="zoom-btn" @click="setZoom(activeTab, 0.15)">+</button>
+              <button class="zoom-btn" @click="setZoom(activeTab, 0)" title="Сбросить">↻</button>
+              <button class="zoom-btn dl-btn" @click="downloadSvg(activeTab)" title="Скачать SVG">⬇</button>
+            </div>
+          </div>
+
+          <!-- SVG-контейнеры -->
+          <template v-for="tab in functionTabs" :key="tab.name">
+            <div
+              v-if="activeTab === tab.name"
+              :ref="el => { if (el) svgContainers[tab.name] = el; else delete svgContainers[tab.name] }"
+              class="svg-container"
+            >
+              <div
+                class="svg-inner"
+                :style="{
+                  transform: `translate(calc(-50% + ${getPan(tab.name).x}px), ${getPan(tab.name).y}px) scale(${getZoom(tab.name) ?? 1})`,
+                  cursor: isPanning ? 'grabbing' : 'grab'
+                }"
+                @mousedown="e => onSvgMousedown(e, tab.name)"
+                @wheel.prevent="e => onSvgWheel(e, tab.name)"
+                v-html="tab.svg"
+              ></div>
+            </div>
+          </template>
+        </div>
+      </template>
+    </div>
+
+    <!-- ══════ КОЛОНКА 3: Переменные ══════ -->
+    <div class="col col-vars" :class="{ collapsed: !varsExpanded }">
+
+      <!-- Свёрнутое состояние: вертикальная полоска с кнопкой -->
+      <template v-if="!varsExpanded">
+        <button class="vars-toggle-btn" @click="varsExpanded = true" title="Показать состояние программы">
+          <span class="toggle-icon">◀</span>
+          <span class="toggle-label">Состояние</span>
+        </button>
+      </template>
+
+      <!-- Развёрнутое состояние -->
+      <template v-else>
+        <div class="col-header">
+          <span class="panel-label"><span class="dot dot-green"></span>Состояние программы</span>
+          <div style="display:flex;align-items:center;gap:6px">
+            <span v-if="tracing" class="step-badge">Шаг {{ currentStep }}</span>
+            <button class="vars-collapse-btn" @click="varsExpanded = false" title="Свернуть">▶</button>
+          </div>
+        </div>
+        <div class="vars-body">
+          <div v-if="!tracing" class="placeholder small">
+            <div class="ph-icon" style="font-size:32px">🖥️</div>
+            <div class="ph-text" style="font-size:12px">Состояние переменных и стек вызовов<br>отобразятся во время трассировки</div>
+          </div>
+          <RuntimeVisualization v-if="snapshot" :snapshot="snapshot" :current-step="currentStep" />
+        </div>
+      </template>
+
+    </div>
+
   </div>
 </template>
 
 <style scoped>
-/* ─── КОРЕНЬ ─────────────────────────────────────────────────────── */
-.fv-root {
+.tracer-root {
   display: grid;
-  grid-template-columns: 380px 1fr 280px;
+  grid-template-columns: 680px 1fr 36px; /* fallback, управляется inline style */
+  transition: grid-template-columns .25s ease;
   height: 100%;
   overflow: hidden;
-  background: #f1f4f9;
-  gap: 0;
+  outline: none;
+  background: #f5f7fb;
 }
 
-/* ─── КОЛОНКИ ────────────────────────────────────────────────────── */
 .col {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  background: #fff;
+  border-right: 1px solid #e2e8f0;
+  background: white;
 }
-.col-editor  { border-right: 1px solid #e2e8f0; }
-.col-schema  { border-right: 1px solid #e2e8f0; background: #fafbfc; }
-.col-trace   {}
+.col:last-child { border-right: none; }
 
-/* ─── ЗАГОЛОВОК ПАНЕЛИ ───────────────────────────────────────────── */
-.panel-head {
+.col-header {
+  display: flex; align-items: center; justify-content: space-between;
+  height: 42px; padding: 0 14px;
+  border-bottom: 1px solid #e2e8f0;
+  background: #fafafa; flex-shrink: 0; gap: 8px;
+}
+
+.panel-label {
+  font-family: 'Courier New', monospace; font-size: 11px; font-weight: 700;
+  color: #475569; display: flex; align-items: center; gap: 7px; white-space: nowrap;
+}
+.dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.dot-blue  { background: #4f46e5; }
+.dot-green { background: #16a34a; }
+
+.step-badge {
+  font-size: 11px; font-family: monospace;
+  background: #4f46e5; color: white;
+  padding: 2px 8px; border-radius: 10px; white-space: nowrap;
+}
+
+/* ── Редактор ── */
+.editor-area {
+  flex: 1; position: relative; overflow: hidden;
+  display: flex; min-height: 0;
+}
+.line-numbers {
+  width: 44px; flex-shrink: 0; padding: 14px 0;
+  background: #fafafa; border-right: 1px solid #e2e8f0;
+  overflow: hidden; font-family: 'Courier New', monospace;
+  font-size: 14px; line-height: 22px; color: #94a3b8; user-select: none;
+}
+.ln { text-align: right; padding-right: 8px; height: 22px; line-height: 22px; }
+.ln-active { background: #fff3cd; color: #856404; font-weight: bold; }
+.code-editor {
+  flex: 1; padding: 14px 10px;
+  font-family: 'Courier New', monospace; font-size: 14px; line-height: 22px;
+  background: white; border: none; outline: none; resize: none; overflow-y: auto; tab-size: 4;
+}
+.code-editor.code-readonly { background: #f8f9fa; color: #495057; cursor: default; }
+.line-highlight {
+  position: absolute; left: 44px; right: 0; height: 22px;
+  background: rgba(255, 200, 0, 0.18); border-left: 3px solid #f59e0b;
+  pointer-events: none; z-index: 1;
+}
+
+/* ── Футер редактора ── */
+.col-footer { padding: 8px 12px; border-top: 1px solid #e2e8f0; background: #fafafa; flex-shrink: 0; }
+.trace-controls { display: flex; flex-direction: column; gap: 6px; }
+.progress-row { display: flex; align-items: center; gap: 8px; }
+.btn-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.msg { font-size: 11px; font-family: monospace; margin-bottom: 6px; }
+.error-msg { color: #dc2626; }
+
+.btn {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 0 14px; height: 34px; border: none; border-radius: 6px;
+  font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; transition: all .15s;
+}
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+.btn-generate { background: #4f46e5; color: white; width: 100%; justify-content: center; }
+.btn-generate:hover:not(:disabled) { background: #4338ca; }
+.btn-trace { background: #16a34a; color: white; flex: 1; justify-content: center; }
+.btn-trace:hover:not(:disabled) { background: #15803d; }
+.btn-step { background: #3b82f6; color: white; padding: 0 10px; }
+.btn-step:hover:not(:disabled) { background: #2563eb; }
+.btn-secondary { background: #e2e8f0; color: #475569; padding: 0 10px; }
+.btn-secondary:hover:not(:disabled) { background: #cbd5e1; }
+.icon-btn { padding: 0 8px; }
+.btn-stop { background: #ef4444; color: white; padding: 0 10px; }
+.btn-stop:hover:not(:disabled) { background: #dc2626; }
+.progress-wrap { flex: 1; height: 5px; background: #e2e8f0; border-radius: 3px; overflow: hidden; }
+.progress-bar { height: 100%; background: linear-gradient(90deg, #4f46e5, #7c3aed); transition: width .2s; }
+.step-label { font-size: 11px; color: #475569; white-space: nowrap; font-family: monospace; }
+
+/* ── Примеры ── */
+.examples-wrap { position: relative; }
+.btn-sm {
+  background: white; border: 1px solid #e2e8f0; color: #475569;
+  padding: 3px 9px; border-radius: 4px; font-size: 11px; cursor: pointer; white-space: nowrap;
+}
+.btn-sm:hover { border-color: #4f46e5; color: #4f46e5; }
+.dropdown {
+  position: absolute; top: 100%; right: 0; margin-top: 4px;
+  background: white; border: 1px solid #e2e8f0;
+  border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,.12);
+  min-width: 130px; z-index: 200;
+}
+.dropdown-item { padding: 7px 12px; font-size: 12px; cursor: pointer; white-space: nowrap; }
+.dropdown-item:hover { background: #f5f7fb; color: #4f46e5; }
+
+/* ── Блок-схема ── */
+.col-flowchart { background: #f8fafc; }
+
+/* svg-scroll — вся колонка целиком */
+.svg-scroll {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Тонкий overlay поверх схемы */
+.svg-overlay {
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 36px;   /* = OVERLAY_H */
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 14px;
-  height: 42px;
+  padding: 0 8px;
+  background: rgba(248, 250, 252, 0.92);
+  backdrop-filter: blur(6px);
   border-bottom: 1px solid #e2e8f0;
-  background: #fff;
-  flex-shrink: 0;
+  z-index: 20;
 }
-.head-title {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: .06em;
-  text-transform: uppercase;
-  color: #475569;
-  font-family: 'Courier New', monospace;
-}
-.dot {
-  width: 8px; height: 8px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-.dot-blue   { background: #3b82f6; }
-.dot-violet { background: #7c3aed; }
-.dot-green  { background: #10b981; }
 
-/* ─── ВЫБОР ПРИМЕРА ──────────────────────────────────────────────── */
-.ex-select {
-  border: 1px solid #e2e8f0;
-  border-radius: 5px;
-  padding: 4px 8px;
-  font-size: 11px;
-  color: #475569;
-  background: #fff;
-  cursor: pointer;
-  outline: none;
-  max-width: 160px;
+.overlay-tabs {
+  display: flex; align-items: center; gap: 2px; overflow-x: auto;
+  scrollbar-width: none; flex: 1; min-width: 0;
 }
-.ex-select:focus { border-color: #3b82f6; }
+.overlay-tabs::-webkit-scrollbar { display: none; }
 
-/* ─── РЕДАКТОР ───────────────────────────────────────────────────── */
-.editor-area {
-  flex: 1;
-  position: relative;
-  overflow: hidden;
-  display: flex;
+.otab {
+  height: 26px; padding: 0 10px;
+  border: 1px solid transparent; border-radius: 4px;
+  background: transparent; color: #64748b;
+  font-family: 'Courier New', monospace; font-size: 11px; font-weight: 500;
+  cursor: pointer; white-space: nowrap; transition: all .15s;
 }
-.line-nums {
-  width: 42px;
-  padding: 16px 8px 16px 0;
-  text-align: right;
-  font-family: 'Courier New', monospace;
-  font-size: 12px;
-  line-height: 1.75;
-  color: #94a3b8;
-  background: #f8fafc;
-  border-right: 1px solid #e2e8f0;
-  user-select: none;
-  overflow: hidden;
-  white-space: pre;
-  flex-shrink: 0;
+.otab:hover { background: #f1f5f9; color: #4f46e5; border-color: #e2e8f0; }
+.otab.active {
+  background: #4f46e5; color: white; border-color: #4f46e5; font-weight: 700;
 }
-.code-ta {
-  flex: 1;
-  padding: 16px 12px;
-  font-family: 'Courier New', monospace;
-  font-size: 12px;
-  line-height: 1.75;
-  border: none;
-  outline: none;
-  resize: none;
-  background: #fff;
-  color: #0f172a;
-  overflow-y: auto;
+
+.overlay-zoom { display: flex; align-items: center; gap: 3px; flex-shrink: 0; }
+.zoom-btn {
+  width: 22px; height: 22px;
+  border: 1px solid #e2e8f0; background: white; color: #475569;
+  border-radius: 3px; cursor: pointer; font-size: 12px;
+  display: flex; align-items: center; justify-content: center; transition: all .15s;
 }
-.code-ta.ta-readonly {
-  background: #f8fafc;
-  color: #475569;
-  cursor: default;
-}
-.line-highlight {
+.zoom-btn:hover { border-color: #4f46e5; color: #4f46e5; }
+.dl-btn { color: #16a34a; border-color: #bbf7d0; }
+.dl-btn:hover { border-color: #16a34a !important; color: #15803d !important; background: #f0fdf4; }
+.zoom-label { font-family: monospace; font-size: 10px; color: #475569; min-width: 32px; text-align: center; }
+
+/* SVG контейнер — под overlay'ем */
+.svg-container {
   position: absolute;
-  left: 42px;
-  right: 0;
-  height: 21px;
-  background: rgba(251, 191, 36, 0.25);
-  pointer-events: none;
-  border-left: 3px solid #f59e0b;
-}
-
-/* ─── ФУТЕР РЕДАКТОРА ────────────────────────────────────────────── */
-.panel-foot {
-  border-top: 1px solid #e2e8f0;
-  padding: 10px 14px;
-  background: #fff;
-  flex-shrink: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.msg { font-size: 11px; font-family: 'Courier New', monospace; }
-.msg.err { color: #dc2626; }
-.msg.ok  { color: #16a34a; }
-.foot-btns {
-  display: flex;
-  gap: 8px;
-}
-.btn {
-  flex: 1;
-  height: 34px;
-  border: none;
-  border-radius: 6px;
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  transition: filter .15s, transform .1s;
-}
-.btn:hover:not(:disabled) { filter: brightness(.92); transform: translateY(-1px); }
-.btn:disabled { opacity: .5; cursor: not-allowed; }
-.btn-schema { background: #7c3aed; color: #fff; }
-.btn-trace  { background: #059669; color: #fff; }
-.btn-edit   { background: #f59e0b; color: #fff; }
-
-/* ─── БЛОК-СХЕМА ─────────────────────────────────────────────────── */
-.schema-body {
-  flex: 1;
+  top: 0; left: 0; right: 0; bottom: 0;
   overflow: hidden;
-  position: relative;
-}
-.svg-scroll {
-  width: 100%;
-  height: 100%;
-  overflow: auto;
-  padding: 20px;
 }
 .svg-inner {
-  transform-origin: top left;
+  position: absolute;
+  top: 44px;   /* overlay 36px + 8px отступ */
+  left: 50%;
+  transform-origin: top center;
   transition: transform .2s;
   display: inline-block;
 }
 .svg-inner :deep(svg) { display: block; }
 
-/* Zoom */
-.zoom-row { display: flex; align-items: center; gap: 6px; }
-.zbtn {
-  width: 26px; height: 26px;
-  border: 1px solid #e2e8f0;
-  background: #fff;
-  border-radius: 4px;
-  font-size: 13px;
-  cursor: pointer;
-  display: flex; align-items: center; justify-content: center;
-  color: #475569;
-  transition: all .15s;
+/* Подсветка */
+.svg-inner :deep(.node-active > .shape),
+.svg-inner :deep(.node-active > polygon),
+.svg-inner :deep(.node-active > ellipse) {
+  fill: #fff9c4 !important; stroke: #f59e0b !important; stroke-width: 3px !important;
 }
-.zbtn:hover { border-color: #7c3aed; color: #7c3aed; }
-.zbtn.dl { margin-left: 4px; }
-.zlabel {
-  font-family: 'Courier New', monospace;
-  font-size: 11px;
-  color: #64748b;
-  min-width: 38px;
-  text-align: center;
-}
+.svg-inner :deep(.node-active > text) { font-weight: bold; }
 
-/* ─── ТРАССИРОВКА ────────────────────────────────────────────────── */
-.step-badge {
-  font-family: 'Courier New', monospace;
-  font-size: 11px;
-  background: #ecfdf5;
-  color: #059669;
-  padding: 3px 8px;
-  border-radius: 20px;
-  font-weight: 700;
-  border: 1px solid #a7f3d0;
-}
+/* ── Переменные ── */
+.col-vars { background: #fafafa; transition: width .2s; }
+.col-vars.collapsed { border-left: 1px solid #e2e8f0; }
+.vars-body { flex: 1; overflow-y: auto; overflow-x: hidden; }
 
-.step-controls {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 12px;
-  border-bottom: 1px solid #e2e8f0;
-  background: #f8fafc;
-  flex-shrink: 0;
-}
-.sbtn {
-  width: 28px; height: 28px;
-  border: 1px solid #e2e8f0;
-  background: #fff;
-  border-radius: 5px;
-  font-size: 14px;
-  cursor: pointer;
-  display: flex; align-items: center; justify-content: center;
-  color: #475569;
-  transition: all .15s;
-  flex-shrink: 0;
-}
-.sbtn:hover:not(:disabled) { border-color: #10b981; color: #10b981; background: #f0fdf4; }
-.sbtn:disabled { opacity: .35; cursor: not-allowed; }
-
-.step-bar {
+/* Кнопка раскрытия (свёрнутая панель) */
+.vars-toggle-btn {
   flex: 1;
-  height: 4px;
-  background: #e2e8f0;
-  border-radius: 2px;
-  overflow: hidden;
-}
-.step-fill {
-  height: 100%;
-  background: #10b981;
-  transition: width .2s;
-  border-radius: 2px;
-}
-
-.trace-body {
-  flex: 1;
-  overflow-y: auto;
-  padding: 12px;
-}
-
-/* Секции */
-.section { margin-bottom: 12px; }
-.sec-title {
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: .08em;
-  text-transform: uppercase;
-  color: #94a3b8;
-  margin-bottom: 6px;
-  padding-bottom: 4px;
-  border-bottom: 1px solid #f1f5f9;
-}
-
-.info-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 10px;
-  padding: 6px 10px;
-  background: #fffbeb;
-  border: 1px solid #fde68a;
-  border-radius: 6px;
-}
-.info-label { font-size: 11px; color: #92400e; font-weight: 600; }
-.info-val { font-family: 'Courier New', monospace; font-size: 13px; font-weight: 700; }
-.line-val { color: #d97706; }
-
-.ret-banner {
-  padding: 7px 10px;
-  background: #f0fdf4;
-  border: 1px solid #bbf7d0;
-  border-radius: 6px;
-  font-size: 12px;
-  color: #166534;
-  margin-bottom: 10px;
-}
-
-/* Стек */
-.frames { display: flex; flex-direction: column; gap: 6px; }
-.frame {
-  border: 1px solid #e2e8f0;
-  border-radius: 7px;
-  overflow: hidden;
-  background: #fff;
-}
-.frame-top { border-color: #bfdbfe; }
-.frame-name {
-  padding: 5px 10px;
-  font-size: 11px;
-  font-weight: 700;
-  font-family: 'Courier New', monospace;
+  width: 100%;
+  border: none;
   background: #f8fafc;
-  color: #3b82f6;
-  border-bottom: 1px solid #e2e8f0;
-}
-.frame-top .frame-name { background: #eff6ff; border-color: #bfdbfe; }
-
-.vars { padding: 6px 4px; }
-.var-row {
-  display: grid;
-  grid-template-columns: 1fr auto auto;
-  gap: 4px;
-  align-items: center;
-  padding: 3px 6px;
-  border-radius: 4px;
-  font-size: 11px;
-  transition: background .1s;
-}
-.var-row:hover { background: #f8fafc; }
-.vname {
-  font-family: 'Courier New', monospace;
-  font-weight: 600;
-  color: #1e293b;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.vtype {
-  font-size: 10px;
-  color: #94a3b8;
-  background: #f1f5f9;
-  padding: 1px 5px;
-  border-radius: 3px;
-  font-family: 'Courier New', monospace;
-}
-.vval {
-  font-family: 'Courier New', monospace;
-  font-weight: 700;
-  color: #0f172a;
-  text-align: right;
-  min-width: 30px;
-}
-.vval.uninit { color: #94a3b8; font-style: italic; }
-
-.no-vars { padding: 4px 8px; font-size: 11px; color: #94a3b8; }
-
-/* ─── ОБЩИЕ ──────────────────────────────────────────────────────── */
-.placeholder {
-  position: absolute;
-  inset: 0;
+  cursor: pointer;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 10px;
-  padding: 24px;
-  text-align: center;
+  padding: 16px 0;
+  transition: background .15s;
+  color: #64748b;
 }
-.ph-icon { font-size: 40px; opacity: .4; }
-.ph-text { font-size: 13px; color: #64748b; max-width: 200px; line-height: 1.5; }
+.vars-toggle-btn:hover { background: #f1f5f9; color: #4f46e5; }
+.toggle-icon { font-size: 12px; }
+.toggle-label {
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  font-size: 11px;
+  font-weight: 600;
+  font-family: 'Courier New', monospace;
+  letter-spacing: 0.05em;
+  user-select: none;
+}
+
+/* Кнопка сворачивания (развёрнутая панель) */
+.vars-collapse-btn {
+  width: 20px; height: 20px;
+  border: 1px solid #e2e8f0; background: white; color: #64748b;
+  border-radius: 3px; cursor: pointer; font-size: 10px;
+  display: flex; align-items: center; justify-content: center;
+  transition: all .15s; flex-shrink: 0;
+}
+.vars-collapse-btn:hover { border-color: #4f46e5; color: #4f46e5; }
+
+/* ── Заглушки ── */
+.placeholder {
+  flex: 1; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; padding: 32px 24px; text-align: center;
+}
+.placeholder.small { padding: 24px 16px; }
+.ph-icon { font-size: 40px; margin-bottom: 12px; opacity: .5; }
+.ph-text  { font-size: 13px; font-weight: 600; color: #64748b; margin-bottom: 4px; }
+.ph-hint  { font-size: 11px; color: #94a3b8; line-height: 1.5; }
 
 .spinner-wrap {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
+  flex: 1; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 12px; font-size: 13px; color: #64748b;
 }
 .spinner {
-  width: 32px; height: 32px;
-  border: 3px solid #e2e8f0;
-  border-top-color: #7c3aed;
-  border-radius: 50%;
+  width: 32px; height: 32px; border: 3px solid #e2e8f0;
+  border-top-color: #4f46e5; border-radius: 50%;
   animation: spin .7s linear infinite;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
-.spin-text { font-size: 12px; color: #94a3b8; }
 
-.trace-err {
-  padding: 12px;
-  background: #fef2f2;
-  border: 1px solid #fecaca;
-  border-radius: 7px;
-  margin: 4px 0;
+/* ── Точки останова ── */
+.ln {
+  cursor: pointer;
+  position: relative;
+  user-select: none;
 }
-.err-title { font-size: 12px; font-weight: 700; color: #dc2626; margin-bottom: 4px; }
-.err-body  { font-size: 11px; color: #b91c1c; font-family: 'Courier New', monospace; white-space: pre-wrap; word-break: break-all; }
+.ln:hover { background: #fee2e2; color: #dc2626; }
+.ln-bp {
+  background: #fee2e2 !important;
+  color: #dc2626 !important;
+  font-weight: bold;
+}
+.bp-dot {
+  color: #dc2626;
+  font-size: 14px;
+  line-height: 22px;
+  display: flex;
+  justify-content: center;
+}
+
+/* Индикатор BP в футере */
+.bp-info {
+  display: flex; align-items: center; justify-content: space-between;
+  background: #fef2f2; border: 1px solid #fecaca; border-radius: 4px;
+  padding: 4px 8px; margin-bottom: 6px; gap: 6px;
+}
+.bp-badge {
+  font-size: 11px; color: #dc2626; font-family: monospace; font-weight: 600;
+}
+.bp-clear {
+  background: none; border: none; color: #dc2626; cursor: pointer;
+  font-size: 12px; padding: 0 2px; line-height: 1;
+}
+.bp-clear:hover { color: #991b1b; }
+
 </style>

@@ -19,7 +19,7 @@
           @keydown="handleTab" @scroll="syncScroll" @input="updateLineNums"></textarea>
       </div>
       <div class="panel-foot">
-        <div class="msg err" v-if="error">✗ {{ error }}</div>
+        <div class="msg err" v-if="error && error !== 'AUTH_REQUIRED' && error !== 'SERVICE_UNAVAILABLE'">✗ {{ error }}</div>
         <div class="msg limit-warn" v-else-if="limitWarning">
           ⚠ {{ limitWarning }}
         </div>
@@ -39,9 +39,6 @@
         <button class="tab-btn" :class="{ active: activeTab === 'history' }" @click="switchHistory">
           🕓 История
         </button>
-        <button class="tab-btn" :class="{ active: activeTab === 'guide' }" @click="activeTab = 'guide'">
-          📖 Справка
-        </button>
         <div v-if="activeTab === 'result' && result" class="summary-badges">
           <span class="badge">Функций: {{ result.functionCount }}</span>
           <span class="badge">Глоб. переменных: {{ result.globalVarCount }}</span>
@@ -50,12 +47,14 @@
 
       <!-- Вкладка Результат -->
       <template v-if="activeTab === 'result'">
-        <div v-if="!result && !loading" class="empty-state">
+        <ServiceError
+          v-if="!result && !loading && (error === 'AUTH_REQUIRED' || error === 'SERVICE_UNAVAILABLE')"
+          :message="error"
+          @retry="calculate"
+        />
+        <div v-else-if="!result && !loading" class="empty-state">
           <div class="empty-icon">📊</div>
           <div>Введите код и нажмите «Подсчитать метрики»</div>
-          <button class="guide-hint-btn" @click="activeTab = 'guide'">
-            Что означают метрики? →
-          </button>
         </div>
         <div v-if="loading" class="empty-state">
           <div class="spinner"></div>
@@ -97,6 +96,10 @@
                 </div>
                 <div class="metric-row"><span class="m-label">Вызовов функций</span><span class="m-val">{{ fn.callCount }}</span></div>
                 <div class="metric-row"><span class="m-label">Return</span><span class="m-val">{{ fn.returnCount }}</span></div>
+                <div v-if="fn.gotoCount > 0" class="metric-row">
+                  <span class="m-label" style="color:#b45309">goto (антипаттерн)</span>
+                  <span class="m-val" style="color:#dc2626">{{ fn.gotoCount }}</span>
+                </div>
                 <div class="cc-bar-wrap">
                   <div class="cc-bar-fill" :class="ccClass(fn.cyclomaticComplexity)"
                        :style="{ width: ccWidth(fn.cyclomaticComplexity) }"></div>
@@ -119,6 +122,8 @@
           <div>История пуста — подсчитайте метрики хотя бы раз</div>
         </div>
         <div v-else class="results-body">
+
+          <!-- Шапка с кол-вом и кнопками массового удаления -->
           <div class="history-toolbar">
             <div class="history-count-wrap">
               <span class="history-count">{{ history.length }} / {{ MAX_RECORDS }} записей</span>
@@ -133,10 +138,14 @@
               <button class="btn-cancel-sel" @click="selectedIds.clear()">Отмена</button>
             </div>
           </div>
+
+          <!-- Предупреждение о лимите -->
           <div v-if="history.length >= MAX_RECORDS" class="limit-banner">
             ⚠ Достигнут лимит {{ MAX_RECORDS }} записей. Удалите часть истории, чтобы можно было сохранять новые метрики.
           </div>
+
           <div v-for="(group, date) in groupedHistory" :key="date" class="history-group">
+            <!-- Заголовок дня с кнопкой удаления дня -->
             <div class="history-date">
               <div class="date-left">
                 <input type="checkbox" class="day-checkbox"
@@ -149,6 +158,7 @@
                 🗑 Удалить день
               </button>
             </div>
+
             <div class="history-rows">
               <div v-for="entry in group" :key="entry.id"
                    class="history-row" :class="{ expanded: expandedId === entry.id, selected: selectedIds.has(entry.id) }">
@@ -174,6 +184,8 @@
                     <button class="delete-btn" @click.stop="deleteEntry(entry.id)" title="Удалить">✕</button>
                   </div>
                 </div>
+
+                <!-- Раскрывающаяся карточка -->
                 <div v-if="expandedId === entry.id" class="history-detail">
                   <div class="detail-header" :class="ccClass(entry.cyclomaticComplexity)">
                     <span>ƒ {{ entry.functionName }}</span>
@@ -204,6 +216,10 @@
                       <div class="detail-label">Return-операторов</div>
                       <div class="detail-value">{{ entry.returnCount }}</div>
                     </div>
+                    <div v-if="entry.gotoCount > 0" class="detail-item detail-item-warn">
+                      <div class="detail-label" style="color:#b45309">goto (антипаттерн)</div>
+                      <div class="detail-value" style="color:#dc2626">{{ entry.gotoCount }}</div>
+                    </div>
                   </div>
                   <div class="detail-cc-bar-wrap">
                     <div class="detail-cc-bar" :class="ccClass(entry.cyclomaticComplexity)"
@@ -215,191 +231,13 @@
           </div>
         </div>
       </template>
-
-      <!-- Вкладка Справка -->
-      <template v-if="activeTab === 'guide'">
-        <div class="guide-body">
-
-          <div class="guide-intro">
-            Метрики кода — это числовые характеристики, которые помогают оценить качество,
-            сложность и поддерживаемость программы ещё до её запуска.
-          </div>
-
-          <!-- Цикломатическая сложность — главная метрика, даём ей больше места -->
-          <div class="guide-card guide-card-featured">
-            <div class="guide-card-icon">🔀</div>
-            <div class="guide-card-content">
-              <div class="guide-card-title">
-                Цикломатическая сложность
-                <span class="guide-abbr">CC</span>
-              </div>
-              <div class="guide-card-desc">
-                Считает количество независимых путей выполнения через функцию.
-                Каждый <code>if</code>, <code>while</code>, <code>for</code>, <code>case</code>
-                добавляет +1 к счётчику. Чем выше CC — тем больше тест-кейсов нужно для
-                полного покрытия и тем сложнее читать и изменять функцию.
-              </div>
-              <div class="guide-cc-scale">
-                <div class="cc-scale-row" v-for="tier in ccTiers" :key="tier.label"
-                     :class="tier.cls">
-                  <div class="cc-scale-range">{{ tier.range }}</div>
-                  <div class="cc-scale-dot"></div>
-                  <div class="cc-scale-label">{{ tier.label }}</div>
-                  <div class="cc-scale-tip">{{ tier.tip }}</div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div class="guide-grid">
-
-            <div class="guide-card">
-              <div class="guide-card-icon">📏</div>
-              <div class="guide-card-content">
-                <div class="guide-card-title">
-                  Строки кода
-                  <span class="guide-abbr">LOC</span>
-                </div>
-                <div class="guide-card-desc">
-                  Количество непустых строк в теле функции (без комментариев).
-                  Сам по себе LOC — слабый индикатор: маленькая функция может быть
-                  запутанной, а большая — прозрачной. Полезен в связке с CC.
-                </div>
-                <div class="guide-thumb">
-                  <span class="thumb-ok">≤ 40</span> норма &nbsp;·&nbsp;
-                  <span class="thumb-warn">41–80</span> стоит разбить &nbsp;·&nbsp;
-                  <span class="thumb-bad">80+</span> рефакторинг
-                </div>
-              </div>
-            </div>
-
-            <div class="guide-card">
-              <div class="guide-card-icon">🪆</div>
-              <div class="guide-card-content">
-                <div class="guide-card-title">
-                  Максимальная вложенность
-                  <span class="guide-abbr">Nesting</span>
-                </div>
-                <div class="guide-card-desc">
-                  Максимальная глубина вложенных блоков <code>if</code>/<code>for</code>/<code>while</code>.
-                  Код с высокой вложенностью тяжело
-                  читать и тестировать. Классическое правило — не более 3–4 уровней.
-                </div>
-                <div class="guide-thumb">
-                  <span class="thumb-ok">1–3</span> хорошо &nbsp;·&nbsp;
-                  <span class="thumb-warn">4</span> предел &nbsp;·&nbsp;
-                  <span class="thumb-bad">5+</span> рефакторинг
-                </div>
-              </div>
-            </div>
-
-            <div class="guide-card">
-              <div class="guide-card-icon">📥</div>
-              <div class="guide-card-content">
-                <div class="guide-card-title">
-                  Параметры функции
-                  <span class="guide-abbr">Params</span>
-                </div>
-                <div class="guide-card-desc">
-                  Число аргументов, принимаемых функцией. Большое количество параметров
-                  затрудняет вызов, тестирование и понимание. Роберт Мартин рекомендует
-                  не более 3; при необходимости — группировать в структуру.
-                </div>
-                <div class="guide-thumb">
-                  <span class="thumb-ok">0–3</span> идеально &nbsp;·&nbsp;
-                  <span class="thumb-warn">4–5</span> приемлемо &nbsp;·&nbsp;
-                  <span class="thumb-bad">6+</span> запах кода
-                </div>
-              </div>
-            </div>
-
-            <div class="guide-card">
-              <div class="guide-card-icon">📞</div>
-              <div class="guide-card-content">
-                <div class="guide-card-title">
-                  Вызовы функций
-                  <span class="guide-abbr">Calls</span>
-                </div>
-                <div class="guide-card-desc">
-                  Сколько раз функция вызывает другие функции. Нулевое значение может
-                  говорить о монолитном коде без декомпозиции. Очень высокое — о функции,
-                  которая «знает слишком много» и нарушает принцип единственной ответственности.
-                </div>
-              </div>
-            </div>
-
-            <div class="guide-card">
-              <div class="guide-card-icon">↩️</div>
-              <div class="guide-card-content">
-                <div class="guide-card-title">
-                  Операторы return
-                  <span class="guide-abbr">Returns</span>
-                </div>
-                <div class="guide-card-desc">
-                  Количество точек выхода из функции. Одна точка выхода — классическое
-                  структурное правило, упрощающее трассировку. Несколько <code>return</code>
-                  допустимы при «охранных» конструкциях в начале функции, но их
-                  разброс по всему телу усложняет понимание.
-                </div>
-                <div class="guide-thumb">
-                  <span class="thumb-ok">1–2</span> норма &nbsp;·&nbsp;
-                  <span class="thumb-warn">3–4</span> приемлемо &nbsp;·&nbsp;
-                  <span class="thumb-bad">5+</span> подозрительно
-                </div>
-              </div>
-            </div>
-
-          </div>
-
-          <!-- Шпаргалка -->
-          <div class="guide-cheatsheet">
-            <div class="guide-cheatsheet-title">Быстрая шпаргалка</div>
-            <div class="guide-cheatsheet-grid">
-              <div class="cs-cell cs-head">Метрика</div>
-              <div class="cs-cell cs-head">Хорошо</div>
-              <div class="cs-cell cs-head">Предел</div>
-              <div class="cs-cell cs-head">Рефакторинг</div>
-
-              <div class="cs-cell cs-name">CC</div>
-              <div class="cs-cell cs-ok">1–5</div>
-              <div class="cs-cell cs-warn">6–10</div>
-              <div class="cs-cell cs-bad">11+</div>
-
-              <div class="cs-cell cs-name">LOC</div>
-              <div class="cs-cell cs-ok">≤ 40</div>
-              <div class="cs-cell cs-warn">41–80</div>
-              <div class="cs-cell cs-bad">80+</div>
-
-              <div class="cs-cell cs-name">Вложенность</div>
-              <div class="cs-cell cs-ok">1–3</div>
-              <div class="cs-cell cs-warn">4</div>
-              <div class="cs-cell cs-bad">5+</div>
-
-              <div class="cs-cell cs-name">Параметры</div>
-              <div class="cs-cell cs-ok">0–3</div>
-              <div class="cs-cell cs-warn">4–5</div>
-              <div class="cs-cell cs-bad">6+</div>
-
-              <div class="cs-cell cs-name">Return</div>
-              <div class="cs-cell cs-ok">1–2</div>
-              <div class="cs-cell cs-warn">3–4</div>
-              <div class="cs-cell cs-bad">5+</div>
-
-              <div class="cs-cell cs-ok">0</div>
-              <div class="cs-cell cs-warn">—</div>
-              <div class="cs-cell cs-bad">любой</div>
-            </div>
-          </div>
-
-        </div>
-      </template>
-
     </div>
   </div>
 </template>
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import ServiceError from '../components/ServiceError.vue'
 import { calculateMetrics } from '../api/metrics.js'
 
 const METRICS_URL = import.meta.env.VITE_METRICS_SERVICE_URL || 'http://localhost:8085'
@@ -425,13 +263,6 @@ const EXAMPLES = {
     code: `int isPrime(int num) {\n  int del = 2;\n  while (del < num) {\n    if (num % del == 0) {\n      return 0;\n    }\n    del++;\n  }\n  return 1;\n}\n\nvoid main() {\n  int num = 20;\n  while (1) {\n    if (isPrime(num)) {\n      break;\n    }\n    num++;\n  }\n}`
   }
 }
-
-const ccTiers = [
-  { range: '1–5',   cls: 'tier-low',      label: 'Низкая',      tip: 'Просто читать, легко тестировать' },
-  { range: '6–10',  cls: 'tier-medium',   label: 'Умеренная',   tip: 'Допустимо, но стоит следить' },
-  { range: '11–20', cls: 'tier-high',     label: 'Высокая',     tip: 'Тяжело тестировать, желателен рефакторинг' },
-  { range: '20+',   cls: 'tier-critical', label: 'Критическая', tip: 'Функцию необходимо разбить на части' },
-]
 
 const code           = ref(EXAMPLES.factorial.code)
 const loading        = ref(false)
@@ -487,6 +318,10 @@ async function calculate() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ code: code.value })
     })
+    if (res.status === 401) { error.value = 'AUTH_REQUIRED'; return }
+    if (res.status === 502 || res.status === 503) { error.value = 'SERVICE_UNAVAILABLE'; return }
+    const contentType = res.headers.get('content-type') || ''
+    if (!contentType.includes('application/json')) { error.value = 'SERVICE_UNAVAILABLE'; return }
     const data = await res.json()
     if (!res.ok) {
       if (data.limitExceeded) {
@@ -709,21 +544,13 @@ function ccWidth(cc) {
   padding: 2px 10px; font-size: 11px; color: #475569; font-weight: 600;
 }
 
-/* Пустой экран результатов */
+/* Результат */
+.results-body { flex: 1; overflow-y: auto; padding: 16px; }
 .empty-state {
   flex: 1; display: flex; flex-direction: column; align-items: center;
   justify-content: center; gap: 12px; color: #94a3b8; font-size: 13px;
 }
 .empty-icon { font-size: 40px; opacity: .5; }
-.guide-hint-btn {
-  margin-top: 4px; background: none; border: 1px solid #e2e8f0;
-  border-radius: 6px; padding: 6px 14px; font-size: 12px; color: #6366f1;
-  cursor: pointer; transition: all .15s;
-}
-.guide-hint-btn:hover { background: #f5f3ff; border-color: #a5b4fc; }
-
-/* Результат */
-.results-body { flex: 1; overflow-y: auto; padding: 16px; }
 .spinner {
   width: 32px; height: 32px; border: 3px solid #e2e8f0;
   border-top-color: #6366f1; border-radius: 50%; animation: spin .7s linear infinite;
@@ -759,135 +586,6 @@ function ccWidth(cc) {
 .cc-bar-fill { height: 100%; border-radius: 3px; transition: width .3s; }
 .cc-label    { font-size: 10px; color: #94a3b8; margin-top: 4px; }
 
-/* ═══════════════════════════════════════════════
-   СПРАВКА
-   ═══════════════════════════════════════════════ */
-.guide-body {
-  flex: 1; overflow-y: auto; padding: 20px 24px;
-  display: flex; flex-direction: column; gap: 16px;
-}
-
-.guide-intro {
-  font-size: 13px; color: #475569; line-height: 1.6;
-  background: #f8fafc; border-left: 3px solid #6366f1;
-  padding: 12px 16px; border-radius: 0 8px 8px 0;
-}
-
-/* Карточки */
-.guide-card {
-  border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px 18px;
-  display: flex; gap: 14px; background: #fff;
-  box-shadow: 0 1px 3px rgba(0,0,0,.04);
-  transition: box-shadow .15s;
-}
-.guide-card:hover { box-shadow: 0 3px 12px rgba(99,102,241,.1); }
-
-.guide-card-featured {
-  border-color: #a5b4fc; background: linear-gradient(135deg, #fafafe 0%, #f5f3ff 100%);
-  flex-direction: column;
-}
-.guide-card-featured .guide-card-icon { font-size: 28px; }
-
-.guide-card-danger { border-color: #fca5a5; background: #fff9f9; }
-
-.guide-card-icon { font-size: 22px; flex-shrink: 0; line-height: 1; padding-top: 1px; }
-
-.guide-card-content { flex: 1; display: flex; flex-direction: column; gap: 7px; }
-
-.guide-card-title {
-  font-size: 14px; font-weight: 700; color: #1e293b;
-  display: flex; align-items: center; gap: 8px;
-}
-.guide-abbr {
-  font-size: 10px; font-weight: 700; letter-spacing: .06em;
-  background: #6366f1; color: #fff; padding: 2px 7px; border-radius: 10px;
-  font-family: 'Courier New', monospace;
-}
-.guide-card-danger .guide-abbr { background: #ef4444; }
-
-.guide-card-desc {
-  font-size: 12px; color: #475569; line-height: 1.6;
-}
-.guide-card-desc code {
-  font-family: 'Courier New', monospace; font-size: 11px;
-  background: #f1f5f9; padding: 1px 5px; border-radius: 3px; color: #6366f1;
-}
-.guide-card-danger .guide-card-desc code { color: #dc2626; background: #fee2e2; }
-
-/* Шкала CC */
-.guide-cc-scale {
-  display: flex; flex-direction: column; gap: 6px; margin-top: 4px;
-}
-.cc-scale-row {
-  display: grid; grid-template-columns: 48px 10px 1fr auto;
-  align-items: center; gap: 10px; padding: 7px 12px;
-  border-radius: 8px; font-size: 12px;
-}
-.cc-scale-dot {
-  width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0;
-}
-.cc-scale-range { font-family: 'Courier New', monospace; font-weight: 700; font-size: 12px; }
-.cc-scale-label { font-weight: 700; }
-.cc-scale-tip   { font-size: 11px; color: #64748b; text-align: right; }
-
-.tier-low      { background: #f0fdf4; }
-.tier-low .cc-scale-dot    { background: #22c55e; }
-.tier-low .cc-scale-range  { color: #16a34a; }
-.tier-low .cc-scale-label  { color: #15803d; }
-
-.tier-medium    { background: #fefce8; }
-.tier-medium .cc-scale-dot   { background: #f59e0b; }
-.tier-medium .cc-scale-range { color: #b45309; }
-.tier-medium .cc-scale-label { color: #92400e; }
-
-.tier-high     { background: #fff7ed; }
-.tier-high .cc-scale-dot    { background: #f97316; }
-.tier-high .cc-scale-range  { color: #c2410c; }
-.tier-high .cc-scale-label  { color: #9a3412; }
-
-.tier-critical { background: #fef2f2; }
-.tier-critical .cc-scale-dot    { background: #ef4444; }
-.tier-critical .cc-scale-range  { color: #b91c1c; }
-.tier-critical .cc-scale-label  { color: #991b1b; }
-
-/* Большой тамб */
-.guide-thumb {
-  font-size: 11px; color: #64748b; margin-top: 2px;
-  padding: 6px 0 0; border-top: 1px solid #f1f5f9;
-}
-.thumb-ok   { color: #16a34a; font-weight: 700; }
-.thumb-warn { color: #b45309; font-weight: 700; }
-.thumb-bad  { color: #dc2626; font-weight: 700; }
-
-/* Сетка карточек */
-.guide-grid {
-  display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px;
-}
-
-/* Шпаргалка */
-.guide-cheatsheet {
-  border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden;
-  background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.04);
-}
-.guide-cheatsheet-title {
-  padding: 10px 16px; background: #f8fafc; font-size: 11px; font-weight: 700;
-  letter-spacing: .07em; text-transform: uppercase; color: #475569;
-  border-bottom: 1px solid #e2e8f0;
-}
-.guide-cheatsheet-grid {
-  display: grid; grid-template-columns: 1fr 1fr 1fr 1fr;
-}
-.cs-cell {
-  padding: 8px 12px; font-size: 12px; border-right: 1px solid #f1f5f9;
-  border-bottom: 1px solid #f1f5f9;
-}
-.cs-cell:last-child, .cs-cell:nth-child(4n) { border-right: none; }
-.cs-head { font-weight: 700; color: #94a3b8; font-size: 10px; text-transform: uppercase; letter-spacing: .05em; background: #fafafa; }
-.cs-name { font-family: 'Courier New', monospace; font-weight: 600; color: #334155; }
-.cs-ok   { color: #16a34a; font-weight: 600; }
-.cs-warn { color: #b45309; font-weight: 600; }
-.cs-bad  { color: #dc2626; font-weight: 600; }
-
 /* Тулбар истории */
 .history-toolbar {
   display: flex; align-items: center; justify-content: space-between;
@@ -913,6 +611,7 @@ function ccWidth(cc) {
   border: 1px solid #e2e8f0; border-radius: 5px; font-size: 11px; cursor: pointer;
 }
 
+/* Баннер лимита */
 .limit-banner {
   background: #fff7ed; border: 1px solid #fed7aa; border-radius: 8px;
   padding: 10px 14px; font-size: 12px; color: #c2410c; margin-bottom: 12px;
@@ -961,6 +660,7 @@ function ccWidth(cc) {
   padding: 2px 6px; flex-shrink: 0;
 }
 
+/* fn-pill с белым текстом — отдельные классы */
 .fn-pill {
   display: inline-flex; align-items: center; padding: 3px 10px; border-radius: 20px;
   font-family: 'Courier New', monospace; font-size: 12px; font-weight: 700;
@@ -986,7 +686,7 @@ function ccWidth(cc) {
 }
 .delete-btn:hover { background: #fee2e2; border-color: #f87171; color: #dc2626; }
 
-/* Раскрывающаяся карточка истории */
+/* Раскрывающаяся карточка */
 .history-detail { border-top: 1px solid #e2e8f0; animation: slideDown .15s ease; }
 @keyframes slideDown { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
 .detail-header {
@@ -1006,7 +706,7 @@ function ccWidth(cc) {
 .detail-cc-bar-wrap { height: 6px; background: #f1f5f9; }
 .detail-cc-bar { height: 100%; transition: width .4s; }
 
-/* Цвета CC */
+/* Цвета */
 .cc-low      { background: #22c55e; color: #fff; }
 .cc-medium   { background: #f59e0b; color: #fff; }
 .cc-high     { background: #f97316; color: #fff; }

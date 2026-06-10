@@ -69,12 +69,6 @@
             <artifactId>spring-boot-starter-data-redis</artifactId>
         </dependency>
 
-        <!-- Spring Session with Redis - persists sessions across container restarts -->
-        <dependency>
-            <groupId>org.springframework.session</groupId>
-            <artifactId>spring-session-data-redis</artifactId>
-        </dependency>
-
         <!-- Kafka -->
         <dependency>
             <groupId>org.springframework.kafka</groupId>

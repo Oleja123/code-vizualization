@@ -8,6 +8,29 @@
       </div>
     </div>
 
+    <div v-else-if="authUnavailable" class="auth-overlay">
+      <div class="auth-card">
+        <div class="auth-header">
+          <div class="logo">⚠️</div>
+          <div>
+            <h2>Сервис недоступен</h2>
+            <p class="subtitle">Не удалось подключиться к серверу авторизации</p>
+          </div>
+        </div>
+        <div class="auth-body">
+          <p style="color:#6b7280; font-size:13px; line-height:1.6; margin-bottom:16px">
+            Сервис авторизации не отвечает. Убедитесь что все контейнеры запущены,
+            затем нажмите «Повторить».
+          </p>
+          <div class="auth-actions" style="justify-content:center">
+            <button class="btn-primary" :disabled="authLoading" @click="retryAuth">
+              {{ authLoading ? 'Проверяем…' : '↻ Повторить' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div v-else-if="!user" class="auth-overlay">
       <div class="auth-card">
         <div class="auth-header">
@@ -67,25 +90,25 @@
         <nav>
           <button
             :class="['nav-button', { active: activeView === 'tracer' }]"
-            @click="activeView = 'tracer'; localStorage.setItem('activeView', 'tracer')"
+            @click="activeView = 'tracer'"
           >
             📊 Трассировка схемы
           </button>
           <button
             :class="['nav-button', { active: activeView === 'visualization' }]"
-            @click="activeView = 'visualization'; localStorage.setItem('activeView', 'visualization')"
+            @click="activeView = 'visualization'"
           >
             ⚡ Трассировка кода
           </button>
           <button
             :class="['nav-button', { active: activeView === 'analysis' }]"
-            @click="activeView = 'analysis'; localStorage.setItem('activeView', 'analysis')"
+            @click="activeView = 'analysis'"
           >
             🛡 Анализ кода
           </button>
           <button
             :class="['nav-button', { active: activeView === 'metrics' }]"
-            @click="activeView = 'metrics'; localStorage.setItem('activeView', 'metrics')"
+            @click="activeView = 'metrics'"
           >
             📈 Метрики
           </button>
@@ -122,23 +145,61 @@ export default {
     MetricsView
   },
   setup() {
-    const VALID_VIEWS = ['tracer', 'visualization', 'analysis', 'metrics']
-    const savedView = localStorage.getItem('activeView')
-    const activeView = ref(VALID_VIEWS.includes(savedView) ? savedView : 'tracer')
+    const activeView = ref('tracer')
 
     // Auth
     const user = ref(null)
     const authLoading = ref(true)
+    const authUnavailable = ref(false)
     const loginLoading = ref(false)
     const usernameInput = ref('')
     const passwordInput = ref('')
     const authError = ref('')
     const showRegister = ref(false)
 
+    // Проверяем сессию через nginx (/api/auth/me).
+    // 200 = залогинен, 401 = не залогинен, всё остальное/таймаут = сервис недоступен.
+    async function checkAuthStatus() {
+      try {
+        const res = await fetch('/api/auth/me', {
+          credentials: 'include',
+          signal: AbortSignal.timeout(5000),
+        })
+        if (res.ok) {
+          const username = await res.text()
+          return { status: 'ok', user: { username } }
+        }
+        if (res.status === 401) {
+          return { status: 'unauthenticated' }
+        }
+        return { status: 'unavailable', code: res.status }
+      } catch {
+        return { status: 'unavailable', code: 0 }
+      }
+    }
+
     onMounted(async () => {
-      user.value = await checkSession()
+      const auth = await checkAuthStatus()
+      if (auth.status === 'ok') {
+        user.value = auth.user
+      } else if (auth.status === 'unavailable') {
+        authUnavailable.value = true
+      }
+      // unauthenticated → user остаётся null → показывается форма входа
       authLoading.value = false
     })
+
+    async function retryAuth() {
+      authLoading.value = true
+      authUnavailable.value = false
+      const auth = await checkAuthStatus()
+      if (auth.status === 'ok') {
+        user.value = auth.user
+      } else if (auth.status === 'unavailable') {
+        authUnavailable.value = true
+      }
+      authLoading.value = false
+    }
 
     async function submitLogin() {
       authError.value = ''
@@ -146,7 +207,8 @@ export default {
       const result = await login(usernameInput.value, passwordInput.value)
       loginLoading.value = false
       if (result.ok) {
-        user.value = await checkSession()
+        const auth = await checkAuthStatus()
+        user.value = auth.status === 'ok' ? auth.user : null
       } else {
         authError.value = result.message
       }
@@ -168,7 +230,8 @@ export default {
       if (result.ok) {
         const loginResult = await login(usernameInput.value, passwordInput.value)
         if (loginResult.ok) {
-          user.value = await checkSession()
+          const auth = await checkAuthStatus()
+          user.value = auth.status === 'ok' ? auth.user : null
         }
       } else {
         authError.value = result.message
@@ -195,6 +258,8 @@ export default {
       activeView,
       user,
       authLoading,
+      authUnavailable,
+      retryAuth,
       loginLoading,
       usernameInput,
       passwordInput,
